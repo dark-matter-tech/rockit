@@ -20,7 +20,7 @@ func printUsage() {
         parse <file.moon>     Parse and dump AST
         check <file.moon>     Type-check and report diagnostics
         lower <file.moon>     Lower to MIR and dump
-        build <file.moon>     Compile to bytecode (coming soon)
+        build <file.moon>     Compile to bytecode (.moonb)
         version               Print version
 
     OPTIONS:
@@ -29,6 +29,7 @@ func printUsage() {
         --dump-types          Show inferred types (with check)
         --dump-mir            Show optimized MIR (with lower)
         --dump-mir-unoptimized Show MIR before optimization
+        --dump-bytecode       Show disassembled bytecode (with build)
         --no-color            Disable colored output
     """)
 }
@@ -211,6 +212,66 @@ func lowerCommand(file: String, dumpMIR: Bool, dumpUnoptimized: Bool = false) {
     }
 }
 
+func buildCommand(file: String, dumpBytecode: Bool) {
+    guard FileManager.default.fileExists(atPath: file) else {
+        print("error: file not found: \(file)")
+        exit(1)
+    }
+
+    guard let source = try? String(contentsOfFile: file, encoding: .utf8) else {
+        print("error: could not read file: \(file)")
+        exit(1)
+    }
+
+    let diagnostics = DiagnosticEngine()
+    let lexer = Lexer(source: source, fileName: file, diagnostics: diagnostics)
+    let tokens = lexer.tokenize()
+    let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+    let ast = parser.parse()
+
+    let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+    let typeResult = checker.check()
+
+    if diagnostics.hasErrors {
+        diagnostics.dump()
+        print("\n\(diagnostics.errorCount) error(s)")
+        exit(1)
+    }
+
+    let lowering = MIRLowering(typeCheckResult: typeResult)
+    let unoptimized = lowering.lower()
+    let optimizer = MIROptimizer()
+    let optimized = optimizer.optimize(unoptimized)
+
+    let codeGen = CodeGen()
+    let bytecodeModule = codeGen.generate(optimized)
+
+    if dumpBytecode {
+        print(CodeGen.disassemble(bytecodeModule))
+    }
+
+    // Serialize to .moonb
+    let outputPath = file.hasSuffix(".moon")
+        ? String(file.dropLast(5)) + ".moonb"
+        : file + ".moonb"
+
+    let bytes = CodeGen.serialize(bytecodeModule)
+    let data = Data(bytes)
+    do {
+        try data.write(to: URL(fileURLWithPath: outputPath))
+    } catch {
+        print("error: could not write output file: \(outputPath)")
+        exit(1)
+    }
+
+    let funcCount = bytecodeModule.functions.count
+    let bytecodeSize = bytecodeModule.totalBytecodeSize
+    let totalSize = bytes.count
+    print("\n\(file) → \(outputPath)")
+    print("  \(funcCount) function(s), \(bytecodeSize) bytes bytecode, \(totalSize) bytes total")
+    print("OK")
+}
+
 // MARK: - Main
 
 let args = CommandLine.arguments
@@ -253,6 +314,14 @@ case "lower":
     let dumpMIR = args.contains("--dump-mir")
     let dumpUnopt = args.contains("--dump-mir-unoptimized")
     lowerCommand(file: args[2], dumpMIR: dumpMIR, dumpUnoptimized: dumpUnopt)
+
+case "build":
+    guard args.count >= 3 else {
+        print("error: build requires a file argument")
+        exit(1)
+    }
+    let dumpBytecode = args.contains("--dump-bytecode")
+    buildCommand(file: args[2], dumpBytecode: dumpBytecode)
 
 case "version":
     print("moonc \(version)")

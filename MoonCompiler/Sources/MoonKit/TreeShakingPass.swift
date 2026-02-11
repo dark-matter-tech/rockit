@@ -63,7 +63,25 @@ internal final class TreeShakingPass: MIRPass {
             reachableTypes.formUnion(refs.types)
         }
 
-        // Step 5: Filter
+        // Step 5: Mark types accessed via global-style loads (enum access pattern).
+        // When code uses `Color.RED`, MIR lowers it as `load "global.Color"` + `getField "RED"`.
+        // The load doesn't show up as a type reference, so check explicitly.
+        let typeNames = Set(module.types.map(\.name))
+        for funcName in reachableFunctions {
+            guard let f = funcMap[funcName] else { continue }
+            for block in f.blocks {
+                for inst in block.instructions {
+                    if case .load(_, let src) = inst, src.hasPrefix("global.") {
+                        let name = String(src.dropFirst(7))
+                        if typeNames.contains(name) {
+                            reachableTypes.insert(name)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 6: Filter
         result.functions = result.functions.filter { reachableFunctions.contains($0.name) }
         result.types = result.types.filter { reachableTypes.contains($0.name) }
 
