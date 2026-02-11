@@ -560,6 +560,29 @@ public final class TypeChecker {
             checkDeclaration(member)
         }
 
+        // Check interface implementation: verify all required methods are provided
+        if let classInfo = symbolTable.lookupType(c.name) {
+            for superTypeName in classInfo.superTypes {
+                if let ifaceInfo = symbolTable.lookupType(superTypeName),
+                   !ifaceInfo.members.isEmpty {
+                    // This is an interface — check that all its methods are implemented
+                    let classMethods = Set(classInfo.members.filter {
+                        if case .function = $0.kind { return true }
+                        return false
+                    }.map { $0.name })
+
+                    for ifaceMember in ifaceInfo.members {
+                        if case .function = ifaceMember.kind, !classMethods.contains(ifaceMember.name) {
+                            diagnostics.error(
+                                "class '\(c.name)' does not implement interface method '\(superTypeName).\(ifaceMember.name)'",
+                                at: c.span.start
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         symbolTable.popScope()
     }
 
@@ -1106,6 +1129,7 @@ public final class TypeChecker {
 
         var hasElse = false
         var coveredTypes: [String] = []
+        var branchTypes: [Type] = []
 
         for entry in we.entries {
             symbolTable.pushScope()
@@ -1117,20 +1141,37 @@ public final class TypeChecker {
                         hasElse = true
                     } else {
                         let _ = checkExpression(expr)
+                        // Detect enum entry references for exhaustiveness (e.g., Color.RED → "RED")
+                        if let entryName = extractEnumEntryName(expr) {
+                            coveredTypes.append(entryName)
+                        }
                     }
                 case .isType(let typeNode, _):
                     let resolvedType = resolver.resolve(typeNode)
                     if let name = resolvedType.typeName {
                         coveredTypes.append(name)
                     }
+                    // Smart cast: narrow subject type in this scope
+                    if let subject = we.subject,
+                       case .identifier(let subjectName, let subjectSpan) = subject {
+                        let narrowed = Symbol(
+                            name: subjectName,
+                            type: resolvedType,
+                            kind: .variable(isMutable: false),
+                            span: subjectSpan
+                        )
+                        symbolTable.currentScope.update(narrowed)
+                    }
                 }
             }
 
             switch entry.body {
             case .expression(let expr):
-                let _ = checkExpression(expr)
+                let bodyType = checkExpression(expr)
+                branchTypes.append(bodyType)
             case .block(let block):
                 checkBlock(block)
+                branchTypes.append(.unit)
             }
 
             symbolTable.popScope()
@@ -1160,6 +1201,11 @@ public final class TypeChecker {
             )
         }
 
+        // Infer when-expression return type from branch types
+        if let firstType = branchTypes.first,
+           branchTypes.allSatisfy({ $0 == firstType || $0.isError }) {
+            return firstType
+        }
         return .unit
     }
 
@@ -1179,6 +1225,26 @@ public final class TypeChecker {
             let missingStr = missing.joined(separator: ", ")
             diagnostics.error("'when' is not exhaustive; missing: \(missingStr)", at: span.start)
         }
+    }
+
+    /// Extract the enum entry name from a when condition expression.
+    /// Handles `EnumType.ENTRY` (memberAccess) and bare `ENTRY` (identifier that's an enumEntry symbol).
+    private func extractEnumEntryName(_ expr: Expression) -> String? {
+        // Pattern: EnumType.ENTRY (e.g., Color.RED)
+        if case .memberAccess(let obj, let member, _) = expr,
+           case .identifier(let typeName, _) = obj,
+           let typeInfo = symbolTable.lookupType(typeName),
+           !typeInfo.enumEntries.isEmpty,
+           typeInfo.enumEntries.contains(member) {
+            return member
+        }
+        // Pattern: bare ENTRY name (if imported/in scope as enum entry)
+        if case .identifier(let name, _) = expr,
+           let sym = symbolTable.lookup(name),
+           sym.kind == .enumEntry {
+            return name
+        }
+        return nil
     }
 
     // MARK: - Lambda

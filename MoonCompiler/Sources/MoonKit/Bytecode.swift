@@ -45,6 +45,7 @@ public enum Opcode: UInt8 {
     // Calls
     case call           = 0x50
     case vcall          = 0x51
+    case callIndirect   = 0x52
 
     // Fields
     case getField       = 0x60
@@ -103,6 +104,7 @@ extension Opcode: CustomStringConvertible {
         case .not:          return "NOT"
         case .call:         return "CALL"
         case .vcall:        return "VCALL"
+        case .callIndirect: return "CALL_INDIRECT"
         case .getField:     return "GET_FIELD"
         case .setField:     return "SET_FIELD"
         case .newObject:    return "NEW_OBJECT"

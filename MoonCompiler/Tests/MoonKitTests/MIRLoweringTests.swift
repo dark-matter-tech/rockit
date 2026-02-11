@@ -501,11 +501,18 @@ final class MIRLoweringTests: XCTestCase {
             BLUE
         }
         """)
+        // Type has a $variant field for the entry name
         let typeDecl = module.types.first { $0.name == "Color" }
         XCTAssertNotNil(typeDecl)
-        XCTAssert(typeDecl!.fields.contains { $0.0 == "RED" }, "Expected RED entry")
-        XCTAssert(typeDecl!.fields.contains { $0.0 == "GREEN" }, "Expected GREEN entry")
-        XCTAssert(typeDecl!.fields.contains { $0.0 == "BLUE" }, "Expected BLUE entry")
+        XCTAssert(typeDecl!.fields.contains { $0.0 == "$variant" }, "Expected $variant field")
+
+        // Each entry becomes a global singleton
+        XCTAssert(module.globals.contains { $0.name == "Color.RED" }, "Expected Color.RED global")
+        XCTAssert(module.globals.contains { $0.name == "Color.GREEN" }, "Expected Color.GREEN global")
+        XCTAssert(module.globals.contains { $0.name == "Color.BLUE" }, "Expected Color.BLUE global")
+
+        // Each entry has an initializer function
+        XCTAssert(module.functions.contains { $0.name == "__init_Color_RED" }, "Expected init function for RED")
     }
 
     // MARK: - Object Lowering

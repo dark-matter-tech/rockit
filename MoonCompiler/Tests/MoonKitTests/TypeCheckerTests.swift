@@ -505,6 +505,39 @@ final class TypeCheckerTests: XCTestCase {
         """)
     }
 
+    // MARK: - Enum Exhaustiveness
+
+    func testEnumExhaustiveWhen() {
+        _ = checkOK("""
+        enum class Color { RED, GREEN, BLUE }
+        fun describe(c: Color): Unit = when (c) {
+            Color.RED -> println("red")
+            Color.GREEN -> println("green")
+            Color.BLUE -> println("blue")
+        }
+        """)
+    }
+
+    func testEnumNonExhaustiveWhen() {
+        assertError("""
+        enum class Color { RED, GREEN, BLUE }
+        fun describe(c: Color): Unit = when (c) {
+            Color.RED -> println("red")
+            Color.GREEN -> println("green")
+        }
+        """, contains: "not exhaustive")
+    }
+
+    func testEnumWithElseWhen() {
+        _ = checkOK("""
+        enum class Color { RED, GREEN, BLUE }
+        fun describe(c: Color): Unit = when (c) {
+            Color.RED -> println("red")
+            else -> println("other")
+        }
+        """)
+    }
+
     // MARK: - Numeric Promotion
 
     func testNumericPromotion() {

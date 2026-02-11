@@ -24,6 +24,10 @@ public final class VM {
     /// Global variable storage, indexed by constant pool index of the global name.
     private var globals: [UInt16: Value] = [:]
 
+    /// Last return value from a function that had no caller frame to receive it.
+    /// Used by global initializers to capture their result.
+    private var lastReturnValue: Value = .unit
+
     /// Function lookup: name → index in module.functions.
     private var functionTable: [String: Int] = [:]
 
@@ -159,8 +163,10 @@ public final class VM {
                         returnRegister: nil,
                         functionName: initFuncName
                     )
+                    lastReturnValue = .unit
                     callStack.append(frame)
                     try executeLoop()
+                    globals[nameIdx] = lastReturnValue
                 }
             }
         }
@@ -217,10 +223,13 @@ public final class VM {
 
                 // MARK: Memory
                 case .alloc:
-                    let reg = readUInt16(bytecode, frame: frameIdx)
-                    let typeIdx = readUInt16(bytecode, frame: frameIdx)
-                    let objId = allocateObject(typeIndex: typeIdx)
-                    callStack[frameIdx].registers[Int(reg)] = .objectRef(objId)
+                    // alloc is a MIR-level concept for reserving a register slot.
+                    // The register is already initialized to .unit by frame creation.
+                    // The actual value comes from a subsequent store instruction.
+                    // We must NOT write to the register here, as it may already hold
+                    // a parameter value placed by the caller.
+                    let _ = readUInt16(bytecode, frame: frameIdx) // dest register
+                    let _ = readUInt16(bytecode, frame: frameIdx) // type index
 
                 case .store:
                     let dest = readUInt16(bytecode, frame: frameIdx)
@@ -335,6 +344,11 @@ public final class VM {
                     if callStack.isEmpty { return }
                     continue
 
+                case .callIndirect:
+                    try executeCallIndirect(bytecode, frame: frameIdx)
+                    if callStack.isEmpty { return }
+                    continue
+
                 // MARK: Fields
                 case .getField:
                     let dest = readUInt16(bytecode, frame: frameIdx)
@@ -424,6 +438,9 @@ public final class VM {
                     callStack.removeLast()
                     if let retReg = returnReg, !callStack.isEmpty {
                         callStack[callStack.count - 1].registers[Int(retReg)] = returnVal
+                    } else {
+                        // No caller frame — save for global initializers
+                        lastReturnValue = returnVal
                     }
                     return
 
@@ -633,6 +650,65 @@ public final class VM {
         try executeLoop()
     }
 
+    // MARK: - Indirect Call
+
+    private func executeCallIndirect(_ bytecode: [UInt8], frame frameIdx: Int) throws {
+        let destReg = readUInt16(bytecode, frame: frameIdx)
+        let funcRefReg = readUInt16(bytecode, frame: frameIdx)
+        let argCount = readUInt16(bytecode, frame: frameIdx)
+
+        var args: [Value] = []
+        for _ in 0..<argCount {
+            let argReg = readUInt16(bytecode, frame: frameIdx)
+            args.append(callStack[frameIdx].registers[Int(argReg)])
+        }
+
+        // Read function name from register (string value)
+        let funcRef = callStack[frameIdx].registers[Int(funcRefReg)]
+        let funcName: String
+        switch funcRef {
+        case .string(let name):
+            funcName = name
+        default:
+            throw VMError.typeMismatch(expected: "String (function reference)", actual: funcRef.typeName, operation: "CALL_INDIRECT")
+        }
+
+        // Check builtins first
+        if let builtin = builtins.lookup(funcName) {
+            let result = try builtin(args)
+            if destReg != 0xFFFF {
+                callStack[frameIdx].registers[Int(destReg)] = result
+            }
+            return
+        }
+
+        // Module function
+        guard let targetIdx = functionTable[funcName] else {
+            throw VMError.unknownFunction(name: funcName)
+        }
+
+        guard callStack.count < config.maxCallStackDepth else {
+            throw VMError.stackOverflow(depth: callStack.count)
+        }
+
+        let targetFunc = module.functions[targetIdx]
+        let returnReg: UInt16? = destReg != 0xFFFF ? destReg : nil
+
+        var newFrame = CallFrame(
+            functionIndex: targetIdx,
+            registerCount: Int(targetFunc.registerCount),
+            returnRegister: returnReg,
+            functionName: funcName
+        )
+
+        for (i, arg) in args.prefix(Int(targetFunc.parameterCount)).enumerated() {
+            newFrame.registers[i] = arg
+        }
+
+        callStack.append(newFrame)
+        try executeLoop()
+    }
+
     // MARK: - Virtual Call
 
     private func executeVirtualCall(_ bytecode: [UInt8], frame frameIdx: Int) throws {
@@ -651,7 +727,20 @@ public final class VM {
         let methodName = constantString(methodIdx)
 
         // Resolve the method as a function
+        // Try fully-qualified name first (TypeName.method), then bare method name
+        let resolvedName: String
         if let funcIndex = functionTable[methodName] {
+            resolvedName = methodName
+            _ = funcIndex  // used below
+        } else if case .objectRef(let objId) = obj,
+                  let runtimeTypeName = arcHeap.typeName(of: objId),
+                  functionTable["\(runtimeTypeName).\(methodName)"] != nil {
+            resolvedName = "\(runtimeTypeName).\(methodName)"
+        } else {
+            resolvedName = methodName
+        }
+
+        if let funcIndex = functionTable[resolvedName] {
             guard callStack.count < config.maxCallStackDepth else {
                 throw VMError.stackOverflow(depth: callStack.count)
             }
@@ -663,7 +752,7 @@ public final class VM {
                 functionIndex: funcIndex,
                 registerCount: Int(targetFunc.registerCount),
                 returnRegister: returnReg,
-                functionName: methodName
+                functionName: resolvedName
             )
 
             // First arg is `this` (the object)
@@ -681,16 +770,11 @@ public final class VM {
                 callStack[frameIdx].registers[Int(destReg)] = result
             }
         } else {
-            throw VMError.unknownFunction(name: methodName)
+            throw VMError.unknownFunction(name: resolvedName)
         }
     }
 
     // MARK: - Object Management (ARC-backed)
-
-    private func allocateObject(typeIndex: UInt16) -> ObjectID {
-        let typeName = Int(typeIndex) < module.constantPool.count ? constantString(typeIndex) : ""
-        return arcHeap.allocate(typeName: typeName)
-    }
 
     private func createObject(typeName: String, args: [Value]) -> ObjectID {
         var fields: [String: Value] = [:]

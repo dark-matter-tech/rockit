@@ -40,6 +40,8 @@ extension MIRInstruction {
             return d
         case .call(let d, _, _):
             return d
+        case .callIndirect(let d, _, _):
+            return d
         case .virtualCall(let d, _, _, _):
             return d
         case .getField(let d, _, _):
@@ -92,6 +94,8 @@ extension MIRInstruction {
             return [o]
         case .call(_, _, let args):
             return args
+        case .callIndirect(_, let ref, let args):
+            return [ref] + args
         case .virtualCall(_, let obj, _, let args):
             return [obj] + args
         case .getField(_, let obj, _):
@@ -116,7 +120,7 @@ extension MIRInstruction {
         switch self {
         case .store, .setField:
             return true
-        case .call, .virtualCall:
+        case .call, .callIndirect, .virtualCall:
             return true
         case .newObject:
             return true

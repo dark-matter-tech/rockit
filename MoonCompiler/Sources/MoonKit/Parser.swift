@@ -1506,23 +1506,38 @@ public final class Parser {
         return LambdaExpr(parameters: parameters, body: body, span: spanFrom(start))
     }
 
-    /// Try to parse lambda parameters: `name ->` or `name, name -> `
+    /// Try to parse lambda parameters: `name ->`, `name: Type ->`, or `name: Type, name: Type ->`
     /// Returns true if successful, false otherwise.
     private func tryParseLambdaParams(_ params: inout [Parameter]) -> Bool {
-        // Look for pattern: identifier [, identifier]* ->
+        // Look for pattern: identifier [: Type] [, identifier [: Type]]* ->
         guard checkIdentifier() != nil else { return false }
         var tempParams: [Parameter] = []
+
         let paramStart = peek()
         let name = checkIdentifier()!
         advance()
-        tempParams.append(Parameter(name: name, type: nil, defaultValue: nil,
+
+        // Optional type annotation
+        var typeNode: TypeNode? = nil
+        if match(.colon) {
+            skipNewlines()
+            typeNode = parseType()
+        }
+        tempParams.append(Parameter(name: name, type: typeNode, defaultValue: nil,
                                     span: paramStart.span))
+
         while match(.comma) {
             skipNewlines()
             let pStart = peek()
             guard let pName = checkIdentifier() else { return false }
             advance()
-            tempParams.append(Parameter(name: pName, type: nil, defaultValue: nil,
+
+            var pType: TypeNode? = nil
+            if match(.colon) {
+                skipNewlines()
+                pType = parseType()
+            }
+            tempParams.append(Parameter(name: pName, type: pType, defaultValue: nil,
                                         span: pStart.span))
         }
         skipNewlines()

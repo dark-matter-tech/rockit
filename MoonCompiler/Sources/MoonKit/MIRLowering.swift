@@ -9,7 +9,7 @@
 public final class MIRLowering {
     private let result: TypeCheckResult
     private let diagnostics: DiagnosticEngine
-    private let builder = MIRBuilder()
+    private var builder = MIRBuilder()
 
     /// Maps local variable names to their alloc temps
     private var locals: [String: String] = [:]
@@ -235,10 +235,8 @@ public final class MIRLowering {
     // MARK: - Enum Lowering
 
     private func lowerEnum(_ e: EnumClassDecl) {
-        var fields: [(String, MIRType)] = []
-        for entry in e.entries {
-            fields.append((entry.name, .reference(e.name)))
-        }
+        // Enum type has a single $variant field storing the entry name
+        let fields: [(String, MIRType)] = [("$variant", .string)]
         var methodNames: [String] = []
         for member in e.members {
             if case .function(let f) = member {
@@ -246,6 +244,29 @@ public final class MIRLowering {
             }
         }
         typeDecls.append(MIRTypeDecl(name: e.name, fields: fields, methods: methodNames))
+
+        // Create a global singleton for each enum entry
+        for entry in e.entries {
+            let globalName = "\(e.name).\(entry.name)"
+            let initName = "__init_\(e.name)_\(entry.name)"
+
+            // Create initializer function: allocates an object with $variant = "entryName"
+            let savedLocals = locals
+            locals = [:]
+            builder.startBlock(label: "entry")
+
+            let variantStr = builder.emitConstString(entry.name)
+            let dest = builder.newTemp()
+            builder.emit(.newObject(dest: dest, typeName: e.name, args: [variantStr]))
+            builder.terminate(.ret(dest))
+
+            let blocks = builder.finishBlocks()
+            let mirFunc = MIRFunction(name: initName, parameters: [], returnType: .reference(e.name), blocks: blocks)
+            functions.append(mirFunc)
+            locals = savedLocals
+
+            globals.append(MIRGlobal(name: globalName, type: .reference(e.name), isMutable: false, initializerFunc: initName))
+        }
 
         // Lower member methods
         let savedClassName = currentClassName
@@ -512,35 +533,84 @@ public final class MIRLowering {
     // MARK: - Control Flow: For Loop
 
     private func lowerForLoop(_ f: ForLoop) {
+        // Check if iterable is a range expression — emit direct counter loop
+        if case .range(let start, let end, let inclusive, _) = f.iterable {
+            lowerForLoopRange(variable: f.variable, start: start, end: end, inclusive: inclusive, body: f.body)
+            return
+        }
+
+        // Collection iteration via iterator protocol (future work)
         let headerLabel = builder.newBlockLabel("for.header")
         let bodyLabel = builder.newBlockLabel("for.body")
         let exitLabel = builder.newBlockLabel("for.exit")
 
-        // Lower iterable and get iterator
         let iterable = lowerExpression(f.iterable)
         let iterator = builder.newTemp()
         builder.emit(.virtualCall(dest: iterator, object: iterable, method: "iterator", args: []))
 
         builder.terminate(.jump(headerLabel))
 
-        // Header: check hasNext
         builder.startBlock(label: headerLabel)
         let hasNext = builder.newTemp()
         builder.emit(.virtualCall(dest: hasNext, object: iterator, method: "hasNext", args: []))
         builder.terminate(.branch(condition: hasNext, thenLabel: bodyLabel, elseLabel: exitLabel))
 
-        // Body: get next, bind loop variable
         builder.startBlock(label: bodyLabel)
         let nextVal = builder.newTemp()
         builder.emit(.virtualCall(dest: nextVal, object: iterator, method: "next", args: []))
 
-        // Alloc loop variable
         let loopVarSlot = builder.emitAlloc(type: .reference("Any"))
         locals[f.variable] = loopVarSlot
         builder.emitStore(dest: loopVarSlot, src: nextVal)
 
         lowerBlock(f.body)
         if !builder.isTerminated {
+            builder.terminate(.jump(headerLabel))
+        }
+
+        builder.startBlock(label: exitLabel)
+    }
+
+    /// Lower a for loop over a range as a direct counter loop.
+    /// `for (i in start..end)` or `for (i in start..<end)`
+    private func lowerForLoopRange(variable: String, start: Expression, end: Expression, inclusive: Bool, body: Block) {
+        let headerLabel = builder.newBlockLabel("for.header")
+        let bodyLabel = builder.newBlockLabel("for.body")
+        let exitLabel = builder.newBlockLabel("for.exit")
+
+        // Lower start and end expressions
+        let startTemp = lowerExpression(start)
+        let endTemp = lowerExpression(end)
+
+        // Alloc loop variable and initialize to start
+        let loopVarSlot = builder.emitAlloc(type: .int)
+        locals[variable] = loopVarSlot
+        builder.emitStore(dest: loopVarSlot, src: startTemp)
+
+        builder.terminate(.jump(headerLabel))
+
+        // Header: load loop var, compare with end
+        builder.startBlock(label: headerLabel)
+        let current = builder.emitLoad(src: loopVarSlot)
+        let cond = builder.newTemp()
+        if inclusive {
+            builder.emit(.lte(dest: cond, lhs: current, rhs: endTemp, type: .int))
+        } else {
+            builder.emit(.lt(dest: cond, lhs: current, rhs: endTemp, type: .int))
+        }
+        builder.terminate(.branch(condition: cond, thenLabel: bodyLabel, elseLabel: exitLabel))
+
+        // Body: execute body, increment loop var, jump back
+        builder.startBlock(label: bodyLabel)
+        lowerBlock(body)
+
+        if !builder.isTerminated {
+            // Increment: load current, add 1, store back
+            let cur = builder.emitLoad(src: loopVarSlot)
+            let one = builder.emitConstInt(1)
+            let next = builder.newTemp()
+            builder.emit(.add(dest: next, lhs: cur, rhs: one, type: .int))
+            builder.emitStore(dest: loopVarSlot, src: next)
             builder.terminate(.jump(headerLabel))
         }
 
@@ -601,6 +671,14 @@ public final class MIRLowering {
 
         // Member access
         case .memberAccess(let obj, let member, _):
+            // Check if this is an enum entry reference (e.g., Color.RED)
+            if case .identifier(let typeName, _) = obj,
+               let typeInfo = result.symbolTable.lookupType(typeName),
+               !typeInfo.enumEntries.isEmpty,
+               typeInfo.enumEntries.contains(member) {
+                // Enum entry — load from the global singleton
+                return builder.emitLoad(src: "global.\(typeName).\(member)")
+            }
             let objTemp = lowerExpression(obj)
             let dest = builder.newTemp()
             builder.emit(.getField(dest: dest, object: objTemp, fieldName: member))
@@ -789,16 +867,24 @@ public final class MIRLowering {
                 return dest
             }
 
+            // Check if it's a local variable holding a function reference
+            if locals[name] != nil {
+                let calleeTemp = lowerExpression(callee)
+                let dest = builder.newTemp()
+                builder.emit(.callIndirect(dest: dest, functionRef: calleeTemp, args: argTemps))
+                return dest
+            }
+
             // Regular function call
             let dest = builder.newTemp()
             builder.emit(.call(dest: dest, function: name, args: argTemps))
             return dest
         }
 
-        // Fallback
+        // Fallback: indirect call (e.g. calling a lambda stored in a variable)
         let calleeTemp = lowerExpression(callee)
         let dest = builder.newTemp()
-        builder.emit(.call(dest: dest, function: calleeTemp, args: argTemps))
+        builder.emit(.callIndirect(dest: dest, functionRef: calleeTemp, args: argTemps))
         return dest
     }
 
@@ -921,10 +1007,14 @@ public final class MIRLowering {
 
     private func lowerLambda(_ le: LambdaExpr) -> String {
         // Stage 0: lower as an anonymous function, return a reference to it
-        let lambdaName = "__lambda_\(builder.newTemp().dropFirst())"
+        // Use a separate builder to avoid corrupting the outer function's blocks
+        let lambdaBuilder = MIRBuilder()
+        let lambdaName = "__lambda_\(lambdaBuilder.newTemp().dropFirst())"
 
         let savedLocals = locals
+        let savedBuilder = builder
         locals = [:]
+        builder = lambdaBuilder
 
         let params: [(String, MIRType)] = le.parameters.map { p in
             let type: MIRType = p.type.flatMap { _ in
@@ -940,12 +1030,31 @@ public final class MIRLowering {
         for (name, type) in params {
             let slot = builder.emitAlloc(type: type)
             locals[name] = slot
+            // Load parameter value and store into slot (same pattern as lowerFunction)
+            let paramTemp = builder.newTemp()
+            builder.emit(.load(dest: paramTemp, src: "param.\(name)"))
+            builder.emitStore(dest: slot, src: paramTemp)
         }
 
-        for stmt in le.body {
-            lowerStatement(stmt)
+        // Lower all statements except the last
+        if le.body.count > 1 {
+            for stmt in le.body.dropLast() {
+                lowerStatement(stmt)
+            }
         }
-        if !builder.isTerminated {
+
+        // If the last statement is an expression, return its value
+        if !builder.isTerminated, let lastStmt = le.body.last {
+            if case .expression(let expr) = lastStmt {
+                let resultTemp = lowerExpression(expr)
+                builder.terminate(.ret(resultTemp))
+            } else {
+                lowerStatement(lastStmt)
+                if !builder.isTerminated {
+                    builder.terminate(.ret(nil))
+                }
+            }
+        } else if !builder.isTerminated {
             builder.terminate(.ret(nil))
         }
 
@@ -953,9 +1062,11 @@ public final class MIRLowering {
         let mirFunc = MIRFunction(name: lambdaName, parameters: params, returnType: .unit, blocks: blocks)
         functions.append(mirFunc)
 
+        // Restore outer function's builder and locals
+        builder = savedBuilder
         locals = savedLocals
 
-        // Return a reference to the lambda function
+        // Return a reference to the lambda function name
         return builder.emitConstString(lambdaName)
     }
 

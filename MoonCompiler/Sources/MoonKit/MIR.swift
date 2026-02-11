@@ -139,6 +139,7 @@ public enum MIRInstruction {
     // Calls
     case call(dest: String?, function: String, args: [String])
     case virtualCall(dest: String?, object: String, method: String, args: [String])
+    case callIndirect(dest: String?, functionRef: String, args: [String])
 
     // Fields
     case getField(dest: String, object: String, fieldName: String)
@@ -203,6 +204,13 @@ extension MIRInstruction: CustomStringConvertible {
                 return "\(d) = vcall \(obj).\(m)(\(args))"
             }
             return "vcall \(obj).\(m)(\(args))"
+
+        case .callIndirect(let d, let ref, let a):
+            let args = a.joined(separator: ", ")
+            if let d = d {
+                return "\(d) = call_indirect \(ref)(\(args))"
+            }
+            return "call_indirect \(ref)(\(args))"
 
         case .getField(let d, let obj, let f):
             return "\(d) = get_field \(obj).\(f)"

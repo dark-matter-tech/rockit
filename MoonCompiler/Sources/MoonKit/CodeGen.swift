@@ -17,6 +17,10 @@ public final class CodeGen {
     /// Sentinel parameter index for `super`.
     private static let superParamIndex: UInt16 = 0xFFFD
 
+    /// Offset applied to MIR temp indices to avoid colliding with parameter registers.
+    /// Set per-function to the function's parameter count.
+    private var currentParamOffset: UInt16 = 0
+
     public init() {}
 
     // MARK: - Generate
@@ -86,6 +90,8 @@ public final class CodeGen {
             pool.intern(value, kind: .string)
         case .call(_, let function, _):
             pool.intern(function, kind: .funcName)
+        case .callIndirect:
+            break  // No constants to intern — function ref is in a register
         case .virtualCall(_, _, let method, _):
             pool.intern(method, kind: .methodName)
         case .getField(_, _, let fieldName):
@@ -120,6 +126,9 @@ public final class CodeGen {
             paramIndexMap[name] = UInt16(i)
         }
 
+        // Set param offset so MIR temps (%t0, %t1, ...) start after parameter registers
+        currentParamOffset = UInt16(function.parameters.count)
+
         let registerCount = computeRegisterCount(function)
 
         // Pass 1: compute block offsets
@@ -153,11 +162,12 @@ public final class CodeGen {
     // MARK: - Register Resolution
 
     /// Extract register index from a `%tN` temp name.
+    /// Adds currentParamOffset so MIR temps don't collide with parameter registers.
     private func resolveRegister(_ name: String) -> UInt16 {
         guard name.hasPrefix("%t"), let index = UInt16(name.dropFirst(2)) else {
             return CodeGen.noDestSentinel
         }
-        return index
+        return index + currentParamOffset
     }
 
     /// Compute the number of registers needed for a function.
@@ -177,7 +187,9 @@ public final class CodeGen {
                 }
             }
         }
-        return maxReg >= 0 ? UInt16(maxReg + 1) : 0
+        // Total registers = parameter registers + MIR temp registers
+        let tempRegCount = maxReg >= 0 ? maxReg + 1 : 0
+        return UInt16(Int(currentParamOffset) + tempRegCount)
     }
 
     // MARK: - Label Resolution
@@ -226,6 +238,8 @@ public final class CodeGen {
             return 5   // op(1) + 2*reg(4)
         case .call(_, _, let args):
             return 7 + 2 * args.count  // op(1) + dest(2) + funcIdx(2) + argCount(2) + args
+        case .callIndirect(_, _, let args):
+            return 7 + 2 * args.count  // op(1) + dest(2) + funcRefReg(2) + argCount(2) + args
         case .virtualCall(_, _, _, let args):
             return 9 + 2 * args.count  // op(1) + dest(2) + obj(2) + methodIdx(2) + argCount(2) + args
         case .getField:
@@ -390,6 +404,15 @@ public final class CodeGen {
             emitter.emitOpcode(.call)
             emitter.emitUInt16(dest.map { resolveRegister($0) } ?? CodeGen.noDestSentinel)
             emitter.emitUInt16(pool.intern(function, kind: .funcName))
+            emitter.emitUInt16(UInt16(args.count))
+            for arg in args {
+                emitter.emitUInt16(resolveRegister(arg))
+            }
+
+        case .callIndirect(let dest, let functionRef, let args):
+            emitter.emitOpcode(.callIndirect)
+            emitter.emitUInt16(dest.map { resolveRegister($0) } ?? CodeGen.noDestSentinel)
+            emitter.emitUInt16(resolveRegister(functionRef))
             emitter.emitUInt16(UInt16(args.count))
             for arg in args {
                 emitter.emitUInt16(resolveRegister(arg))
@@ -771,6 +794,15 @@ public final class CodeGen {
                 let fname = Int(funcIdx) < pool.count ? pool[Int(funcIdx)].value : "#\(funcIdx)"
                 let destStr = dest == CodeGen.noDestSentinel ? "_" : "r\(dest)"
                 lines.append("  \(offset): \(op)       \(destStr), \(fname)(\(args.joined(separator: ", ")))")
+
+            case .callIndirect:
+                let dest = readUInt16(bytes, at: &pc)
+                let funcRefReg = readUInt16(bytes, at: &pc)
+                let argCount = readUInt16(bytes, at: &pc)
+                var args: [String] = []
+                for _ in 0..<argCount { args.append("r\(readUInt16(bytes, at: &pc))") }
+                let destStr = dest == CodeGen.noDestSentinel ? "_" : "r\(dest)"
+                lines.append("  \(offset): \(op) \(destStr), r\(funcRefReg)(\(args.joined(separator: ", ")))")
 
             case .vcall:
                 let dest = readUInt16(bytes, at: &pc)

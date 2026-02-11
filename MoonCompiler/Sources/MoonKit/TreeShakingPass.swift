@@ -99,6 +99,11 @@ internal final class TreeShakingPass: MIRPass {
                 switch inst {
                 case .call(_, let function, _):
                     funcs.insert(function)
+                case .callIndirect:
+                    break  // Can't statically determine target
+                case .constString(_, let value) where value.hasPrefix("__lambda_"):
+                    // Lambda function references stored as strings
+                    funcs.insert(value)
                 case .virtualCall(_, _, let method, _):
                     // method may be "ClassName.method" — extract class name
                     funcs.insert(method)

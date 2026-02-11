@@ -409,4 +409,384 @@ final class VMTests: XCTestCase {
             XCTAssert("\(error)".contains("main"), "Expected error about missing main")
         }
     }
+
+    // MARK: - Enum When Matching (End-to-End)
+
+    func testEnumWhenMatching() throws {
+        let output = try runCapturing("""
+        enum class Color { RED, GREEN, BLUE }
+        fun describe(c: Color): String {
+            when (c) {
+                Color.RED -> { return "red" }
+                Color.GREEN -> { return "green" }
+                Color.BLUE -> { return "blue" }
+            }
+            return "unknown"
+        }
+        fun main(): Unit {
+            val r: Color = Color.RED
+            val g: Color = Color.GREEN
+            val b: Color = Color.BLUE
+            println(describe(r))
+            println(describe(g))
+            println(describe(b))
+        }
+        """)
+        XCTAssertEqual(output, ["red", "green", "blue"])
+    }
+
+    func testEnumGlobalInitialization() throws {
+        // Verify that enum globals are properly initialized (not left as null)
+        let output = try runCapturing("""
+        enum class Direction { NORTH, SOUTH, EAST, WEST }
+        fun main(): Unit {
+            val d: Direction = Direction.NORTH
+            println("ok")
+        }
+        """)
+        XCTAssertEqual(output, ["ok"])
+    }
+
+    func testEnumWhenWithElse() throws {
+        let output = try runCapturing("""
+        enum class Size { SMALL, MEDIUM, LARGE }
+        fun label(s: Size): String {
+            when (s) {
+                Size.SMALL -> { return "S" }
+                else -> { return "other" }
+            }
+            return "?"
+        }
+        fun main(): Unit {
+            println(label(Size.SMALL))
+            println(label(Size.LARGE))
+        }
+        """)
+        XCTAssertEqual(output, ["S", "other"])
+    }
+
+    // MARK: - Sealed Class When Matching (End-to-End)
+
+    func testSealedClassWhenMatching() throws {
+        let output = try runCapturing("""
+        sealed class Shape
+        class Circle(val radius: Int) : Shape
+        class Rect(val width: Int, val height: Int) : Shape
+
+        fun describe(s: Shape): String {
+            when (s) {
+                is Circle -> { return "circle" }
+                is Rect -> { return "rect" }
+            }
+            return "unknown"
+        }
+        fun main(): Unit {
+            val c: Shape = Circle(5)
+            val r: Shape = Rect(3, 4)
+            println(describe(c))
+            println(describe(r))
+        }
+        """)
+        XCTAssertEqual(output, ["circle", "rect"])
+    }
+
+    // MARK: - Global Val Initialization
+
+    func testGlobalValInitialization() throws {
+        let output = try runCapturing("""
+        val GREETING: String = "hello"
+        fun main(): Unit {
+            println(GREETING)
+        }
+        """)
+        XCTAssertEqual(output, ["hello"])
+    }
+
+    func testGlobalValIntInitialization() throws {
+        let output = try runCapturing("""
+        val MAGIC: Int = 42
+        fun main(): Unit {
+            println(MAGIC)
+        }
+        """)
+        XCTAssertEqual(output, ["42"])
+    }
+
+    // MARK: - When as Expression (Return Value)
+
+    func testWhenAsExpressionInt() throws {
+        let output = try runCapturing("""
+        fun label(x: Int): String {
+            when (x) {
+                1 -> { return "one" }
+                2 -> { return "two" }
+                else -> { return "other" }
+            }
+            return "?"
+        }
+        fun main(): Unit {
+            println(label(1))
+            println(label(2))
+            println(label(3))
+        }
+        """)
+        XCTAssertEqual(output, ["one", "two", "other"])
+    }
+
+    func testEnumMultipleWhenCalls() throws {
+        // Verify enum matching works across multiple function calls
+        let output = try runCapturing("""
+        enum class Op { ADD, SUB, MUL }
+        fun name(op: Op): String {
+            when (op) {
+                Op.ADD -> { return "add" }
+                Op.SUB -> { return "sub" }
+                Op.MUL -> { return "mul" }
+            }
+            return "?"
+        }
+        fun main(): Unit {
+            println(name(Op.ADD))
+            println(name(Op.SUB))
+            println(name(Op.MUL))
+            println(name(Op.ADD))
+        }
+        """)
+        XCTAssertEqual(output, ["add", "sub", "mul", "add"])
+    }
+
+    func testFunctionWithMultipleParams() throws {
+        // Ensure parameter passing works correctly for multiple params
+        let output = try runCapturing("""
+        fun add(a: Int, b: Int): Int {
+            return a + b
+        }
+        fun main(): Unit {
+            println(add(3, 4))
+        }
+        """)
+        XCTAssertEqual(output, ["7"])
+    }
+
+    // MARK: - For Loop Tests
+
+    func testForLoopRangeInclusive() throws {
+        let output = try runCapturing("""
+        fun main(): Unit {
+            var sum: Int = 0
+            for (i in 1..5) {
+                sum = sum + i
+            }
+            println(sum)
+        }
+        """)
+        XCTAssertEqual(output, ["15"])  // 1+2+3+4+5 = 15
+    }
+
+    func testForLoopRangeExclusive() throws {
+        let output = try runCapturing("""
+        fun main(): Unit {
+            var sum: Int = 0
+            for (i in 0..<5) {
+                sum = sum + i
+            }
+            println(sum)
+        }
+        """)
+        XCTAssertEqual(output, ["10"])  // 0+1+2+3+4 = 10
+    }
+
+    func testForLoopRangePrint() throws {
+        let output = try runCapturing("""
+        fun main(): Unit {
+            for (i in 1..3) {
+                println(i)
+            }
+        }
+        """)
+        XCTAssertEqual(output, ["1", "2", "3"])
+    }
+
+    func testForLoopNested() throws {
+        let output = try runCapturing("""
+        fun main(): Unit {
+            var sum: Int = 0
+            for (i in 1..3) {
+                for (j in 1..3) {
+                    sum = sum + i * j
+                }
+            }
+            println(sum)
+        }
+        """)
+        // (1*1+1*2+1*3) + (2*1+2*2+2*3) + (3*1+3*2+3*3) = 6+12+18 = 36
+        XCTAssertEqual(output, ["36"])
+    }
+
+    // MARK: - String Interpolation Tests
+
+    func testStringInterpolation() throws {
+        let output = try runCapturing("""
+        fun main(): Unit {
+            val name: String = "World"
+            println("Hello, ${name}!")
+        }
+        """)
+        XCTAssertEqual(output, ["Hello, World!"])
+    }
+
+    func testStringInterpolationExpression() throws {
+        let output = try runCapturing("""
+        fun main(): Unit {
+            val a: Int = 3
+            val b: Int = 4
+            println("${a} + ${b} = ${a + b}")
+        }
+        """)
+        XCTAssertEqual(output, ["3 + 4 = 7"])
+    }
+
+    // MARK: - Lambda Tests
+
+    func testLambdaCallDirect() throws {
+        let output = try runCapturing("""
+        fun main(): Unit {
+            val f = { x: Int -> x + 1 }
+            println(f(5))
+        }
+        """)
+        XCTAssertEqual(output, ["6"])
+    }
+
+    func testLambdaPassToFunction() throws {
+        let output = try runCapturing("""
+        fun apply(f: (Int) -> Int, x: Int): Int {
+            return f(x)
+        }
+        fun main(): Unit {
+            println(apply({ x: Int -> x * 2 }, 3))
+        }
+        """)
+        XCTAssertEqual(output, ["6"])
+    }
+
+    func testLambdaNoParams() throws {
+        let output = try runCapturing("""
+        fun main(): Unit {
+            val f = { 42 }
+            println(f())
+        }
+        """)
+        XCTAssertEqual(output, ["42"])
+    }
+
+    // MARK: - Generics Tests
+
+    func testGenericFunctionInferred() throws {
+        // Generic function with type inference (no explicit type args)
+        let output = try runCapturing("""
+        fun identity<T>(x: T): T {
+            return x
+        }
+        fun main(): Unit {
+            println(identity(42))
+            println(identity("hello"))
+        }
+        """)
+        XCTAssertEqual(output, ["42", "hello"])
+    }
+
+    func testGenericDataClass() throws {
+        // Generic data class instantiation
+        let output = try runCapturing("""
+        data class Box<T>(val value: T)
+        fun main(): Unit {
+            val b = Box(42)
+            println(b.value)
+        }
+        """)
+        XCTAssertEqual(output, ["42"])
+    }
+
+    func testGenericMultipleTypeParams() throws {
+        // Multiple type parameters
+        let output = try runCapturing("""
+        fun first<A, B>(a: A, b: B): A {
+            return a
+        }
+        fun main(): Unit {
+            println(first(1, "hello"))
+        }
+        """)
+        XCTAssertEqual(output, ["1"])
+    }
+
+    // MARK: - Interface Tests
+
+    func testInterfaceImplementation() throws {
+        // Class implements interface and method is called
+        let output = try runCapturing("""
+        interface Greeter {
+            fun greet(): String
+        }
+        class EnglishGreeter : Greeter {
+            fun greet(): String {
+                return "Hello"
+            }
+        }
+        fun main(): Unit {
+            val g = EnglishGreeter()
+            println(g.greet())
+        }
+        """)
+        XCTAssertEqual(output, ["Hello"])
+    }
+
+    func testInterfaceMissingMethod() throws {
+        // Class omits required method → should produce type error
+        let diagnostics = DiagnosticEngine()
+        let source = """
+        interface Speaker {
+            fun speak(): String
+        }
+        class Mute : Speaker {
+        }
+        fun main(): Unit {
+        }
+        """
+        let lexer = Lexer(source: source, fileName: "test.moon", diagnostics: diagnostics)
+        let tokens = lexer.tokenize()
+        let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+        let ast = parser.parse()
+        let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+        _ = checker.check()
+        XCTAssertTrue(diagnostics.hasErrors, "Should report missing interface method")
+    }
+
+    func testInterfacePolymorphicDispatch() throws {
+        // Different classes implementing same interface, dispatched by runtime type
+        let output = try runCapturing("""
+        interface Animal {
+            fun sound(): String
+        }
+        class Dog : Animal {
+            fun sound(): String {
+                return "Woof"
+            }
+        }
+        class Cat : Animal {
+            fun sound(): String {
+                return "Meow"
+            }
+        }
+        fun makeSound(a: Animal): Unit {
+            println(a.sound())
+        }
+        fun main(): Unit {
+            makeSound(Dog())
+            makeSound(Cat())
+        }
+        """)
+        XCTAssertEqual(output, ["Woof", "Meow"])
+    }
 }
