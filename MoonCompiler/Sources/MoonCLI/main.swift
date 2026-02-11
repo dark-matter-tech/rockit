@@ -19,6 +19,7 @@ func printUsage() {
         lex <file.moon>       Tokenize and dump tokens
         parse <file.moon>     Parse and dump AST
         check <file.moon>     Type-check and report diagnostics
+        lower <file.moon>     Lower to MIR and dump
         build <file.moon>     Compile to bytecode (coming soon)
         version               Print version
 
@@ -26,6 +27,7 @@ func printUsage() {
         --dump-tokens         Show token stream (with lex)
         --dump-ast            Show AST (with parse)
         --dump-types          Show inferred types (with check)
+        --dump-mir            Show MIR (with lower)
         --no-color            Disable colored output
     """)
 }
@@ -152,6 +154,48 @@ func checkCommand(file: String, dumpTypes: Bool) {
     }
 }
 
+func lowerCommand(file: String, dumpMIR: Bool) {
+    guard FileManager.default.fileExists(atPath: file) else {
+        print("error: file not found: \(file)")
+        exit(1)
+    }
+
+    guard let source = try? String(contentsOfFile: file, encoding: .utf8) else {
+        print("error: could not read file: \(file)")
+        exit(1)
+    }
+
+    let diagnostics = DiagnosticEngine()
+    let lexer = Lexer(source: source, fileName: file, diagnostics: diagnostics)
+    let tokens = lexer.tokenize()
+    let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+    let ast = parser.parse()
+
+    let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+    let typeResult = checker.check()
+
+    let lowering = MIRLowering(typeCheckResult: typeResult)
+    let module = lowering.lower()
+
+    if dumpMIR {
+        print(module)
+    }
+
+    let funcCount = module.functions.count
+    let instrCount = module.totalInstructionCount
+    let typeCount = module.types.count
+    let globalCount = module.globals.count
+    print("\n\(file): \(funcCount) function(s), \(instrCount) instruction(s), \(typeCount) type(s), \(globalCount) global(s)")
+
+    if diagnostics.hasErrors {
+        diagnostics.dump()
+        print("\n\(diagnostics.errorCount) error(s)")
+        exit(1)
+    } else {
+        print("OK")
+    }
+}
+
 // MARK: - Main
 
 let args = CommandLine.arguments
@@ -185,6 +229,14 @@ case "check":
     }
     let dumpTypes = args.contains("--dump-types")
     checkCommand(file: args[2], dumpTypes: dumpTypes)
+
+case "lower":
+    guard args.count >= 3 else {
+        print("error: lower requires a file argument")
+        exit(1)
+    }
+    let dumpMIR = args.contains("--dump-mir")
+    lowerCommand(file: args[2], dumpMIR: dumpMIR)
 
 case "version":
     print("moonc \(version)")
