@@ -1,0 +1,802 @@
+// VM.swift
+// MoonKit — Moon Language Compiler
+// Copyright © 2026 Dark Matter Tech. All rights reserved.
+
+import Foundation
+
+// MARK: - VM
+
+/// The Moon Virtual Machine. Loads and executes bytecode modules
+/// using a register-based architecture with a call stack.
+public final class VM {
+    /// The loaded bytecode module.
+    private let module: BytecodeModule
+
+    /// Runtime configuration.
+    private let config: RuntimeConfig
+
+    /// Built-in function registry.
+    private let builtins: BuiltinRegistry
+
+    /// Call stack.
+    private var callStack: [CallFrame] = []
+
+    /// Global variable storage, indexed by constant pool index of the global name.
+    private var globals: [UInt16: Value] = [:]
+
+    /// Function lookup: name → index in module.functions.
+    private var functionTable: [String: Int] = [:]
+
+    /// Type lookup: name → index in module.types.
+    private var typeTable: [String: Int] = [:]
+
+    /// Type field name → field index mapping for fast field access.
+    private var typeFieldIndices: [String: [String: Int]] = [:]
+
+    /// Heap for object allocation with ARC memory management.
+    private let arcHeap: Heap
+
+    /// Automatic Reference Counting manager.
+    private let arc: ReferenceCounter
+
+    /// Output capture for testing (nil = print to stdout).
+    public var outputCapture: ((String) -> Void)?
+
+    /// Total instructions executed (for stats).
+    private var instructionCount: Int = 0
+
+    public init(module: BytecodeModule, config: RuntimeConfig = .default, builtins: BuiltinRegistry? = nil) {
+        self.module = module
+        self.config = config
+        self.builtins = builtins ?? BuiltinRegistry()
+        self.arcHeap = Heap()
+        self.arc = ReferenceCounter(heap: arcHeap, cycleDetectorThreshold: config.cycleDetectorThreshold)
+        buildLookupTables()
+    }
+
+    // MARK: - Setup
+
+    private func buildLookupTables() {
+        // Function table
+        for (i, f) in module.functions.enumerated() {
+            let name = constantString(f.nameIndex)
+            functionTable[name] = i
+        }
+
+        // Type table + field indices
+        for (i, t) in module.types.enumerated() {
+            let typeName = constantString(t.nameIndex)
+            typeTable[typeName] = i
+            var fieldMap: [String: Int] = [:]
+            for (fi, (nameIdx, _)) in t.fields.enumerated() {
+                fieldMap[constantString(nameIdx)] = fi
+            }
+            typeFieldIndices[typeName] = fieldMap
+        }
+    }
+
+    private func constantString(_ index: UInt16) -> String {
+        let i = Int(index)
+        guard i < module.constantPool.count else { return "<invalid#\(i)>" }
+        return module.constantPool[i].value
+    }
+
+    // MARK: - Execution
+
+    /// Run the module by calling its `main` function.
+    public func run() throws {
+        guard let mainIdx = functionTable["main"] else {
+            throw VMError.unknownFunction(name: "main")
+        }
+
+        // Initialize globals
+        try initializeGlobals()
+
+        // Set up main frame
+        let mainFunc = module.functions[mainIdx]
+        let frame = CallFrame(
+            functionIndex: mainIdx,
+            registerCount: Int(mainFunc.registerCount),
+            returnRegister: nil,
+            functionName: "main"
+        )
+        callStack.append(frame)
+
+        // Execute
+        try executeLoop()
+    }
+
+    /// Run a specific function by name with arguments.
+    public func call(function name: String, args: [Value] = []) throws -> Value {
+        guard let funcIdx = functionTable[name] else {
+            // Check builtins
+            if let builtin = builtins.lookup(name) {
+                return try builtin(args)
+            }
+            throw VMError.unknownFunction(name: name)
+        }
+
+        let f = module.functions[funcIdx]
+        let frame = CallFrame(
+            functionIndex: funcIdx,
+            registerCount: Int(f.registerCount),
+            returnRegister: nil,
+            functionName: name
+        )
+        callStack.append(frame)
+
+        // Load arguments into registers for LOAD_PARAM to read
+        for (i, arg) in args.prefix(Int(f.parameterCount)).enumerated() {
+            callStack[callStack.count - 1].registers[i] = arg
+        }
+
+        try executeLoop()
+
+        return .unit
+    }
+
+    private func initializeGlobals() throws {
+        for (_, global) in module.globals.enumerated() {
+            let nameIdx = global.nameIndex
+            // Initialize with default value based on type
+            switch global.typeTag {
+            case .int, .int32, .int64:  globals[nameIdx] = .int(0)
+            case .float, .float64, .double: globals[nameIdx] = .float(0.0)
+            case .bool:                 globals[nameIdx] = .bool(false)
+            case .string:               globals[nameIdx] = .string("")
+            case .nullable:             globals[nameIdx] = .null
+            default:                    globals[nameIdx] = .null
+            }
+
+            // Run initializer function if present
+            if let initIdx = global.initializerFuncIndex {
+                let initFuncName = constantString(initIdx)
+                if let funcIndex = functionTable[initFuncName] {
+                    let initFunc = module.functions[funcIndex]
+                    let frame = CallFrame(
+                        functionIndex: funcIndex,
+                        registerCount: Int(initFunc.registerCount),
+                        returnRegister: nil,
+                        functionName: initFuncName
+                    )
+                    callStack.append(frame)
+                    try executeLoop()
+                }
+            }
+        }
+    }
+
+    // MARK: - Main Execution Loop
+
+    private func executeLoop() throws {
+        while !callStack.isEmpty {
+            let frameIdx = callStack.count - 1
+            let f = module.functions[callStack[frameIdx].functionIndex]
+            let bytecode = f.bytecode
+
+            while callStack[frameIdx].pc < bytecode.count {
+                let pc = callStack[frameIdx].pc
+                guard let opcode = Opcode(rawValue: bytecode[pc]) else {
+                    throw VMError.unknownOpcode(byte: bytecode[pc])
+                }
+                callStack[frameIdx].pc += 1
+
+                if config.traceExecution {
+                    trace(opcode: opcode, pc: pc, frame: callStack[frameIdx])
+                }
+                instructionCount += 1
+
+                switch opcode {
+                // MARK: Constants
+                case .constInt:
+                    let reg = readUInt16(bytecode, frame: frameIdx)
+                    let val = readInt64(bytecode, frame: frameIdx)
+                    callStack[frameIdx].registers[Int(reg)] = .int(val)
+
+                case .constFloat:
+                    let reg = readUInt16(bytecode, frame: frameIdx)
+                    let val = readFloat64(bytecode, frame: frameIdx)
+                    callStack[frameIdx].registers[Int(reg)] = .float(val)
+
+                case .constTrue:
+                    let reg = readUInt16(bytecode, frame: frameIdx)
+                    callStack[frameIdx].registers[Int(reg)] = .bool(true)
+
+                case .constFalse:
+                    let reg = readUInt16(bytecode, frame: frameIdx)
+                    callStack[frameIdx].registers[Int(reg)] = .bool(false)
+
+                case .constString:
+                    let reg = readUInt16(bytecode, frame: frameIdx)
+                    let idx = readUInt16(bytecode, frame: frameIdx)
+                    callStack[frameIdx].registers[Int(reg)] = .string(constantString(idx))
+
+                case .constNull:
+                    let reg = readUInt16(bytecode, frame: frameIdx)
+                    callStack[frameIdx].registers[Int(reg)] = .null
+
+                // MARK: Memory
+                case .alloc:
+                    let reg = readUInt16(bytecode, frame: frameIdx)
+                    let typeIdx = readUInt16(bytecode, frame: frameIdx)
+                    let objId = allocateObject(typeIndex: typeIdx)
+                    callStack[frameIdx].registers[Int(reg)] = .objectRef(objId)
+
+                case .store:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let src = readUInt16(bytecode, frame: frameIdx)
+                    callStack[frameIdx].registers[Int(dest)] = callStack[frameIdx].registers[Int(src)]
+
+                case .load:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let src = readUInt16(bytecode, frame: frameIdx)
+                    callStack[frameIdx].registers[Int(dest)] = callStack[frameIdx].registers[Int(src)]
+
+                case .loadParam:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let paramIdx = readUInt16(bytecode, frame: frameIdx)
+                    // Parameters are stored in the first N registers by the caller
+                    callStack[frameIdx].registers[Int(dest)] = callStack[frameIdx].registers[Int(paramIdx)]
+
+                case .loadGlobal:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let nameIdx = readUInt16(bytecode, frame: frameIdx)
+                    callStack[frameIdx].registers[Int(dest)] = globals[nameIdx] ?? .null
+
+                // MARK: Arithmetic
+                case .add:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let lhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    let rhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = try performAdd(lhs, rhs)
+
+                case .sub:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let lhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    let rhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = try performSub(lhs, rhs)
+
+                case .mul:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let lhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    let rhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = try performMul(lhs, rhs)
+
+                case .div:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let lhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    let rhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = try performDiv(lhs, rhs)
+
+                case .mod:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let lhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    let rhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = try performMod(lhs, rhs)
+
+                case .neg:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let operand = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    switch operand {
+                    case .int(let v):   callStack[frameIdx].registers[Int(dest)] = .int(-v)
+                    case .float(let v): callStack[frameIdx].registers[Int(dest)] = .float(-v)
+                    default: throw VMError.typeMismatch(expected: "numeric", actual: operand.typeName, operation: "neg")
+                    }
+
+                // MARK: Comparison
+                case .eq:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let lhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    let rhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = .bool(lhs == rhs)
+
+                case .neq:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let lhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    let rhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = .bool(lhs != rhs)
+
+                case .lt:
+                    try executeComparison(bytecode, frame: frameIdx, op: <)
+                case .lte:
+                    try executeComparison(bytecode, frame: frameIdx, op: <=)
+                case .gt:
+                    try executeComparison(bytecode, frame: frameIdx, op: >)
+                case .gte:
+                    try executeComparison(bytecode, frame: frameIdx, op: >=)
+
+                // MARK: Logic
+                case .and:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let lhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    let rhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = .bool(lhs.isTruthy && rhs.isTruthy)
+
+                case .or:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let lhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    let rhs = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = .bool(lhs.isTruthy || rhs.isTruthy)
+
+                case .not:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let operand = callStack[frameIdx].registers[Int(readUInt16(bytecode, frame: frameIdx))]
+                    callStack[frameIdx].registers[Int(dest)] = .bool(!operand.isTruthy)
+
+                // MARK: Calls
+                case .call:
+                    try executeCall(bytecode, frame: frameIdx)
+                    // After call returns, we may have a different frame count
+                    if callStack.isEmpty { return }
+                    continue
+
+                case .vcall:
+                    try executeVirtualCall(bytecode, frame: frameIdx)
+                    if callStack.isEmpty { return }
+                    continue
+
+                // MARK: Fields
+                case .getField:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let objReg = readUInt16(bytecode, frame: frameIdx)
+                    let fieldIdx = readUInt16(bytecode, frame: frameIdx)
+                    let obj = callStack[frameIdx].registers[Int(objReg)]
+                    let fieldName = constantString(fieldIdx)
+                    callStack[frameIdx].registers[Int(dest)] = try getField(obj, fieldName: fieldName)
+
+                case .setField:
+                    let objReg = readUInt16(bytecode, frame: frameIdx)
+                    let fieldIdx = readUInt16(bytecode, frame: frameIdx)
+                    let valReg = readUInt16(bytecode, frame: frameIdx)
+                    let obj = callStack[frameIdx].registers[Int(objReg)]
+                    let fieldName = constantString(fieldIdx)
+                    let value = callStack[frameIdx].registers[Int(valReg)]
+                    try setField(obj, fieldName: fieldName, value: value)
+
+                // MARK: Objects
+                case .newObject:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let typeIdx = readUInt16(bytecode, frame: frameIdx)
+                    let argCount = readUInt16(bytecode, frame: frameIdx)
+                    var args: [Value] = []
+                    for _ in 0..<argCount {
+                        let argReg = readUInt16(bytecode, frame: frameIdx)
+                        args.append(callStack[frameIdx].registers[Int(argReg)])
+                    }
+                    let typeName = constantString(typeIdx)
+                    let objId = createObject(typeName: typeName, args: args)
+                    callStack[frameIdx].registers[Int(dest)] = .objectRef(objId)
+
+                // MARK: Null Safety
+                case .nullCheck:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let operandReg = readUInt16(bytecode, frame: frameIdx)
+                    let operand = callStack[frameIdx].registers[Int(operandReg)]
+                    if case .null = operand {
+                        throw VMError.nullPointerAccess(context: "null check failed")
+                    }
+                    callStack[frameIdx].registers[Int(dest)] = operand
+
+                case .isNull:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let operandReg = readUInt16(bytecode, frame: frameIdx)
+                    let operand = callStack[frameIdx].registers[Int(operandReg)]
+                    callStack[frameIdx].registers[Int(dest)] = .bool(operand == .null)
+
+                // MARK: Type Operations
+                case .typeCheck:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let operandReg = readUInt16(bytecode, frame: frameIdx)
+                    let typeIdx = readUInt16(bytecode, frame: frameIdx)
+                    let operand = callStack[frameIdx].registers[Int(operandReg)]
+                    let typeName = constantString(typeIdx)
+                    callStack[frameIdx].registers[Int(dest)] = .bool(valueIsType(operand, typeName: typeName))
+
+                case .typeCast:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let operandReg = readUInt16(bytecode, frame: frameIdx)
+                    let typeIdx = readUInt16(bytecode, frame: frameIdx)
+                    let operand = callStack[frameIdx].registers[Int(operandReg)]
+                    let typeName = constantString(typeIdx)
+                    guard valueIsType(operand, typeName: typeName) else {
+                        throw VMError.invalidCast(from: operand.typeName, to: typeName)
+                    }
+                    callStack[frameIdx].registers[Int(dest)] = operand
+
+                // MARK: String
+                case .stringConcat:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let count = readUInt16(bytecode, frame: frameIdx)
+                    var parts: [String] = []
+                    for _ in 0..<count {
+                        let partReg = readUInt16(bytecode, frame: frameIdx)
+                        parts.append(callStack[frameIdx].registers[Int(partReg)].description)
+                    }
+                    callStack[frameIdx].registers[Int(dest)] = .string(parts.joined())
+
+                // MARK: Terminators
+                case .ret:
+                    let valReg = readUInt16(bytecode, frame: frameIdx)
+                    let returnVal = callStack[frameIdx].registers[Int(valReg)]
+                    let returnReg = callStack[frameIdx].returnRegister
+                    // Release all registers except the return value
+                    releaseFrame(frameIdx, exceptRegister: Int(valReg))
+                    callStack.removeLast()
+                    if let retReg = returnReg, !callStack.isEmpty {
+                        callStack[callStack.count - 1].registers[Int(retReg)] = returnVal
+                    }
+                    return
+
+                case .retVoid:
+                    // Release all registers in the frame
+                    releaseFrame(frameIdx, exceptRegister: nil)
+                    callStack.removeLast()
+                    return
+
+                case .jump:
+                    let target = readUInt32(bytecode, frame: frameIdx)
+                    callStack[frameIdx].pc = Int(target)
+
+                case .branch:
+                    let condReg = readUInt16(bytecode, frame: frameIdx)
+                    let thenTarget = readUInt32(bytecode, frame: frameIdx)
+                    let elseTarget = readUInt32(bytecode, frame: frameIdx)
+                    let condition = callStack[frameIdx].registers[Int(condReg)]
+                    callStack[frameIdx].pc = condition.isTruthy ? Int(thenTarget) : Int(elseTarget)
+
+                case .unreachable:
+                    throw VMError.unreachable
+                }
+            }
+
+            // If we reach the end of bytecode without a terminator, pop frame
+            releaseFrame(frameIdx, exceptRegister: nil)
+            callStack.removeLast()
+        }
+    }
+
+    // MARK: - ARC Frame Cleanup
+
+    /// Release all objectRef values in a frame's registers when it's being popped.
+    /// Optionally skip one register (the return value being transferred to caller).
+    private func releaseFrame(_ frameIdx: Int, exceptRegister: Int?) {
+        let registers = callStack[frameIdx].registers
+        for (i, value) in registers.enumerated() {
+            if i == exceptRegister { continue }
+            arc.release(value)  // No-op for non-objectRef values
+        }
+        // Trigger cycle detection if suspect buffer is large enough
+        arc.collectCyclesIfNeeded()
+    }
+
+    // MARK: - Byte Reading
+
+    private func readUInt16(_ bytecode: [UInt8], frame: Int) -> UInt16 {
+        let pc = callStack[frame].pc
+        guard pc + 1 < bytecode.count else { callStack[frame].pc = bytecode.count; return 0 }
+        let val = UInt16(bytecode[pc]) << 8 | UInt16(bytecode[pc + 1])
+        callStack[frame].pc += 2
+        return val
+    }
+
+    private func readUInt32(_ bytecode: [UInt8], frame: Int) -> UInt32 {
+        let pc = callStack[frame].pc
+        guard pc + 3 < bytecode.count else { callStack[frame].pc = bytecode.count; return 0 }
+        let val = UInt32(bytecode[pc]) << 24 | UInt32(bytecode[pc+1]) << 16 |
+                  UInt32(bytecode[pc+2]) << 8 | UInt32(bytecode[pc+3])
+        callStack[frame].pc += 4
+        return val
+    }
+
+    private func readInt64(_ bytecode: [UInt8], frame: Int) -> Int64 {
+        let pc = callStack[frame].pc
+        guard pc + 7 < bytecode.count else { callStack[frame].pc = bytecode.count; return 0 }
+        var bits: UInt64 = 0
+        for i in 0..<8 {
+            bits = bits << 8 | UInt64(bytecode[pc + i])
+        }
+        callStack[frame].pc += 8
+        return Int64(bitPattern: bits)
+    }
+
+    private func readFloat64(_ bytecode: [UInt8], frame: Int) -> Double {
+        let pc = callStack[frame].pc
+        guard pc + 7 < bytecode.count else { callStack[frame].pc = bytecode.count; return 0 }
+        var bits: UInt64 = 0
+        for i in 0..<8 {
+            bits = bits << 8 | UInt64(bytecode[pc + i])
+        }
+        callStack[frame].pc += 8
+        return Double(bitPattern: bits)
+    }
+
+    // MARK: - Arithmetic Helpers
+
+    private func performAdd(_ lhs: Value, _ rhs: Value) throws -> Value {
+        switch (lhs, rhs) {
+        case (.int(let a), .int(let b)):     return .int(a &+ b)
+        case (.float(let a), .float(let b)): return .float(a + b)
+        case (.string(let a), .string(let b)): return .string(a + b)
+        default: throw VMError.typeMismatch(expected: "matching types", actual: "\(lhs.typeName) + \(rhs.typeName)", operation: "add")
+        }
+    }
+
+    private func performSub(_ lhs: Value, _ rhs: Value) throws -> Value {
+        switch (lhs, rhs) {
+        case (.int(let a), .int(let b)):     return .int(a &- b)
+        case (.float(let a), .float(let b)): return .float(a - b)
+        default: throw VMError.typeMismatch(expected: "numeric", actual: "\(lhs.typeName) - \(rhs.typeName)", operation: "sub")
+        }
+    }
+
+    private func performMul(_ lhs: Value, _ rhs: Value) throws -> Value {
+        switch (lhs, rhs) {
+        case (.int(let a), .int(let b)):     return .int(a &* b)
+        case (.float(let a), .float(let b)): return .float(a * b)
+        default: throw VMError.typeMismatch(expected: "numeric", actual: "\(lhs.typeName) * \(rhs.typeName)", operation: "mul")
+        }
+    }
+
+    private func performDiv(_ lhs: Value, _ rhs: Value) throws -> Value {
+        switch (lhs, rhs) {
+        case (.int(let a), .int(let b)):
+            guard b != 0 else { throw VMError.divisionByZero }
+            return .int(a / b)
+        case (.float(let a), .float(let b)):
+            guard b != 0.0 else { throw VMError.divisionByZero }
+            return .float(a / b)
+        default: throw VMError.typeMismatch(expected: "numeric", actual: "\(lhs.typeName) / \(rhs.typeName)", operation: "div")
+        }
+    }
+
+    private func performMod(_ lhs: Value, _ rhs: Value) throws -> Value {
+        switch (lhs, rhs) {
+        case (.int(let a), .int(let b)):
+            guard b != 0 else { throw VMError.divisionByZero }
+            return .int(a % b)
+        default: throw VMError.typeMismatch(expected: "Int", actual: "\(lhs.typeName) % \(rhs.typeName)", operation: "mod")
+        }
+    }
+
+    // MARK: - Comparison Helper
+
+    private func executeComparison(_ bytecode: [UInt8], frame: Int, op: (Int64, Int64) -> Bool) throws {
+        let dest = readUInt16(bytecode, frame: frame)
+        let lhs = callStack[frame].registers[Int(readUInt16(bytecode, frame: frame))]
+        let rhs = callStack[frame].registers[Int(readUInt16(bytecode, frame: frame))]
+        switch (lhs, rhs) {
+        case (.int(let a), .int(let b)):
+            callStack[frame].registers[Int(dest)] = .bool(op(a, b))
+        case (.float(let a), .float(let b)):
+            // Convert float comparison to int comparison semantics
+            let result: Bool
+            if a < b { result = op(-1, 0) }
+            else if a > b { result = op(1, 0) }
+            else { result = op(0, 0) }
+            callStack[frame].registers[Int(dest)] = .bool(result)
+        default:
+            throw VMError.typeMismatch(expected: "numeric", actual: "\(lhs.typeName) cmp \(rhs.typeName)", operation: "comparison")
+        }
+    }
+
+    // MARK: - Function Call
+
+    private func executeCall(_ bytecode: [UInt8], frame frameIdx: Int) throws {
+        let destReg = readUInt16(bytecode, frame: frameIdx)
+        let funcIdx = readUInt16(bytecode, frame: frameIdx)
+        let argCount = readUInt16(bytecode, frame: frameIdx)
+
+        var args: [Value] = []
+        for _ in 0..<argCount {
+            let argReg = readUInt16(bytecode, frame: frameIdx)
+            args.append(callStack[frameIdx].registers[Int(argReg)])
+        }
+
+        let funcName = constantString(funcIdx)
+
+        // Check builtins first
+        if let builtin = builtins.lookup(funcName) {
+            let result = try builtin(args)
+            if destReg != 0xFFFF {
+                callStack[frameIdx].registers[Int(destReg)] = result
+            }
+            return
+        }
+
+        // Module function
+        guard let targetIdx = functionTable[funcName] else {
+            throw VMError.unknownFunction(name: funcName)
+        }
+
+        guard callStack.count < config.maxCallStackDepth else {
+            throw VMError.stackOverflow(depth: callStack.count)
+        }
+
+        let targetFunc = module.functions[targetIdx]
+        let returnReg: UInt16? = destReg != 0xFFFF ? destReg : nil
+
+        var newFrame = CallFrame(
+            functionIndex: targetIdx,
+            registerCount: Int(targetFunc.registerCount),
+            returnRegister: returnReg,
+            functionName: funcName
+        )
+
+        // Pass arguments: store in first N registers (for LOAD_PARAM to read)
+        for (i, arg) in args.prefix(Int(targetFunc.parameterCount)).enumerated() {
+            newFrame.registers[i] = arg
+        }
+
+        callStack.append(newFrame)
+
+        // Execute the called function
+        try executeLoop()
+    }
+
+    // MARK: - Virtual Call
+
+    private func executeVirtualCall(_ bytecode: [UInt8], frame frameIdx: Int) throws {
+        let destReg = readUInt16(bytecode, frame: frameIdx)
+        let objReg = readUInt16(bytecode, frame: frameIdx)
+        let methodIdx = readUInt16(bytecode, frame: frameIdx)
+        let argCount = readUInt16(bytecode, frame: frameIdx)
+
+        var args: [Value] = []
+        for _ in 0..<argCount {
+            let argReg = readUInt16(bytecode, frame: frameIdx)
+            args.append(callStack[frameIdx].registers[Int(argReg)])
+        }
+
+        let obj = callStack[frameIdx].registers[Int(objReg)]
+        let methodName = constantString(methodIdx)
+
+        // Resolve the method as a function
+        if let funcIndex = functionTable[methodName] {
+            guard callStack.count < config.maxCallStackDepth else {
+                throw VMError.stackOverflow(depth: callStack.count)
+            }
+
+            let targetFunc = module.functions[funcIndex]
+            let returnReg: UInt16? = destReg != 0xFFFF ? destReg : nil
+
+            var newFrame = CallFrame(
+                functionIndex: funcIndex,
+                registerCount: Int(targetFunc.registerCount),
+                returnRegister: returnReg,
+                functionName: methodName
+            )
+
+            // First arg is `this` (the object)
+            newFrame.registers[0] = obj
+            for (i, arg) in args.prefix(Int(targetFunc.parameterCount)).enumerated() {
+                newFrame.registers[i + 1] = arg
+            }
+
+            callStack.append(newFrame)
+            try executeLoop()
+        } else if let builtin = builtins.lookup(methodName) {
+            let allArgs = [obj] + args
+            let result = try builtin(allArgs)
+            if destReg != 0xFFFF {
+                callStack[frameIdx].registers[Int(destReg)] = result
+            }
+        } else {
+            throw VMError.unknownFunction(name: methodName)
+        }
+    }
+
+    // MARK: - Object Management (ARC-backed)
+
+    private func allocateObject(typeIndex: UInt16) -> ObjectID {
+        let typeName = Int(typeIndex) < module.constantPool.count ? constantString(typeIndex) : ""
+        return arcHeap.allocate(typeName: typeName)
+    }
+
+    private func createObject(typeName: String, args: [Value]) -> ObjectID {
+        var fields: [String: Value] = [:]
+
+        // Look up type to get field names
+        if let typeIdx = typeTable[typeName],
+           typeIdx < module.types.count {
+            let typeDecl = module.types[typeIdx]
+            for (i, (nameIdx, _)) in typeDecl.fields.enumerated() {
+                let fieldName = constantString(nameIdx)
+                if i < args.count {
+                    fields[fieldName] = args[i]
+                } else {
+                    fields[fieldName] = .null
+                }
+            }
+        } else {
+            // No type info — store positionally
+            for (i, arg) in args.enumerated() {
+                fields["$\(i)"] = arg
+            }
+        }
+
+        let id = arcHeap.allocate(typeName: typeName, fields: fields)
+
+        // Retain any object references stored as fields
+        for fieldValue in fields.values {
+            arc.retain(fieldValue)
+        }
+
+        return id
+    }
+
+    private func getField(_ value: Value, fieldName: String) throws -> Value {
+        guard case .objectRef(let id) = value else {
+            if case .null = value {
+                throw VMError.nullPointerAccess(context: "field access '\(fieldName)' on null")
+            }
+            throw VMError.typeMismatch(expected: "Object", actual: value.typeName, operation: "getField(\(fieldName))")
+        }
+        return try arcHeap.getField(id, name: fieldName)
+    }
+
+    private func setField(_ value: Value, fieldName: String, value newValue: Value) throws {
+        guard case .objectRef(let id) = value else {
+            if case .null = value {
+                throw VMError.nullPointerAccess(context: "field set '\(fieldName)' on null")
+            }
+            throw VMError.typeMismatch(expected: "Object", actual: value.typeName, operation: "setField(\(fieldName))")
+        }
+        // Write barrier: retain new value, release old value
+        let oldValue = try arcHeap.setField(id, name: fieldName, value: newValue)
+        arc.retain(newValue)
+        arc.release(oldValue)
+    }
+
+    // MARK: - Type Checking
+
+    private func valueIsType(_ value: Value, typeName: String) -> Bool {
+        switch (value, typeName) {
+        case (.int, "Int"), (.int, "Int64"):       return true
+        case (.float, "Float64"), (.float, "Double"): return true
+        case (.bool, "Bool"):                       return true
+        case (.string, "String"):                   return true
+        case (.null, _):                            return false
+        case (.objectRef(let id), _):
+            return arcHeap.typeName(of: id) == typeName
+        default: return false
+        }
+    }
+
+    // MARK: - Tracing
+
+    private func trace(opcode: Opcode, pc: Int, frame: CallFrame) {
+        let msg = "  [\(frame.functionName)] 0x\(String(format: "%04X", pc)): \(opcode)"
+        if let capture = outputCapture {
+            capture(msg)
+        } else {
+            Swift.print(msg)
+        }
+    }
+
+    // MARK: - Stack Trace
+
+    /// Build a stack trace from the current call stack state.
+    public func captureStackTrace(error: VMError) -> StackTrace {
+        let frames = callStack.reversed().map { frame in
+            StackTraceFrame(functionName: frame.functionName, bytecodeOffset: frame.pc)
+        }
+        return StackTrace(error: error, frames: frames)
+    }
+
+    // MARK: - GC Stats
+
+    /// Print GC/ARC statistics (for --gc-stats flag).
+    public func printGCStats() {
+        let output = """
+        \(arcHeap.statsDescription)
+        \(arc.statsDescription)
+        \(arc.cycleDetector.statsDescription)
+          Instructions executed: \(instructionCount)
+        """
+        if let capture = outputCapture {
+            capture(output)
+        } else {
+            Swift.print(output)
+        }
+    }
+}

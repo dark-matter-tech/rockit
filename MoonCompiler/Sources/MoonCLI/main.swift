@@ -21,6 +21,7 @@ func printUsage() {
         check <file.moon>     Type-check and report diagnostics
         lower <file.moon>     Lower to MIR and dump
         build <file.moon>     Compile to bytecode (.moonb)
+        run <file>            Execute a .moon or .moonb file
         version               Print version
 
     OPTIONS:
@@ -30,6 +31,8 @@ func printUsage() {
         --dump-mir            Show optimized MIR (with lower)
         --dump-mir-unoptimized Show MIR before optimization
         --dump-bytecode       Show disassembled bytecode (with build)
+        --trace               Show instruction-level execution trace (with run)
+        --gc-stats            Show ARC/memory statistics (with run)
         --no-color            Disable colored output
     """)
 }
@@ -272,6 +275,71 @@ func buildCommand(file: String, dumpBytecode: Bool) {
     print("OK")
 }
 
+func runCommand(file: String, trace: Bool, gcStats: Bool) {
+    guard FileManager.default.fileExists(atPath: file) else {
+        print("error: file not found: \(file)")
+        exit(1)
+    }
+
+    let module: BytecodeModule
+
+    if file.hasSuffix(".moonb") {
+        // Load pre-compiled bytecode
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: file)) else {
+            print("error: could not read file: \(file)")
+            exit(1)
+        }
+        do {
+            module = try BytecodeLoader.load(bytes: Array(data))
+        } catch {
+            print("error: \(error)")
+            exit(1)
+        }
+    } else {
+        // Compile from source first
+        guard let source = try? String(contentsOfFile: file, encoding: .utf8) else {
+            print("error: could not read file: \(file)")
+            exit(1)
+        }
+
+        let diagnostics = DiagnosticEngine()
+        let lexer = Lexer(source: source, fileName: file, diagnostics: diagnostics)
+        let tokens = lexer.tokenize()
+        let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+        let ast = parser.parse()
+
+        let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+        let typeResult = checker.check()
+
+        if diagnostics.hasErrors {
+            diagnostics.dump()
+            print("\n\(diagnostics.errorCount) error(s)")
+            exit(1)
+        }
+
+        let lowering = MIRLowering(typeCheckResult: typeResult)
+        let unoptimized = lowering.lower()
+        let optimizer = MIROptimizer()
+        let optimized = optimizer.optimize(unoptimized)
+        let codeGen = CodeGen()
+        module = codeGen.generate(optimized)
+    }
+
+    let config = RuntimeConfig(traceExecution: trace, gcStats: gcStats)
+    let vm = VM(module: module, config: config)
+
+    do {
+        try vm.run()
+        if gcStats {
+            vm.printGCStats()
+        }
+    } catch {
+        let stackTrace = vm.captureStackTrace(error: error as! VMError)
+        print(stackTrace)
+        exit(1)
+    }
+}
+
 // MARK: - Main
 
 let args = CommandLine.arguments
@@ -322,6 +390,15 @@ case "build":
     }
     let dumpBytecode = args.contains("--dump-bytecode")
     buildCommand(file: args[2], dumpBytecode: dumpBytecode)
+
+case "run":
+    guard args.count >= 3 else {
+        print("error: run requires a file argument")
+        exit(1)
+    }
+    let trace = args.contains("--trace")
+    let gcStats = args.contains("--gc-stats")
+    runCommand(file: args[2], trace: trace, gcStats: gcStats)
 
 case "version":
     print("moonc \(version)")
