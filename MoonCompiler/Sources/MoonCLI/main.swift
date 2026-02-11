@@ -17,12 +17,13 @@ func printUsage() {
 
     COMMANDS:
         lex <file.moon>       Tokenize and dump tokens
-        parse <file.moon>     Parse and dump AST (coming soon)
+        parse <file.moon>     Parse and dump AST
         build <file.moon>     Compile to bytecode (coming soon)
         version               Print version
 
     OPTIONS:
         --dump-tokens         Show token stream (with lex)
+        --dump-ast            Show AST (with parse)
         --no-color            Disable colored output
     """)
 }
@@ -75,6 +76,39 @@ func lex(file: String, dumpTokens: Bool) {
     }
 }
 
+func parseCommand(file: String, dumpAST: Bool) {
+    guard FileManager.default.fileExists(atPath: file) else {
+        print("error: file not found: \(file)")
+        exit(1)
+    }
+
+    guard let source = try? String(contentsOfFile: file, encoding: .utf8) else {
+        print("error: could not read file: \(file)")
+        exit(1)
+    }
+
+    let diagnostics = DiagnosticEngine()
+    let lexer = Lexer(source: source, fileName: file, diagnostics: diagnostics)
+    let tokens = lexer.tokenize()
+    let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+    let ast = parser.parse()
+
+    if dumpAST {
+        print(ast.dump())
+    }
+
+    let declCount = ast.declarations.count
+    print("\n\(file): \(declCount) declaration(s)")
+
+    if diagnostics.hasErrors {
+        diagnostics.dump()
+        print("\n\(diagnostics.errorCount) error(s)")
+        exit(1)
+    } else {
+        print("OK")
+    }
+}
+
 // MARK: - Main
 
 let args = CommandLine.arguments
@@ -92,6 +126,14 @@ case "lex":
     }
     let dumpTokens = args.contains("--dump-tokens")
     lex(file: args[2], dumpTokens: dumpTokens)
+
+case "parse":
+    guard args.count >= 3 else {
+        print("error: parse requires a file argument")
+        exit(1)
+    }
+    let dumpAST = args.contains("--dump-ast")
+    parseCommand(file: args[2], dumpAST: dumpAST)
 
 case "version":
     print("moonc \(version)")

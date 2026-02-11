@@ -61,6 +61,13 @@ public final class DiagnosticEngine {
         diagnostics.append(Diagnostic(.note, message, at: location))
     }
 
+    /// Remove diagnostics added after the given count (for speculative parsing rollback)
+    public func truncate(to count: Int) {
+        if diagnostics.count > count {
+            diagnostics.removeSubrange(count...)
+        }
+    }
+
     public func dump() {
         for diag in diagnostics {
             print(diag)
