@@ -1586,11 +1586,20 @@ public final class Parser {
     private func parseWhenEntry() -> WhenEntry {
         let start = peek()
         var conditions: [WhenCondition] = []
-        conditions.append(parseWhenCondition())
-        while match(.comma) {
-            skipNewlines()
+
+        // Handle `else ->` as a special when entry
+        if check(.kwElse) {
+            let elseToken = advance()
+            let elseSpan = elseToken.span
+            conditions.append(.expression(.identifier("else", elseSpan)))
+        } else {
             conditions.append(parseWhenCondition())
+            while match(.comma) {
+                skipNewlines()
+                conditions.append(parseWhenCondition())
+            }
         }
+
         skipNewlines()
         expect(.arrow, "expected '->' in when entry")
         skipNewlines()
