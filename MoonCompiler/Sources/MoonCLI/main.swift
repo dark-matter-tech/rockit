@@ -27,7 +27,8 @@ func printUsage() {
         --dump-tokens         Show token stream (with lex)
         --dump-ast            Show AST (with parse)
         --dump-types          Show inferred types (with check)
-        --dump-mir            Show MIR (with lower)
+        --dump-mir            Show optimized MIR (with lower)
+        --dump-mir-unoptimized Show MIR before optimization
         --no-color            Disable colored output
     """)
 }
@@ -154,7 +155,7 @@ func checkCommand(file: String, dumpTypes: Bool) {
     }
 }
 
-func lowerCommand(file: String, dumpMIR: Bool) {
+func lowerCommand(file: String, dumpMIR: Bool, dumpUnoptimized: Bool = false) {
     guard FileManager.default.fileExists(atPath: file) else {
         print("error: file not found: \(file)")
         exit(1)
@@ -175,7 +176,16 @@ func lowerCommand(file: String, dumpMIR: Bool) {
     let typeResult = checker.check()
 
     let lowering = MIRLowering(typeCheckResult: typeResult)
-    let module = lowering.lower()
+    let unoptimized = lowering.lower()
+
+    if dumpUnoptimized {
+        print("--- Unoptimized MIR ---")
+        print(unoptimized)
+        print("--- End Unoptimized MIR ---")
+    }
+
+    let optimizer = MIROptimizer()
+    let module = optimizer.optimize(unoptimized)
 
     if dumpMIR {
         print(module)
@@ -185,7 +195,12 @@ func lowerCommand(file: String, dumpMIR: Bool) {
     let instrCount = module.totalInstructionCount
     let typeCount = module.types.count
     let globalCount = module.globals.count
+    let savedInstrs = unoptimized.totalInstructionCount - instrCount
+    let savedFuncs = unoptimized.functions.count - funcCount
     print("\n\(file): \(funcCount) function(s), \(instrCount) instruction(s), \(typeCount) type(s), \(globalCount) global(s)")
+    if savedInstrs > 0 || savedFuncs > 0 {
+        print("  optimized: \(savedInstrs) instruction(s) eliminated, \(savedFuncs) function(s) removed")
+    }
 
     if diagnostics.hasErrors {
         diagnostics.dump()
@@ -236,7 +251,8 @@ case "lower":
         exit(1)
     }
     let dumpMIR = args.contains("--dump-mir")
-    lowerCommand(file: args[2], dumpMIR: dumpMIR)
+    let dumpUnopt = args.contains("--dump-mir-unoptimized")
+    lowerCommand(file: args[2], dumpMIR: dumpMIR, dumpUnoptimized: dumpUnopt)
 
 case "version":
     print("moonc \(version)")
