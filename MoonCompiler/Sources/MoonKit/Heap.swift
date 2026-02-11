@@ -21,12 +21,20 @@ public final class MoonObject {
     /// Weak reference flag — not counted in refCount.
     public var hasWeakRefs: Bool
 
+    /// Element storage for List objects. nil for non-list objects.
+    public var listStorage: [Value]?
+
+    /// Key-value storage for HashMap objects. nil for non-map objects.
+    public var mapStorage: [Value: Value]?
+
     public init(typeName: String, fields: [String: Value] = [:]) {
         self.typeName = typeName
         self.fields = fields
         self.refCount = 1
         self.isDeallocated = false
         self.hasWeakRefs = false
+        self.listStorage = nil
+        self.mapStorage = nil
     }
 }
 
@@ -115,11 +123,20 @@ public final class Heap {
     }
 
     /// Get all field values of an object (for ARC cascading release).
+    /// Includes collection elements so they are properly released.
     public func allFieldValues(_ id: ObjectID) -> [Value] {
         guard id.index < objects.count, let obj = objects[id.index], !obj.isDeallocated else {
             return []
         }
-        return Array(obj.fields.values)
+        var values = Array(obj.fields.values)
+        if let listElements = obj.listStorage {
+            values.append(contentsOf: listElements)
+        }
+        if let mapEntries = obj.mapStorage {
+            values.append(contentsOf: mapEntries.keys)
+            values.append(contentsOf: mapEntries.values)
+        }
+        return values
     }
 
     // MARK: - Deallocation
@@ -131,6 +148,8 @@ public final class Heap {
         }
         obj.isDeallocated = true
         obj.fields = [:]
+        obj.listStorage = nil
+        obj.mapStorage = nil
         objects[id.index] = nil
         freeList.append(id.index)
         totalDeallocations += 1

@@ -145,4 +145,255 @@ public final class BuiltinRegistry {
             return .string(first.typeName)
         }
     }
+
+    // MARK: - Collection Builtins
+
+    /// Register collection builtins that need heap and ARC access.
+    /// Called by VM after heap and ARC are initialized.
+    public func registerCollectionBuiltins(heap: Heap, arc: ReferenceCounter) {
+        registerListBuiltins(heap: heap, arc: arc)
+        registerHashMapBuiltins(heap: heap, arc: arc)
+    }
+
+    // MARK: List Builtins
+
+    private func registerListBuiltins(heap: Heap, arc: ReferenceCounter) {
+        func extractList(_ args: [Value], operation: String) throws -> MoonObject {
+            guard let first = args.first, case .objectRef(let id) = first else {
+                throw VMError.typeMismatch(
+                    expected: "List",
+                    actual: args.first?.typeName ?? "nothing",
+                    operation: operation
+                )
+            }
+            let obj = try heap.get(id)
+            guard obj.typeName == "List" || obj.typeName == "MutableList" else {
+                throw VMError.typeMismatch(
+                    expected: "List", actual: obj.typeName, operation: operation
+                )
+            }
+            return obj
+        }
+
+        register(name: "listCreate") { _ in
+            let id = heap.allocate(typeName: "List")
+            let obj = try heap.get(id)
+            obj.listStorage = []
+            return .objectRef(id)
+        }
+
+        register(name: "listAppend") { args in
+            let obj = try extractList(args, operation: "listAppend")
+            guard args.count >= 2 else {
+                throw VMError.typeMismatch(expected: "2 arguments", actual: "\(args.count)", operation: "listAppend")
+            }
+            let element = args[1]
+            obj.listStorage?.append(element)
+            arc.retain(element)
+            return .unit
+        }
+
+        register(name: "listGet") { args in
+            let obj = try extractList(args, operation: "listGet")
+            guard args.count >= 2, case .int(let index) = args[1] else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.count >= 2 ? args[1].typeName : "nothing", operation: "listGet")
+            }
+            guard let storage = obj.listStorage, index >= 0, Int(index) < storage.count else {
+                throw VMError.indexOutOfBounds(index: Int(index), count: obj.listStorage?.count ?? 0)
+            }
+            return storage[Int(index)]
+        }
+
+        register(name: "listSet") { args in
+            let obj = try extractList(args, operation: "listSet")
+            guard args.count >= 3, case .int(let index) = args[1] else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.count >= 2 ? args[1].typeName : "nothing", operation: "listSet")
+            }
+            let newValue = args[2]
+            guard obj.listStorage != nil, index >= 0, Int(index) < obj.listStorage!.count else {
+                throw VMError.indexOutOfBounds(index: Int(index), count: obj.listStorage?.count ?? 0)
+            }
+            let oldValue = obj.listStorage![Int(index)]
+            obj.listStorage![Int(index)] = newValue
+            arc.retain(newValue)
+            arc.release(oldValue)
+            return .unit
+        }
+
+        register(name: "listSize") { args in
+            let obj = try extractList(args, operation: "listSize")
+            return .int(Int64(obj.listStorage?.count ?? 0))
+        }
+
+        register(name: "listRemoveAt") { args in
+            let obj = try extractList(args, operation: "listRemoveAt")
+            guard args.count >= 2, case .int(let index) = args[1] else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.count >= 2 ? args[1].typeName : "nothing", operation: "listRemoveAt")
+            }
+            guard obj.listStorage != nil, index >= 0, Int(index) < obj.listStorage!.count else {
+                throw VMError.indexOutOfBounds(index: Int(index), count: obj.listStorage?.count ?? 0)
+            }
+            let removed = obj.listStorage!.remove(at: Int(index))
+            // Ownership transfer: list's retain becomes caller's retain
+            return removed
+        }
+
+        register(name: "listContains") { args in
+            let obj = try extractList(args, operation: "listContains")
+            guard args.count >= 2 else {
+                throw VMError.typeMismatch(expected: "2 arguments", actual: "\(args.count)", operation: "listContains")
+            }
+            return .bool(obj.listStorage?.contains(args[1]) ?? false)
+        }
+
+        register(name: "listIndexOf") { args in
+            let obj = try extractList(args, operation: "listIndexOf")
+            guard args.count >= 2 else {
+                throw VMError.typeMismatch(expected: "2 arguments", actual: "\(args.count)", operation: "listIndexOf")
+            }
+            if let index = obj.listStorage?.firstIndex(of: args[1]) {
+                return .int(Int64(index))
+            }
+            return .int(-1)
+        }
+
+        register(name: "listIsEmpty") { args in
+            let obj = try extractList(args, operation: "listIsEmpty")
+            return .bool(obj.listStorage?.isEmpty ?? true)
+        }
+
+        register(name: "listClear") { args in
+            let obj = try extractList(args, operation: "listClear")
+            if let elements = obj.listStorage {
+                for element in elements {
+                    arc.release(element)
+                }
+            }
+            obj.listStorage = []
+            return .unit
+        }
+    }
+
+    // MARK: HashMap Builtins
+
+    private func registerHashMapBuiltins(heap: Heap, arc: ReferenceCounter) {
+        func extractMap(_ args: [Value], operation: String) throws -> MoonObject {
+            guard let first = args.first, case .objectRef(let id) = first else {
+                throw VMError.typeMismatch(
+                    expected: "HashMap",
+                    actual: args.first?.typeName ?? "nothing",
+                    operation: operation
+                )
+            }
+            let obj = try heap.get(id)
+            guard obj.typeName == "HashMap" || obj.typeName == "Map" || obj.typeName == "MutableMap" else {
+                throw VMError.typeMismatch(
+                    expected: "HashMap", actual: obj.typeName, operation: operation
+                )
+            }
+            return obj
+        }
+
+        register(name: "mapCreate") { _ in
+            let id = heap.allocate(typeName: "HashMap")
+            let obj = try heap.get(id)
+            obj.mapStorage = [:]
+            return .objectRef(id)
+        }
+
+        register(name: "mapPut") { args in
+            let obj = try extractMap(args, operation: "mapPut")
+            guard args.count >= 3 else {
+                throw VMError.typeMismatch(expected: "3 arguments", actual: "\(args.count)", operation: "mapPut")
+            }
+            let key = args[1]
+            let newValue = args[2]
+            if let oldValue = obj.mapStorage?[key] {
+                // Key exists: release old value, retain new value
+                arc.release(oldValue)
+            } else {
+                // New key: retain the key
+                arc.retain(key)
+            }
+            obj.mapStorage?[key] = newValue
+            arc.retain(newValue)
+            return .unit
+        }
+
+        register(name: "mapGet") { args in
+            let obj = try extractMap(args, operation: "mapGet")
+            guard args.count >= 2 else {
+                throw VMError.typeMismatch(expected: "2 arguments", actual: "\(args.count)", operation: "mapGet")
+            }
+            return obj.mapStorage?[args[1]] ?? .null
+        }
+
+        register(name: "mapRemove") { args in
+            let obj = try extractMap(args, operation: "mapRemove")
+            guard args.count >= 2 else {
+                throw VMError.typeMismatch(expected: "2 arguments", actual: "\(args.count)", operation: "mapRemove")
+            }
+            let key = args[1]
+            guard let removedValue = obj.mapStorage?.removeValue(forKey: key) else {
+                return .null
+            }
+            arc.release(key)
+            // Ownership transfer for value: map's retain becomes caller's retain
+            return removedValue
+        }
+
+        register(name: "mapContainsKey") { args in
+            let obj = try extractMap(args, operation: "mapContainsKey")
+            guard args.count >= 2 else {
+                throw VMError.typeMismatch(expected: "2 arguments", actual: "\(args.count)", operation: "mapContainsKey")
+            }
+            return .bool(obj.mapStorage?[args[1]] != nil)
+        }
+
+        register(name: "mapKeys") { args in
+            let obj = try extractMap(args, operation: "mapKeys")
+            let keys = obj.mapStorage.map { Array($0.keys) } ?? []
+            let listId = heap.allocate(typeName: "List")
+            let listObj = try heap.get(listId)
+            listObj.listStorage = keys
+            for key in keys {
+                arc.retain(key)
+            }
+            return .objectRef(listId)
+        }
+
+        register(name: "mapValues") { args in
+            let obj = try extractMap(args, operation: "mapValues")
+            let values = obj.mapStorage.map { Array($0.values) } ?? []
+            let listId = heap.allocate(typeName: "List")
+            let listObj = try heap.get(listId)
+            listObj.listStorage = values
+            for value in values {
+                arc.retain(value)
+            }
+            return .objectRef(listId)
+        }
+
+        register(name: "mapSize") { args in
+            let obj = try extractMap(args, operation: "mapSize")
+            return .int(Int64(obj.mapStorage?.count ?? 0))
+        }
+
+        register(name: "mapIsEmpty") { args in
+            let obj = try extractMap(args, operation: "mapIsEmpty")
+            return .bool(obj.mapStorage?.isEmpty ?? true)
+        }
+
+        register(name: "mapClear") { args in
+            let obj = try extractMap(args, operation: "mapClear")
+            if let entries = obj.mapStorage {
+                for (key, value) in entries {
+                    arc.release(key)
+                    arc.release(value)
+                }
+            }
+            obj.mapStorage = [:]
+            return .unit
+        }
+    }
 }

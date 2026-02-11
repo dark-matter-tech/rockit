@@ -56,6 +56,7 @@ public final class VM {
         self.arcHeap = Heap()
         self.arc = ReferenceCounter(heap: arcHeap, cycleDetectorThreshold: config.cycleDetectorThreshold)
         buildLookupTables()
+        self.builtins.registerCollectionBuiltins(heap: arcHeap, arc: arc)
     }
 
     // MARK: - Setup

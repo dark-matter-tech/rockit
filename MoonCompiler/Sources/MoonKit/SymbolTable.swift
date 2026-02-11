@@ -208,5 +208,56 @@ public final class SymbolTable {
         for (name, type) in builtinFunctions {
             globalScope.define(Symbol(name: name, type: type, kind: .function))
         }
+
+        // Collection builtin functions
+        let collectionBuiltins: [(String, Type)] = [
+            // List operations
+            ("listCreate",   .function(parameterTypes: [],
+                                       returnType: .classType(name: "List", typeArguments: []))),
+            ("listAppend",   .function(parameterTypes: [.classType(name: "List", typeArguments: []), .typeParameter(name: "T", bound: nil)],
+                                       returnType: .unit)),
+            ("listGet",      .function(parameterTypes: [.classType(name: "List", typeArguments: []), .int],
+                                       returnType: .typeParameter(name: "T", bound: nil))),
+            ("listSet",      .function(parameterTypes: [.classType(name: "List", typeArguments: []), .int, .typeParameter(name: "T", bound: nil)],
+                                       returnType: .unit)),
+            ("listSize",     .function(parameterTypes: [.classType(name: "List", typeArguments: [])],
+                                       returnType: .int)),
+            ("listRemoveAt", .function(parameterTypes: [.classType(name: "List", typeArguments: []), .int],
+                                       returnType: .typeParameter(name: "T", bound: nil))),
+            ("listContains", .function(parameterTypes: [.classType(name: "List", typeArguments: []), .typeParameter(name: "T", bound: nil)],
+                                       returnType: .bool)),
+            ("listIndexOf",  .function(parameterTypes: [.classType(name: "List", typeArguments: []), .typeParameter(name: "T", bound: nil)],
+                                       returnType: .int)),
+            ("listIsEmpty",  .function(parameterTypes: [.classType(name: "List", typeArguments: [])],
+                                       returnType: .bool)),
+            ("listClear",    .function(parameterTypes: [.classType(name: "List", typeArguments: [])],
+                                       returnType: .unit)),
+
+            // HashMap operations
+            ("mapCreate",      .function(parameterTypes: [],
+                                         returnType: .classType(name: "Map", typeArguments: []))),
+            ("mapPut",         .function(parameterTypes: [.classType(name: "Map", typeArguments: []), .typeParameter(name: "K", bound: nil), .typeParameter(name: "V", bound: nil)],
+                                         returnType: .unit)),
+            ("mapGet",         .function(parameterTypes: [.classType(name: "Map", typeArguments: []), .typeParameter(name: "K", bound: nil)],
+                                         returnType: .nullable(.typeParameter(name: "V", bound: nil)))),
+            ("mapRemove",      .function(parameterTypes: [.classType(name: "Map", typeArguments: []), .typeParameter(name: "K", bound: nil)],
+                                         returnType: .nullable(.typeParameter(name: "V", bound: nil)))),
+            ("mapContainsKey", .function(parameterTypes: [.classType(name: "Map", typeArguments: []), .typeParameter(name: "K", bound: nil)],
+                                         returnType: .bool)),
+            ("mapKeys",        .function(parameterTypes: [.classType(name: "Map", typeArguments: [])],
+                                         returnType: .classType(name: "List", typeArguments: []))),
+            ("mapValues",      .function(parameterTypes: [.classType(name: "Map", typeArguments: [])],
+                                         returnType: .classType(name: "List", typeArguments: []))),
+            ("mapSize",        .function(parameterTypes: [.classType(name: "Map", typeArguments: [])],
+                                         returnType: .int)),
+            ("mapIsEmpty",     .function(parameterTypes: [.classType(name: "Map", typeArguments: [])],
+                                         returnType: .bool)),
+            ("mapClear",       .function(parameterTypes: [.classType(name: "Map", typeArguments: [])],
+                                         returnType: .unit)),
+        ]
+
+        for (name, type) in collectionBuiltins {
+            globalScope.define(Symbol(name: name, type: type, kind: .function))
+        }
     }
 }
