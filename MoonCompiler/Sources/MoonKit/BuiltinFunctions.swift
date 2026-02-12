@@ -96,6 +96,135 @@ public final class BuiltinRegistry {
             return .string(String(s[startIdx..<endIdx]))
         }
 
+        register(name: "charAt") { args in
+            guard args.count >= 2,
+                  case .string(let s) = args[0],
+                  case .int(let index) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, Int", actual: "invalid args", operation: "charAt")
+            }
+            guard index >= 0, Int(index) < s.count else {
+                throw VMError.indexOutOfBounds(index: Int(index), count: s.count)
+            }
+            let charIdx = s.index(s.startIndex, offsetBy: Int(index))
+            return .string(String(s[charIdx]))
+        }
+
+        register(name: "stringIndexOf") { args in
+            guard args.count >= 2,
+                  case .string(let s) = args[0],
+                  case .string(let search) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, String", actual: "invalid args", operation: "stringIndexOf")
+            }
+            if let range = s.range(of: search) {
+                return .int(Int64(s.distance(from: s.startIndex, to: range.lowerBound)))
+            }
+            return .int(-1)
+        }
+
+        register(name: "startsWith") { args in
+            guard args.count >= 2,
+                  case .string(let s) = args[0],
+                  case .string(let prefix) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, String", actual: "invalid args", operation: "startsWith")
+            }
+            return .bool(s.hasPrefix(prefix))
+        }
+
+        register(name: "endsWith") { args in
+            guard args.count >= 2,
+                  case .string(let s) = args[0],
+                  case .string(let suffix) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, String", actual: "invalid args", operation: "endsWith")
+            }
+            return .bool(s.hasSuffix(suffix))
+        }
+
+        register(name: "stringContains") { args in
+            guard args.count >= 2,
+                  case .string(let s) = args[0],
+                  case .string(let search) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, String", actual: "invalid args", operation: "stringContains")
+            }
+            return .bool(s.contains(search))
+        }
+
+        register(name: "stringTrim") { args in
+            guard case .string(let s) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "stringTrim")
+            }
+            return .string(s.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        register(name: "stringReplace") { args in
+            guard args.count >= 3,
+                  case .string(let s) = args[0],
+                  case .string(let target) = args[1],
+                  case .string(let replacement) = args[2] else {
+                throw VMError.typeMismatch(expected: "String, String, String", actual: "invalid args", operation: "stringReplace")
+            }
+            return .string(s.replacingOccurrences(of: target, with: replacement))
+        }
+
+        register(name: "stringToLower") { args in
+            guard case .string(let s) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "stringToLower")
+            }
+            return .string(s.lowercased())
+        }
+
+        register(name: "stringToUpper") { args in
+            guard case .string(let s) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "stringToUpper")
+            }
+            return .string(s.uppercased())
+        }
+
+        // Character classification
+        register(name: "isDigit") { args in
+            guard case .string(let s) = args.first, let ch = s.first else {
+                throw VMError.typeMismatch(expected: "String (single char)", actual: args.first?.typeName ?? "nothing", operation: "isDigit")
+            }
+            return .bool(ch.isNumber)
+        }
+
+        register(name: "isLetter") { args in
+            guard case .string(let s) = args.first, let ch = s.first else {
+                throw VMError.typeMismatch(expected: "String (single char)", actual: args.first?.typeName ?? "nothing", operation: "isLetter")
+            }
+            return .bool(ch.isLetter)
+        }
+
+        register(name: "isWhitespace") { args in
+            guard case .string(let s) = args.first, let ch = s.first else {
+                throw VMError.typeMismatch(expected: "String (single char)", actual: args.first?.typeName ?? "nothing", operation: "isWhitespace")
+            }
+            return .bool(ch.isWhitespace)
+        }
+
+        register(name: "isLetterOrDigit") { args in
+            guard case .string(let s) = args.first, let ch = s.first else {
+                throw VMError.typeMismatch(expected: "String (single char)", actual: args.first?.typeName ?? "nothing", operation: "isLetterOrDigit")
+            }
+            return .bool(ch.isLetter || ch.isNumber)
+        }
+
+        register(name: "charToInt") { args in
+            guard case .string(let s) = args.first, let ch = s.first else {
+                throw VMError.typeMismatch(expected: "String (single char)", actual: args.first?.typeName ?? "nothing", operation: "charToInt")
+            }
+            return .int(Int64(ch.asciiValue ?? 0))
+        }
+
+        register(name: "intToChar") { args in
+            guard case .int(let code) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "intToChar")
+            }
+            guard code >= 0, code <= 127, let scalar = UnicodeScalar(Int(code)) else {
+                return .string("")
+            }
+            return .string(String(Character(scalar)))
+        }
+
         // Input
         register(name: "readLine") { _ in
             if let line = Swift.readLine() {
@@ -153,6 +282,7 @@ public final class BuiltinRegistry {
     public func registerCollectionBuiltins(heap: Heap, arc: ReferenceCounter) {
         registerListBuiltins(heap: heap, arc: arc)
         registerHashMapBuiltins(heap: heap, arc: arc)
+        registerHeapAwareStringBuiltins(heap: heap)
     }
 
     // MARK: List Builtins
@@ -394,6 +524,48 @@ public final class BuiltinRegistry {
             }
             obj.mapStorage = [:]
             return .unit
+        }
+    }
+
+    // MARK: Heap-Aware String Builtins
+
+    private func registerHeapAwareStringBuiltins(heap: Heap) {
+        register(name: "stringSplit") { args in
+            guard args.count >= 2,
+                  case .string(let s) = args[0],
+                  case .string(let delimiter) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, String", actual: "invalid args", operation: "stringSplit")
+            }
+            let parts = delimiter.isEmpty ? s.map { String($0) } : s.components(separatedBy: delimiter)
+            let listId = heap.allocate(typeName: "List")
+            let listObj = try heap.get(listId)
+            listObj.listStorage = parts.map { .string($0) }
+            return .objectRef(listId)
+        }
+
+        register(name: "stringConcat") { args in
+            guard args.count >= 2,
+                  case .string(let a) = args[0],
+                  case .string(let b) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, String", actual: "invalid args", operation: "stringConcat")
+            }
+            return .string(a + b)
+        }
+
+        register(name: "stringFromCharCodes") { args in
+            guard args.count >= 1, case .objectRef(let id) = args[0] else {
+                throw VMError.typeMismatch(expected: "List of Int", actual: args.first?.typeName ?? "nothing", operation: "stringFromCharCodes")
+            }
+            let obj = try heap.get(id)
+            guard let elements = obj.listStorage else {
+                throw VMError.typeMismatch(expected: "List", actual: obj.typeName, operation: "stringFromCharCodes")
+            }
+            var result = ""
+            for element in elements {
+                guard case .int(let code) = element, let scalar = UnicodeScalar(Int(code)) else { continue }
+                result.append(Character(scalar))
+            }
+            return .string(result)
         }
     }
 }

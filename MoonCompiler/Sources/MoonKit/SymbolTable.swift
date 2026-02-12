@@ -259,5 +259,33 @@ public final class SymbolTable {
         for (name, type) in collectionBuiltins {
             globalScope.define(Symbol(name: name, type: type, kind: .function))
         }
+
+        // String operation builtins
+        let stringBuiltins: [(String, Type)] = [
+            ("charAt",          .function(parameterTypes: [.string, .int], returnType: .string)),
+            ("stringIndexOf",   .function(parameterTypes: [.string, .string], returnType: .int)),
+            ("stringSplit",     .function(parameterTypes: [.string, .string],
+                                         returnType: .classType(name: "List", typeArguments: []))),
+            ("startsWith",      .function(parameterTypes: [.string, .string], returnType: .bool)),
+            ("endsWith",        .function(parameterTypes: [.string, .string], returnType: .bool)),
+            ("stringContains",  .function(parameterTypes: [.string, .string], returnType: .bool)),
+            ("stringTrim",      .function(parameterTypes: [.string], returnType: .string)),
+            ("stringReplace",   .function(parameterTypes: [.string, .string, .string], returnType: .string)),
+            ("stringToLower",   .function(parameterTypes: [.string], returnType: .string)),
+            ("stringToUpper",   .function(parameterTypes: [.string], returnType: .string)),
+            ("stringConcat",    .function(parameterTypes: [.string, .string], returnType: .string)),
+            ("isDigit",         .function(parameterTypes: [.string], returnType: .bool)),
+            ("isLetter",        .function(parameterTypes: [.string], returnType: .bool)),
+            ("isWhitespace",    .function(parameterTypes: [.string], returnType: .bool)),
+            ("isLetterOrDigit", .function(parameterTypes: [.string], returnType: .bool)),
+            ("charToInt",       .function(parameterTypes: [.string], returnType: .int)),
+            ("intToChar",       .function(parameterTypes: [.int], returnType: .string)),
+            ("stringFromCharCodes", .function(parameterTypes: [.classType(name: "List", typeArguments: [])],
+                                              returnType: .string)),
+        ]
+
+        for (name, type) in stringBuiltins {
+            globalScope.define(Symbol(name: name, type: type, kind: .function))
+        }
     }
 }
