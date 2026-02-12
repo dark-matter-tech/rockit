@@ -734,6 +734,23 @@ fun parseValDecl(p: Map): Map {
     val line = peekLine(p)
     val col = peekCol(p)
     expect(p, "KW_VAL")
+
+    // Check for destructuring: val (a, b, c) = expr
+    if (check(p, "LPAREN")) {
+        advance(p)
+        val names = listCreate()
+        listAppend(names, toString(mapGet(expect(p, "IDENT"), "value")))
+        while (matchToken(p, "COMMA")) {
+            listAppend(names, toString(mapGet(expect(p, "IDENT"), "value")))
+        }
+        expect(p, "RPAREN")
+        expect(p, "EQ")
+        val node = makeNodeAt("destructure", line, col)
+        mapPut(node, "names", names)
+        mapPut(node, "init", parseExpression(p, 0))
+        return node
+    }
+
     val name = toString(mapGet(expect(p, "IDENT"), "value"))
     val node = makeNodeAt("valDecl", line, col)
     mapPut(node, "name", name)

@@ -1421,6 +1421,23 @@ fun parseValDecl(p: Map): Map {
     val line = peekLine(p)
     val col = peekCol(p)
     expect(p, "KW_VAL")
+
+    // Check for destructuring: val (a, b, c) = expr
+    if (check(p, "LPAREN")) {
+        advance(p)
+        val names = listCreate()
+        listAppend(names, toString(mapGet(expect(p, "IDENT"), "value")))
+        while (matchToken(p, "COMMA")) {
+            listAppend(names, toString(mapGet(expect(p, "IDENT"), "value")))
+        }
+        expect(p, "RPAREN")
+        expect(p, "EQ")
+        val node = makeNodeAt("destructure", line, col)
+        mapPut(node, "names", names)
+        mapPut(node, "init", parseExpression(p, 0))
+        return node
+    }
+
     val name = toString(mapGet(expect(p, "IDENT"), "value"))
     val node = makeNodeAt("valDecl", line, col)
     mapPut(node, "name", name)
@@ -2257,6 +2274,7 @@ fun makeCompiler(): Map {
     mapPut(c, "objectNames", mapCreate()) // objectName -> true (singletons)
     mapPut(c, "interfaceNames", mapCreate()) // ifaceName -> list of method names
     mapPut(c, "sealedNames", mapCreate())    // sealedName -> list of subclass names
+    mapPut(c, "funcSignatures", mapCreate()) // funcName -> params list (for default args)
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -3058,6 +3076,15 @@ fun compileExpr(fs: Map, node: Map): Int {
                 }
                 i = i + 1
             }
+            // Pad with null for default params if fewer args provided
+            val sig = mapGet(mapGet(mapGet(fs, "compiler"), "funcSignatures"), funcName)
+            if (sig != null) {
+                while (listSize(argRegs) < listSize(sig)) {
+                    val nullReg = allocReg(fs)
+                    emitConstNull(fs, nullReg)
+                    listAppend(argRegs, nullReg)
+                }
+            }
             val dest = allocReg(fs)
             emitCall(fs, dest, funcName, argRegs)
             return dest
@@ -3383,6 +3410,34 @@ fun compileStmt(fs: Map, node: Map): Unit {
         return
     }
 
+    // Destructuring: val (a, b, c) = expr
+    if (kind == "destructure") {
+        val names = mapGet(node, "names")
+        val initReg = compileExpr(fs, mapGet(node, "init"))
+        // Try to get type name to determine if this is a class or list
+        // For class objects: access fields by position (using class field names)
+        // For lists: access by index
+        // Strategy: try GET_FIELD with component1/component2 names first,
+        // then fall back to list indexing
+        var di: Int = 0
+        while (di < listSize(names)) {
+            val varName = toString(listGet(names, di))
+            val slot = allocReg(fs)
+            mapPut(mapGet(fs, "locals"), varName, slot)
+            // Use listGet for destructuring (works for lists and positional access)
+            val args = listCreate()
+            listAppend(args, initReg)
+            val idxReg = allocReg(fs)
+            emitConstInt(fs, idxReg, di)
+            listAppend(args, idxReg)
+            val elemReg = allocReg(fs)
+            emitCall(fs, elemReg, "listGet", args)
+            emitStore(fs, slot, elemReg)
+            di = di + 1
+        }
+        return
+    }
+
     if (kind == "assign") {
         val target = mapGet(node, "target")
         val targetKind = toString(mapGet(target, "kind"))
@@ -3513,9 +3568,89 @@ fun compileStmt(fs: Map, node: Map): Unit {
 
     if (kind == "for") {
         // for (variable in iterable) { body }
-        // Compile as: val list = iterable; var i = 0; while (i < listSize(list)) { val variable = listGet(list, i); body; i = i + 1 }
         val varName = toString(mapGet(node, "variable"))
-        val iterReg = compileExpr(fs, mapGet(node, "iterable"))
+        val iterable = mapGet(node, "iterable")
+        val iterKind = toString(mapGet(iterable, "kind"))
+
+        // Check for range expressions: 0..n or 0..<n
+        var isRange: Bool = false
+        var rangeOp: String = ""
+        if (iterKind == "binary") {
+            rangeOp = toString(mapGet(iterable, "op"))
+            if (rangeOp == ".." || rangeOp == "..<") {
+                isRange = true
+            }
+        }
+
+        if (isRange) {
+            // Range-based for loop: for (i in start..end) or for (i in start..<end)
+            val startReg = compileExpr(fs, mapGet(iterable, "left"))
+            val endReg = compileExpr(fs, mapGet(iterable, "right"))
+
+            // If inclusive (..), add 1 to end for the comparison
+            var limitReg: Int = endReg
+            if (rangeOp == "..") {
+                val oneReg = allocReg(fs)
+                emitConstInt(fs, oneReg, 1)
+                limitReg = allocReg(fs)
+                emitBinaryOp(fs, "+", limitReg, endReg, oneReg)
+            }
+
+            // Counter slot
+            val counterSlot = allocReg(fs)
+            emitStore(fs, counterSlot, startReg)
+
+            val loopStart = currentOffset(fs)
+            val breakLabel = newLabel(fs)
+            val continueLabel = newLabel(fs)
+
+            val loopCtx = mapCreate()
+            mapPut(loopCtx, "breakLabel", breakLabel)
+            mapPut(loopCtx, "continueLabel", continueLabel)
+            listAppend(mapGet(fs, "loopStack"), loopCtx)
+
+            // Condition: counter < limit
+            markLabel(fs, continueLabel)
+            val curReg = allocReg(fs)
+            emitLoad(fs, curReg, counterSlot)
+            val condReg = allocReg(fs)
+            emitBinaryOp(fs, "<", condReg, curReg, limitReg)
+            val patches = emitBranch(fs, condReg)
+            patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+
+            // Bind loop variable
+            val varSlot = allocReg(fs)
+            val varLoadReg = allocReg(fs)
+            emitLoad(fs, varLoadReg, counterSlot)
+            emitStore(fs, varSlot, varLoadReg)
+            mapPut(mapGet(fs, "locals"), varName, varSlot)
+
+            // Body
+            compileBlock(fs, mapGet(node, "body"))
+
+            // Increment counter
+            val curIdx2 = allocReg(fs)
+            emitLoad(fs, curIdx2, counterSlot)
+            val oneReg2 = allocReg(fs)
+            emitConstInt(fs, oneReg2, 1)
+            val newIdx = allocReg(fs)
+            emitBinaryOp(fs, "+", newIdx, curIdx2, oneReg2)
+            emitStore(fs, counterSlot, newIdx)
+
+            // Loop back
+            emitByte(fs, OP_JUMP())
+            emitU32(fs, loopStart)
+
+            // Exit
+            patchJump(fs, toInt(mapGet(patches, "elsePatch")))
+            markLabel(fs, breakLabel)
+
+            listRemoveAt(mapGet(fs, "loopStack"), listSize(mapGet(fs, "loopStack")) - 1)
+            return
+        }
+
+        // List-based for loop
+        val iterReg = compileExpr(fs, iterable)
 
         // Size
         val sizeArgs = listCreate()
@@ -3711,8 +3846,30 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
         val slot = allocReg(fs)
         emitStore(fs, slot, paramReg)
         mapPut(mapGet(fs, "locals"), pname, slot)
+
+        // Handle default parameter values
+        val paramNode = listGet(params, i)
+        val defaultExpr = mapGet(paramNode, "default")
+        if (defaultExpr != null) {
+            // If param is null (omitted by caller), use default value
+            val checkReg = allocReg(fs)
+            emitLoad(fs, checkReg, slot)
+            val isNullReg = allocReg(fs)
+            emitIsNull(fs, isNullReg, checkReg)
+            val patches2 = emitBranch(fs, isNullReg)
+            // Then: param is null → assign default
+            patchJump(fs, toInt(mapGet(patches2, "thenPatch")))
+            val defaultReg = compileExpr(fs, defaultExpr)
+            emitStore(fs, slot, defaultReg)
+            // Else: param was provided → skip
+            patchJump(fs, toInt(mapGet(patches2, "elsePatch")))
+        }
+
         i = i + 1
     }
+
+    // Store function signature info for call sites
+    mapPut(mapGet(compiler, "funcSignatures"), name, params)
 
     // Compile body
     val body = mapGet(decl, "body")
@@ -4413,6 +4570,21 @@ fun compileProgram(ast: Map): Map {
                     }
                     si = si + 1
                 }
+            }
+        }
+        i = i + 1
+    }
+
+    // Pass 1c: Pre-register function signatures for default param padding
+    i = 0
+    while (i < listSize(decls)) {
+        val decl = listGet(decls, i)
+        val kind = toString(mapGet(decl, "kind"))
+        if (kind == "funDecl") {
+            val fname = toString(mapGet(decl, "name"))
+            val fparams = mapGet(decl, "params")
+            if (fparams != null) {
+                mapPut(mapGet(compiler, "funcSignatures"), fname, fparams)
             }
         }
         i = i + 1
