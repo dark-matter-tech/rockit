@@ -158,6 +158,10 @@ public enum MIRInstruction {
 
     // String
     case stringConcat(dest: String, parts: [String])
+
+    // Exception handling
+    case tryBegin(catchLabel: String, exceptionDest: String)
+    case tryEnd
 }
 
 extension MIRInstruction: CustomStringConvertible {
@@ -233,6 +237,11 @@ extension MIRInstruction: CustomStringConvertible {
 
         case .stringConcat(let d, let parts):
             return "\(d) = string_concat \(parts.joined(separator: ", "))"
+
+        case .tryBegin(let catchLabel, let dest):
+            return "try_begin catch=\(catchLabel) exc=\(dest)"
+        case .tryEnd:
+            return "try_end"
         }
     }
 }
@@ -244,6 +253,7 @@ public enum MIRTerminator {
     case ret(String?)
     case jump(String)
     case branch(condition: String, thenLabel: String, elseLabel: String)
+    case throwValue(String)
     case unreachable
 }
 
@@ -257,6 +267,8 @@ extension MIRTerminator: CustomStringConvertible {
             return "jump \(label)"
         case .branch(let cond, let t, let e):
             return "branch \(cond), \(t), \(e)"
+        case .throwValue(let val):
+            return "throw \(val)"
         case .unreachable:
             return "unreachable"
         }

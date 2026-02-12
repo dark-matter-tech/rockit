@@ -893,6 +893,8 @@ public final class Parser {
             let start = advance()
             let expr = parseExpression()
             return .throwStmt(expr, spanFrom(start))
+        case .kwTry:
+            return .tryCatch(parseTryCatch())
         case .kwFor:
             return .forLoop(parseForLoop())
         case .kwWhile:
@@ -1637,6 +1639,30 @@ public final class Parser {
             return .isType(type, spanFrom(start))
         }
         return .expression(parseExpression())
+    }
+
+    // MARK: - Try-Catch Statement
+
+    private func parseTryCatch() -> TryCatch {
+        let start = expect(.kwTry, "expected 'try'")
+        skipNewlines()
+        let tryBody = parseBlock()
+        skipNewlines()
+        expect(.kwCatch, "expected 'catch' after try block")
+        expect(.leftParen, "expected '(' after 'catch'")
+        parenDepth += 1
+        let variable = expectIdentifier("expected catch variable name")
+        // Skip optional type annotation (: Type)
+        if check(.colon) {
+            advance()
+            let _ = parseType()
+        }
+        parenDepth -= 1
+        expect(.rightParen, "expected ')' after catch clause")
+        skipNewlines()
+        let catchBody = parseBlock()
+        return TryCatch(tryBody: tryBody, catchVariable: variable,
+                        catchBody: catchBody, span: spanFrom(start))
     }
 
     // MARK: - Try Expression

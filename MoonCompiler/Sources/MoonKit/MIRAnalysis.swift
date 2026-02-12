@@ -58,6 +58,10 @@ extension MIRInstruction {
             return d
         case .stringConcat(let d, _):
             return d
+        case .tryBegin(_, let d):
+            return d
+        case .tryEnd:
+            return nil
         }
     }
 
@@ -112,6 +116,10 @@ extension MIRInstruction {
             return [o]
         case .stringConcat(_, let parts):
             return parts
+        case .tryBegin(_, let d):
+            return [d]
+        case .tryEnd:
+            return []
         }
     }
 
@@ -125,6 +133,8 @@ extension MIRInstruction {
         case .newObject:
             return true
         case .nullCheck:
+            return true
+        case .tryBegin, .tryEnd:
             return true
         default:
             return false
@@ -145,6 +155,8 @@ extension MIRTerminator {
             return []
         case .branch(let cond, _, _):
             return [cond]
+        case .throwValue(let v):
+            return [v]
         case .unreachable:
             return []
         }
@@ -153,7 +165,7 @@ extension MIRTerminator {
     /// Block labels this terminator can jump to.
     public var successorLabels: [String] {
         switch self {
-        case .ret, .unreachable:
+        case .ret, .unreachable, .throwValue:
             return []
         case .jump(let label):
             return [label]
@@ -174,10 +186,20 @@ public func reachableBlocks(in function: MIRFunction) -> Set<String> {
 
     while let label = worklist.popLast() {
         guard visited.insert(label).inserted else { continue }
-        if let block = blockMap[label], let term = block.terminator {
-            for succ in term.successorLabels {
-                if !visited.contains(succ) {
-                    worklist.append(succ)
+        if let block = blockMap[label] {
+            // Check instructions for exception handler targets
+            for inst in block.instructions {
+                if case .tryBegin(let catchLabel, _) = inst {
+                    if !visited.contains(catchLabel) {
+                        worklist.append(catchLabel)
+                    }
+                }
+            }
+            if let term = block.terminator {
+                for succ in term.successorLabels {
+                    if !visited.contains(succ) {
+                        worklist.append(succ)
+                    }
                 }
             }
         }

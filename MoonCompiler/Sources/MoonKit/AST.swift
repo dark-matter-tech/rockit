@@ -395,6 +395,7 @@ public enum Statement {
     case breakStmt(SourceSpan)
     case continueStmt(SourceSpan)
     case throwStmt(Expression, SourceSpan)
+    case tryCatch(TryCatch)
     case assignment(AssignmentStmt)
     case forLoop(ForLoop)
     case whileLoop(WhileLoop)
@@ -464,6 +465,21 @@ public struct DoWhileLoop {
     public init(body: Block, condition: Expression, span: SourceSpan) {
         self.body = body
         self.condition = condition
+        self.span = span
+    }
+}
+
+/// Try-catch statement
+public struct TryCatch {
+    public let tryBody: Block
+    public let catchVariable: String
+    public let catchBody: Block
+    public let span: SourceSpan
+
+    public init(tryBody: Block, catchVariable: String, catchBody: Block, span: SourceSpan) {
+        self.tryBody = tryBody
+        self.catchVariable = catchVariable
+        self.catchBody = catchBody
         self.span = span
     }
 }
@@ -824,6 +840,8 @@ extension Statement {
             return "\(pad)Continue"
         case .throwStmt(let e, _):
             return "\(pad)Throw\n\(e.dump(indent: indent + 1))"
+        case .tryCatch(let tc):
+            return "\(pad)TryCatch(\(tc.catchVariable))\n\(tc.tryBody.dump(indent: indent + 1))\n\(tc.catchBody.dump(indent: indent + 1))"
         case .assignment(let a):
             return "\(pad)Assignment(\(a.op))\n\(a.target.dump(indent: indent + 1))\n\(a.value.dump(indent: indent + 1))"
         case .forLoop(let f):

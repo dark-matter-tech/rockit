@@ -138,7 +138,7 @@ public final class CodeGen {
         let emitter = BytecodeEmitter()
         for block in function.blocks {
             for inst in block.instructions {
-                emitInstruction(inst, emitter: emitter, paramIndexMap: paramIndexMap)
+                emitInstruction(inst, emitter: emitter, paramIndexMap: paramIndexMap, blockOffsets: blockOffsets)
             }
             if let term = block.terminator {
                 emitTerminator(term, emitter: emitter, blockOffsets: blockOffsets)
@@ -254,6 +254,10 @@ public final class CodeGen {
             return 7   // op(1) + dest(2) + operand(2) + typeIdx(2)
         case .stringConcat(_, let parts):
             return 5 + 2 * parts.count  // op(1) + dest(2) + count(2) + parts
+        case .tryBegin:
+            return 7   // op(1) + catchOffset(4) + exceptionReg(2)
+        case .tryEnd:
+            return 1   // op(1)
         }
     }
 
@@ -266,6 +270,8 @@ public final class CodeGen {
             return 5   // op(1) + offset(4)
         case .branch:
             return 11  // op(1) + reg(2) + offset(4) + offset(4)
+        case .throwValue:
+            return 3   // op(1) + reg(2)
         case .unreachable:
             return 1
         }
@@ -276,7 +282,8 @@ public final class CodeGen {
     private func emitInstruction(
         _ inst: MIRInstruction,
         emitter: BytecodeEmitter,
-        paramIndexMap: [String: UInt16]
+        paramIndexMap: [String: UInt16],
+        blockOffsets: [String: UInt32] = [:]
     ) {
         switch inst {
         // Constants
@@ -483,6 +490,15 @@ public final class CodeGen {
             for part in parts {
                 emitter.emitUInt16(resolveRegister(part))
             }
+
+        // Exception handling
+        case .tryBegin(let catchLabel, let exceptionDest):
+            emitter.emitOpcode(.tryBegin)
+            emitter.emitUInt32(blockOffsets[catchLabel] ?? 0)
+            emitter.emitUInt16(resolveRegister(exceptionDest))
+
+        case .tryEnd:
+            emitter.emitOpcode(.tryEnd)
         }
     }
 
@@ -511,6 +527,10 @@ public final class CodeGen {
             emitter.emitUInt16(resolveRegister(condition))
             emitter.emitUInt32(blockOffsets[thenLabel] ?? 0)
             emitter.emitUInt32(blockOffsets[elseLabel] ?? 0)
+
+        case .throwValue(let val):
+            emitter.emitOpcode(.throwOp)
+            emitter.emitUInt16(resolveRegister(val))
 
         case .unreachable:
             emitter.emitOpcode(.unreachable)
@@ -868,6 +888,18 @@ public final class CodeGen {
                 var parts: [String] = []
                 for _ in 0..<count { parts.append("r\(readUInt16(bytes, at: &pc))") }
                 lines.append("  \(offset): \(op) r\(dest), [\(parts.joined(separator: ", "))]")
+
+            case .tryBegin:
+                let catchOffset = readUInt32(bytes, at: &pc)
+                let excReg = readUInt16(bytes, at: &pc)
+                lines.append("  \(offset): \(op)  catch=@\(String(format: "%04X", catchOffset)), exc=r\(excReg)")
+
+            case .tryEnd:
+                lines.append("  \(offset): \(op)")
+
+            case .throwOp:
+                let reg = readUInt16(bytes, at: &pc)
+                lines.append("  \(offset): \(op)      r\(reg)")
 
             case .ret:
                 let reg = readUInt16(bytes, at: &pc)

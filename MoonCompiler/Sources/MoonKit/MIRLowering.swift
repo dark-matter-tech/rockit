@@ -373,6 +373,7 @@ public final class MIRLowering {
 
     private func lowerBlock(_ block: Block) {
         for stmt in block.statements {
+            if builder.isTerminated { break }
             lowerStatement(stmt)
         }
     }
@@ -406,8 +407,11 @@ public final class MIRLowering {
             lowerDoWhileLoop(d)
 
         case .throwStmt(let expr, _):
-            let _ = lowerExpression(expr)
-            builder.terminate(.unreachable)
+            let val = lowerExpression(expr)
+            builder.terminate(.throwValue(val))
+
+        case .tryCatch(let tc):
+            lowerTryCatch(tc)
 
         case .breakStmt:
             if let loop = loopStack.last {
@@ -547,6 +551,39 @@ public final class MIRLowering {
         builder.startBlock(label: exitLabel)
     }
 
+    // MARK: - Control Flow: Try-Catch
+
+    private func lowerTryCatch(_ tc: TryCatch) {
+        let catchLabel = builder.newBlockLabel("catch")
+        let endLabel = builder.newBlockLabel("try.end")
+
+        // Register for the caught exception value
+        let exceptionSlot = builder.emitAlloc(type: .string)
+
+        // Push exception handler
+        builder.emit(.tryBegin(catchLabel: catchLabel, exceptionDest: exceptionSlot))
+
+        // Lower try body
+        lowerBlock(tc.tryBody)
+        if !builder.isTerminated {
+            // Normal exit: pop handler and jump past catch
+            builder.emit(.tryEnd)
+            builder.terminate(.jump(endLabel))
+        }
+
+        // Catch block
+        builder.startBlock(label: catchLabel)
+        // Exception value is already in exceptionSlot (placed by VM)
+        locals[tc.catchVariable] = exceptionSlot
+        lowerBlock(tc.catchBody)
+        if !builder.isTerminated {
+            builder.terminate(.jump(endLabel))
+        }
+
+        // End
+        builder.startBlock(label: endLabel)
+    }
+
     // MARK: - Control Flow: For Loop
 
     private func lowerForLoop(_ f: ForLoop) {
@@ -556,40 +593,8 @@ public final class MIRLowering {
             return
         }
 
-        // Collection iteration via iterator protocol (future work)
-        let headerLabel = builder.newBlockLabel("for.header")
-        let bodyLabel = builder.newBlockLabel("for.body")
-        let exitLabel = builder.newBlockLabel("for.exit")
-
-        loopStack.append((continueLabel: headerLabel, breakLabel: exitLabel))
-
-        let iterable = lowerExpression(f.iterable)
-        let iterator = builder.newTemp()
-        builder.emit(.virtualCall(dest: iterator, object: iterable, method: "iterator", args: []))
-
-        builder.terminate(.jump(headerLabel))
-
-        builder.startBlock(label: headerLabel)
-        let hasNext = builder.newTemp()
-        builder.emit(.virtualCall(dest: hasNext, object: iterator, method: "hasNext", args: []))
-        builder.terminate(.branch(condition: hasNext, thenLabel: bodyLabel, elseLabel: exitLabel))
-
-        builder.startBlock(label: bodyLabel)
-        let nextVal = builder.newTemp()
-        builder.emit(.virtualCall(dest: nextVal, object: iterator, method: "next", args: []))
-
-        let loopVarSlot = builder.emitAlloc(type: .reference("Any"))
-        locals[f.variable] = loopVarSlot
-        builder.emitStore(dest: loopVarSlot, src: nextVal)
-
-        lowerBlock(f.body)
-        if !builder.isTerminated {
-            builder.terminate(.jump(headerLabel))
-        }
-
-        loopStack.removeLast()
-
-        builder.startBlock(label: exitLabel)
+        // Collection iteration via index-based loop using listSize/listGet
+        lowerForLoopList(variable: f.variable, iterable: f.iterable, body: f.body)
     }
 
     /// Lower a for loop over a range as a direct counter loop.
@@ -644,6 +649,66 @@ public final class MIRLowering {
         loopStack.removeLast()
 
         // Exit
+        builder.startBlock(label: exitLabel)
+    }
+
+    /// Lower a for loop over a List as an index-based counter loop.
+    /// `for (item in myList)` → `var i = 0; while (i < listSize(list)) { item = listGet(list, i); body; i++ }`
+    private func lowerForLoopList(variable: String, iterable: Expression, body: Block) {
+        let headerLabel = builder.newBlockLabel("for.header")
+        let bodyLabel = builder.newBlockLabel("for.body")
+        let incrLabel = builder.newBlockLabel("for.incr")
+        let exitLabel = builder.newBlockLabel("for.exit")
+
+        loopStack.append((continueLabel: incrLabel, breakLabel: exitLabel))
+
+        // Evaluate the list expression once
+        let listTemp = lowerExpression(iterable)
+
+        // Get list size
+        let sizeTemp = builder.newTemp()
+        builder.emit(.call(dest: sizeTemp, function: "listSize", args: [listTemp]))
+
+        // Alloc index counter, initialize to 0
+        let indexSlot = builder.emitAlloc(type: .int)
+        let zero = builder.emitConstInt(0)
+        builder.emitStore(dest: indexSlot, src: zero)
+
+        builder.terminate(.jump(headerLabel))
+
+        // Header: index < size?
+        builder.startBlock(label: headerLabel)
+        let currentIdx = builder.emitLoad(src: indexSlot)
+        let cond = builder.newTemp()
+        builder.emit(.lt(dest: cond, lhs: currentIdx, rhs: sizeTemp, type: .int))
+        builder.terminate(.branch(condition: cond, thenLabel: bodyLabel, elseLabel: exitLabel))
+
+        // Body: item = listGet(list, index)
+        builder.startBlock(label: bodyLabel)
+        let idx = builder.emitLoad(src: indexSlot)
+        let element = builder.newTemp()
+        builder.emit(.call(dest: element, function: "listGet", args: [listTemp, idx]))
+
+        let loopVarSlot = builder.emitAlloc(type: .reference("Any"))
+        locals[variable] = loopVarSlot
+        builder.emitStore(dest: loopVarSlot, src: element)
+
+        lowerBlock(body)
+        if !builder.isTerminated {
+            builder.terminate(.jump(incrLabel))
+        }
+
+        // Increment: index++
+        builder.startBlock(label: incrLabel)
+        let cur = builder.emitLoad(src: indexSlot)
+        let one = builder.emitConstInt(1)
+        let next = builder.newTemp()
+        builder.emit(.add(dest: next, lhs: cur, rhs: one, type: .int))
+        builder.emitStore(dest: indexSlot, src: next)
+        builder.terminate(.jump(headerLabel))
+
+        loopStack.removeLast()
+
         builder.startBlock(label: exitLabel)
     }
 

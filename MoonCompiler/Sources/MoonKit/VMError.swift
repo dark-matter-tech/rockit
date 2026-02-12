@@ -54,6 +54,9 @@ public enum VMError: Error, CustomStringConvertible {
     /// Actor isolation violation.
     case actorIsolationViolation(actor: String, field: String)
 
+    /// Uncaught user exception (throw without matching catch).
+    case userException(message: String)
+
     public var description: String {
         switch self {
         case .nullPointerAccess(let ctx):
@@ -88,6 +91,8 @@ public enum VMError: Error, CustomStringConvertible {
             return "CapabilityError: capability '\(name)' not granted"
         case .actorIsolationViolation(let actor, let field):
             return "IsolationError: cannot access '\(field)' on actor '\(actor)' from outside"
+        case .userException(let message):
+            return "Exception: \(message)"
         }
     }
 }

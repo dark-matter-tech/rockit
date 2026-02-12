@@ -37,6 +37,9 @@ public final class VM {
     /// Type field name → field index mapping for fast field access.
     private var typeFieldIndices: [String: [String: Int]] = [:]
 
+    /// Exception handler stack for try/catch.
+    private var exceptionHandlers: [(catchPC: Int, exceptionReg: UInt16, frameIndex: Int)] = []
+
     /// Heap for object allocation with ARC memory management.
     private let arcHeap: Heap
 
@@ -193,7 +196,7 @@ public final class VM {
                 }
                 instructionCount += 1
 
-                switch opcode {
+                do { switch opcode {
                 // MARK: Constants
                 case .constInt:
                     let reg = readUInt16(bytecode, frame: frameIdx)
@@ -429,6 +432,34 @@ public final class VM {
                     }
                     callStack[frameIdx].registers[Int(dest)] = .string(parts.joined())
 
+                // MARK: Exception Handling
+                case .tryBegin:
+                    let catchOffset = readUInt32(bytecode, frame: frameIdx)
+                    let excReg = readUInt16(bytecode, frame: frameIdx)
+                    exceptionHandlers.append((catchPC: Int(catchOffset), exceptionReg: excReg, frameIndex: frameIdx))
+
+                case .tryEnd:
+                    if !exceptionHandlers.isEmpty {
+                        exceptionHandlers.removeLast()
+                    }
+
+                case .throwOp:
+                    let valReg = readUInt16(bytecode, frame: frameIdx)
+                    let thrownValue = callStack[frameIdx].registers[Int(valReg)]
+                    let message: String
+                    if case .string(let s) = thrownValue {
+                        message = s
+                    } else {
+                        message = thrownValue.description
+                    }
+                    try handleThrow(message: message, currentFrame: frameIdx)
+                    // If handler was in the same frame, continue executing with updated PC
+                    if callStack.count > frameIdx {
+                        break
+                    }
+                    // Frames were unwound — return so the parent executeLoop picks up
+                    return
+
                 // MARK: Terminators
                 case .ret:
                     let valReg = readUInt16(bytecode, frame: frameIdx)
@@ -464,13 +495,52 @@ public final class VM {
 
                 case .unreachable:
                     throw VMError.unreachable
-                }
+                } // end switch
+                } catch let error as VMError {
+                    // If there's an exception handler, route the error there
+                    if !exceptionHandlers.isEmpty {
+                        let currentFrame = callStack.count - 1
+                        try handleThrow(message: error.description, currentFrame: currentFrame)
+                        // If handler was in the same frame, continue the loop with updated PC
+                        if callStack.count > currentFrame {
+                            continue
+                        }
+                        // Frames were unwound — return so parent executeLoop picks up
+                        return
+                    } else {
+                        throw error
+                    }
+                } // end do/catch
             }
 
             // If we reach the end of bytecode without a terminator, pop frame
             releaseFrame(frameIdx, exceptRegister: nil)
             callStack.removeLast()
         }
+    }
+
+    // MARK: - Exception Handling
+
+    /// Handle a throw by unwinding to the nearest catch handler.
+    /// If no handler is found, re-throws as a Swift error.
+    private func handleThrow(message: String, currentFrame: Int) throws {
+        guard let handler = exceptionHandlers.popLast() else {
+            // No handler — propagate as VM error
+            throw VMError.userException(message: message)
+        }
+
+        // Unwind frames between current and handler's frame
+        while callStack.count > handler.frameIndex + 1 {
+            let topIdx = callStack.count - 1
+            releaseFrame(topIdx, exceptRegister: nil)
+            callStack.removeLast()
+            // Remove any exception handlers from unwound frames
+            exceptionHandlers.removeAll { $0.frameIndex >= callStack.count }
+        }
+
+        // Store exception message in the handler's register and jump to catch
+        callStack[handler.frameIndex].registers[Int(handler.exceptionReg)] = .string(message)
+        callStack[handler.frameIndex].pc = handler.catchPC
     }
 
     // MARK: - ARC Frame Cleanup

@@ -65,6 +65,11 @@ public enum Opcode: UInt8 {
     // String
     case stringConcat   = 0xA0
 
+    // Exception handling
+    case tryBegin       = 0xB0
+    case tryEnd         = 0xB1
+    case throwOp        = 0xB2
+
     // Terminators
     case ret            = 0xE0
     case retVoid        = 0xE1
@@ -113,6 +118,9 @@ extension Opcode: CustomStringConvertible {
         case .typeCheck:    return "TYPE_CHECK"
         case .typeCast:     return "TYPE_CAST"
         case .stringConcat: return "STRING_CONCAT"
+        case .tryBegin:     return "TRY_BEGIN"
+        case .tryEnd:       return "TRY_END"
+        case .throwOp:      return "THROW"
         case .ret:          return "RET"
         case .retVoid:      return "RET_VOID"
         case .jump:         return "JUMP"

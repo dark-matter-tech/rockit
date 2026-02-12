@@ -672,6 +672,14 @@ public final class TypeChecker {
         case .throwStmt(let expr, _):
             let _ = checkExpression(expr)
 
+        case .tryCatch(let tc):
+            checkBlock(tc.tryBody)
+            symbolTable.pushScope()
+            symbolTable.define(Symbol(name: tc.catchVariable, type: .string,
+                                     kind: .variable(isMutable: false), span: tc.span))
+            checkBlock(tc.catchBody)
+            symbolTable.popScope()
+
         case .assignment(let a):
             checkAssignment(a)
 
