@@ -3057,8 +3057,34 @@ fun main(): Unit {
     val resolvedDecls = resolveImports(rawDecls, sourceDir, libPath, imported)
     mapPut(ast, "decls", resolvedDecls)
 
+    // Type check (opt-in with --check)
+    var doCheck: Bool = false
+    var ac: Int = 2
+    while (ac < listSize(args)) {
+        if (toString(listGet(args, ac)) == "--check") { doCheck = true }
+        ac = ac + 1
+    }
+    if (doCheck) {
+        val tc = typeCheck(ast)
+        val tcErrors = mapGet(tc, "errors")
+        if (listSize(tcErrors) > 0) {
+            var ei: Int = 0
+            while (ei < listSize(tcErrors)) {
+                println(stringConcat("warning: ", toString(listGet(tcErrors, ei))))
+                ei = ei + 1
+            }
+            println(stringConcat(toString(listSize(tcErrors)), " type warning(s)"))
+        }
+    }
+
+    // Optimize AST
+    foldConstants(ast)
+
     // Compile
     val compiler = compileProgram(ast)
+
+    // Dead function elimination
+    eliminateDeadFunctions(compiler)
 
     // Serialize
     val moduleBytes = serializeModule(compiler)

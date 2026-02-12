@@ -402,6 +402,44 @@ public final class BuiltinRegistry {
         registerHeapAwareStringBuiltins(heap: heap)
         registerProcessBuiltins(heap: heap)
         registerFileIOBuiltins(heap: heap)
+        registerTypeCheckBuiltins(heap: heap)
+    }
+
+    // MARK: Type Check Builtins
+
+    private func registerTypeCheckBuiltins(heap: Heap) {
+        register(name: "isMap") { args in
+            guard let first = args.first else { return .bool(false) }
+            guard case .objectRef(let id) = first else { return .bool(false) }
+            guard let obj = try? heap.get(id) else { return .bool(false) }
+            return .bool(obj.mapStorage != nil)
+        }
+
+        register(name: "isList") { args in
+            guard let first = args.first else { return .bool(false) }
+            guard case .objectRef(let id) = first else { return .bool(false) }
+            guard let obj = try? heap.get(id) else { return .bool(false) }
+            return .bool(obj.listStorage != nil)
+        }
+
+        register(name: "typeOf") { args in
+            guard let first = args.first else { return .string("null") }
+            switch first {
+            case .int: return .string("Int")
+            case .float: return .string("Float")
+            case .string: return .string("String")
+            case .bool: return .string("Bool")
+            case .null: return .string("null")
+            case .unit: return .string("Unit")
+            case .objectRef(let id):
+                guard let obj = try? heap.get(id) else { return .string("object") }
+                if obj.mapStorage != nil { return .string("Map") }
+                if obj.listStorage != nil { return .string("List") }
+                return .string("object")
+            case .functionRef:
+                return .string("Function")
+            }
+        }
     }
 
     // MARK: List Builtins
