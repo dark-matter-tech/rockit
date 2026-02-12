@@ -1351,6 +1351,10 @@ fun parseTryCatch(p: Map): Map {
         mapPut(node, "catchVar", catchVar)
         mapPut(node, "catchBody", parseBlock(p))
     }
+    skipNewlines(p)
+    if (matchToken(p, "KW_FINALLY")) {
+        mapPut(node, "finallyBody", parseBlock(p))
+    }
     return node
 }
 
@@ -1821,6 +1825,19 @@ fun parseObjectDecl(p: Map): Map {
     return node
 }
 
+fun parseTypeAlias(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_TYPEALIAS")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    expect(p, "EQ")
+    val target = parseType(p)
+    val node = makeNodeAt("typeAlias", line, col)
+    mapPut(node, "name", name)
+    mapPut(node, "target", target)
+    return node
+}
+
 // ---------------------------------------------------------------------------
 // Top-level program parsing
 // ---------------------------------------------------------------------------
@@ -1852,10 +1869,14 @@ fun parseProgram(p: Map): Map {
                                 if (tt == "KW_IMPORT") {
                                     listAppend(decls, parseImport(p))
                                 } else {
-                                    // Skip unknown top-level tokens
-                                    val tok = advance(p)
-                                    val err = stringConcat("unexpected top-level token: ", stringConcat(tt, stringConcat(" at ", stringConcat(toString(peekLine(p)), stringConcat(":", toString(peekCol(p)))))))
-                                    listAppend(mapGet(p, "errors"), err)
+                                    if (tt == "KW_TYPEALIAS") {
+                                        listAppend(decls, parseTypeAlias(p))
+                                    } else {
+                                        // Skip unknown top-level tokens
+                                        val tok = advance(p)
+                                        val err = stringConcat("unexpected top-level token: ", stringConcat(tt, stringConcat(" at ", stringConcat(toString(peekLine(p)), stringConcat(":", toString(peekCol(p)))))))
+                                        listAppend(mapGet(p, "errors"), err)
+                                    }
                                 }
                             }
                         }
@@ -2275,6 +2296,7 @@ fun makeCompiler(): Map {
     mapPut(c, "interfaceNames", mapCreate()) // ifaceName -> list of method names
     mapPut(c, "sealedNames", mapCreate())    // sealedName -> list of subclass names
     mapPut(c, "funcSignatures", mapCreate()) // funcName -> params list (for default args)
+    mapPut(c, "typeAliases", mapCreate())    // aliasName -> targetName
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -3273,6 +3295,9 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
         subjectReg = compileExpr(fs, subject)
     }
 
+    val dest = allocReg(fs)
+    emitConstNull(fs, dest)
+
     val branches = mapGet(node, "branches")
     val endPatches = listCreate()
     var i: Int = 0
@@ -3287,21 +3312,27 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
             if (bodyKind == "block") {
                 compileBlock(fs, body)
             } else {
-                compileExpr(fs, body)
+                val valReg = compileExpr(fs, body)
+                emitStore(fs, dest, valReg)
             }
         } else {
             // Pattern matching branch
             val patterns = mapGet(branch, "patterns")
             val firstPattern = listGet(patterns, 0)
             val patternKind = toString(mapGet(firstPattern, "kind"))
-            val condReg = allocReg(fs)
-            if (patternKind == "isPattern") {
+            var condReg: Int = 0
+            if (subject == null) {
+                // No subject — pattern is a boolean condition
+                condReg = compileExpr(fs, firstPattern)
+            } else if (patternKind == "isPattern") {
                 // Type check pattern: is Type
+                condReg = allocReg(fs)
                 val typeNode = mapGet(firstPattern, "type")
                 val typeName = toString(mapGet(typeNode, "name"))
                 emitTypeCheck(fs, condReg, subjectReg, typeName)
             } else {
                 // Value equality pattern
+                condReg = allocReg(fs)
                 val patternReg = compileExpr(fs, firstPattern)
                 emitBinaryOp(fs, "==", condReg, subjectReg, patternReg)
             }
@@ -3313,7 +3344,8 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
             if (bodyKind == "block") {
                 compileBlock(fs, body)
             } else {
-                compileExpr(fs, body)
+                val valReg = compileExpr(fs, body)
+                emitStore(fs, dest, valReg)
             }
             listAppend(endPatches, emitJump(fs))
 
@@ -3386,8 +3418,6 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
         j = j + 1
     }
 
-    val dest = allocReg(fs)
-    emitConstNull(fs, dest)
     return dest
 }
 
@@ -3777,6 +3807,11 @@ fun compileStmt(fs: Map, node: Map): Unit {
         // Try body
         compileBlock(fs, mapGet(node, "tryBody"))
         emitByte(fs, OP_TRY_END())
+        // Finally after try (normal path)
+        val finallyBody = mapGet(node, "finallyBody")
+        if (finallyBody != null) {
+            compileBlock(fs, finallyBody)
+        }
         val jumpToEnd = emitJump(fs)
 
         // Catch block
@@ -3788,6 +3823,10 @@ fun compileStmt(fs: Map, node: Map): Unit {
         val catchBody = mapGet(node, "catchBody")
         if (catchBody != null) {
             compileBlock(fs, catchBody)
+        }
+        // Finally after catch
+        if (finallyBody != null) {
+            compileBlock(fs, finallyBody)
         }
 
         patchJump(fs, jumpToEnd)
@@ -4547,6 +4586,12 @@ fun compileProgram(ast: Map): Map {
         }
         if (kind == "interfaceDecl") {
             compileInterfaceDecl(compiler, decl)
+        }
+        if (kind == "typeAlias") {
+            val aliasName = toString(mapGet(decl, "name"))
+            val targetNode = mapGet(decl, "target")
+            val targetName = toString(mapGet(targetNode, "name"))
+            mapPut(mapGet(compiler, "typeAliases"), aliasName, targetName)
         }
         i = i + 1
     }

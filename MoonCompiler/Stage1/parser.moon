@@ -664,6 +664,10 @@ fun parseTryCatch(p: Map): Map {
         mapPut(node, "catchVar", catchVar)
         mapPut(node, "catchBody", parseBlock(p))
     }
+    skipNewlines(p)
+    if (matchToken(p, "KW_FINALLY")) {
+        mapPut(node, "finallyBody", parseBlock(p))
+    }
     return node
 }
 
@@ -1134,6 +1138,19 @@ fun parseObjectDecl(p: Map): Map {
     return node
 }
 
+fun parseTypeAlias(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_TYPEALIAS")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    expect(p, "EQ")
+    val target = parseType(p)
+    val node = makeNodeAt("typeAlias", line, col)
+    mapPut(node, "name", name)
+    mapPut(node, "target", target)
+    return node
+}
+
 // ---------------------------------------------------------------------------
 // Top-level program parsing
 // ---------------------------------------------------------------------------
@@ -1165,10 +1182,14 @@ fun parseProgram(p: Map): Map {
                                 if (tt == "KW_IMPORT") {
                                     listAppend(decls, parseImport(p))
                                 } else {
-                                    // Skip unknown top-level tokens
-                                    val tok = advance(p)
-                                    val err = stringConcat("unexpected top-level token: ", stringConcat(tt, stringConcat(" at ", stringConcat(toString(peekLine(p)), stringConcat(":", toString(peekCol(p)))))))
-                                    listAppend(mapGet(p, "errors"), err)
+                                    if (tt == "KW_TYPEALIAS") {
+                                        listAppend(decls, parseTypeAlias(p))
+                                    } else {
+                                        // Skip unknown top-level tokens
+                                        val tok = advance(p)
+                                        val err = stringConcat("unexpected top-level token: ", stringConcat(tt, stringConcat(" at ", stringConcat(toString(peekLine(p)), stringConcat(":", toString(peekCol(p)))))))
+                                        listAppend(mapGet(p, "errors"), err)
+                                    }
                                 }
                             }
                         }

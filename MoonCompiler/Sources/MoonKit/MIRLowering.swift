@@ -568,6 +568,10 @@ public final class MIRLowering {
         if !builder.isTerminated {
             // Normal exit: pop handler and jump past catch
             builder.emit(.tryEnd)
+            // Emit finally after try (normal path)
+            if let finallyBody = tc.finallyBody {
+                lowerBlock(finallyBody)
+            }
             builder.terminate(.jump(endLabel))
         }
 
@@ -577,6 +581,10 @@ public final class MIRLowering {
         locals[tc.catchVariable] = exceptionSlot
         lowerBlock(tc.catchBody)
         if !builder.isTerminated {
+            // Emit finally after catch
+            if let finallyBody = tc.finallyBody {
+                lowerBlock(finallyBody)
+            }
             builder.terminate(.jump(endLabel))
         }
 

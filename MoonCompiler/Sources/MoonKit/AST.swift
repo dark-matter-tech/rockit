@@ -474,12 +474,14 @@ public struct TryCatch {
     public let tryBody: Block
     public let catchVariable: String
     public let catchBody: Block
+    public let finallyBody: Block?
     public let span: SourceSpan
 
-    public init(tryBody: Block, catchVariable: String, catchBody: Block, span: SourceSpan) {
+    public init(tryBody: Block, catchVariable: String, catchBody: Block, finallyBody: Block? = nil, span: SourceSpan) {
         self.tryBody = tryBody
         self.catchVariable = catchVariable
         self.catchBody = catchBody
+        self.finallyBody = finallyBody
         self.span = span
     }
 }

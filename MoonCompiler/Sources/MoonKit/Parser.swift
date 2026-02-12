@@ -1661,8 +1661,15 @@ public final class Parser {
         expect(.rightParen, "expected ')' after catch clause")
         skipNewlines()
         let catchBody = parseBlock()
+        skipNewlines()
+        var finallyBody: Block? = nil
+        if check(.kwFinally) {
+            advance()
+            skipNewlines()
+            finallyBody = parseBlock()
+        }
         return TryCatch(tryBody: tryBody, catchVariable: variable,
-                        catchBody: catchBody, span: spanFrom(start))
+                        catchBody: catchBody, finallyBody: finallyBody, span: spanFrom(start))
     }
 
     // MARK: - Try Expression
