@@ -1,35 +1,35 @@
 // swift-tools-version: 5.9
-// Moon Language Compiler
+// Rockit Language Compiler
 // Dark Matter Tech — Codename Mars
 
 import PackageDescription
 
 let package = Package(
-    name: "MoonCompiler",
+    name: "RockitCompiler",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "moonc", targets: ["MoonCLI"]),
-        .library(name: "MoonKit", targets: ["MoonKit"]),
+        .executable(name: "command", targets: ["RockitCLI"]),
+        .library(name: "RockitKit", targets: ["RockitKit"]),
     ],
     targets: [
         // Core compiler library
         .target(
-            name: "MoonKit",
-            path: "Sources/MoonKit"
+            name: "RockitKit",
+            path: "Sources/RockitKit"
         ),
         // CLI entry point
         .executableTarget(
-            name: "MoonCLI",
-            dependencies: ["MoonKit"],
-            path: "Sources/MoonCLI"
+            name: "RockitCLI",
+            dependencies: ["RockitKit"],
+            path: "Sources/RockitCLI"
         ),
         // Tests
         .testTarget(
-            name: "MoonKitTests",
-            dependencies: ["MoonKit"],
-            path: "Tests/MoonKitTests"
+            name: "RockitKitTests",
+            dependencies: ["RockitKit"],
+            path: "Tests/RockitKitTests"
         ),
     ]
 )

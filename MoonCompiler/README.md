@@ -1,10 +1,10 @@
-# moonc
+# command
 
-The Moon language compiler. Written from scratch in Swift.
+The Rockit language compiler. Written from scratch in Swift (Stage 0), self-hosting in Rockit (Stage 1+).
 
-> **Status:** Phase 1 — Lexer complete. Parser next.
+> **Status:** All phases complete. Self-hosting compiler achieves bit-identical fixed point.
 
-For the full language specification and design rationale, see the [Moon Language README](../README.md).
+For the full language specification and design rationale, see the [Rockit Language README](../README.md).
 
 ---
 
@@ -14,19 +14,37 @@ For the full language specification and design rationale, see the [Moon Language
 swift build
 ```
 
-Binary lands at `.build/debug/moonc`.
+Binary lands at `.build/debug/command`.
 
 ## Run
 
 ```bash
-# Tokenize a .moon file and dump the token stream
-swift run moonc lex Examples/hello.moon --dump-tokens
+# Tokenize a .rok file and dump the token stream
+swift run command lex Examples/hello.rok --dump-tokens
 
-# Just tokenize (summary only)
-swift run moonc lex Examples/hello.moon
+# Parse and dump AST
+swift run command parse Examples/hello.rok --dump-ast
+
+# Type-check
+swift run command check Examples/hello.rok
+
+# Compile to bytecode
+swift run command build Examples/hello.rok
+
+# Run a .rok or .rokb file
+swift run command run Examples/hello.rok
+
+# Start REPL
+swift run command repl
+
+# Create a new project
+swift run command init myproject
+
+# Run tests
+swift run command test
 
 # Version
-swift run moonc version
+swift run command version
 ```
 
 ## Test
@@ -35,44 +53,49 @@ swift run moonc version
 swift test
 ```
 
-25+ test cases covering the full token set — keywords, literals, operators, comments, string interpolation, null safety operators, generics, annotations, error recovery, and source location tracking.
+479+ test cases covering the full compiler pipeline — lexer, parser, type checker, MIR, optimizer, codegen, VM, collections, strings, break/continue, ARC, coroutines, actors, file I/O, and bytecode serialization.
 
 ---
 
 ## Architecture
 
 ```
-moonc
-├── MoonKit          # Core compiler library (importable)
-│   ├── Token        # 130+ token types — full Moon grammar coverage
-│   ├── Lexer        # Single-pass UTF-8 scanner
-│   ├── Diagnostic   # Error/warning reporting with source locations
-│   ├── AST          # (Phase 2)
-│   └── Parser       # (Phase 2)
-└── MoonCLI          # CLI frontend (moonc binary)
+command
+├── RockitKit          # Core compiler library (importable)
+│   ├── Token          # 130+ token types — full Rockit grammar coverage
+│   ├── Lexer          # Single-pass UTF-8 scanner
+│   ├── Parser         # Recursive descent parser
+│   ├── TypeChecker    # Two-pass type checker
+│   ├── MIRLowering    # AST → MIR
+│   ├── MIROptimizer   # Optimization passes
+│   ├── CodeGen        # MIR → bytecode
+│   ├── VM             # Bytecode interpreter
+│   ├── Diagnostic     # Error/warning reporting with source locations
+│   └── ...            # 34 files total
+└── RockitCLI          # CLI frontend (command binary)
 ```
 
-MoonKit is a standalone library so it can be embedded in other tools — editor plugins, LSP server, Aurora package manager — without dragging in the CLI.
+RockitKit is a standalone library so it can be embedded in other tools — editor plugins, LSP server, Fuel package manager — without dragging in the CLI.
 
 ## Compiler Pipeline
 
 | Phase | Input | Output | Status |
 |-------|-------|--------|--------|
-| **Lexer** | `.moon` source | Token stream | ✅ |
-| **Parser** | Token stream | AST | 🔨 Next |
-| **Type Checker** | AST | Typed AST | ⬜ |
-| **MIR Lowering** | Typed AST | Moon IR | ⬜ |
-| **Optimizer** | MIR | Optimized MIR | ⬜ |
-| **Codegen** | Optimized MIR | Bytecode | ⬜ |
-| **Runtime** | Bytecode | Execution | ⬜ |
+| **Lexer** | `.rok` source | Token stream | ✅ |
+| **Parser** | Token stream | AST | ✅ |
+| **Type Checker** | AST | Typed AST | ✅ |
+| **MIR Lowering** | Typed AST | Rockit IR | ✅ |
+| **Optimizer** | MIR | Optimized MIR | ✅ |
+| **Codegen** | Optimized MIR | Bytecode | ✅ |
+| **Runtime** | Bytecode | Execution | ✅ |
 
 ---
 
 ## Token Coverage
 
-The lexer handles the complete Moon token set as defined in the language spec.
+The lexer handles the complete Rockit token set as defined in the language spec.
 
-**Moon-specific keywords**
+**Rockit-specific keywords**
 `view` · `actor` · `navigation` · `route` · `theme` · `style` · `suspend` · `async` · `await` · `concurrent` · `weak` · `unowned`
 
 **Kotlin-inherited keywords**
@@ -98,36 +121,6 @@ The lexer handles the complete Moon token set as defined in the language spec.
 **Comments**
 - Single-line: `// ...`
 - Multi-line: `/* ... */` (nestable)
-
----
-
-## Example Output
-
-```bash
-$ moonc lex Examples/hello.moon --dump-tokens
-```
-
-```
-  1:1      package                        kwPackage
-  1:9      com                            identifier("com")
-  1:12     .                              '.'
-  1:13     darkmatter                     identifier("darkmatter")
-  1:23     .                              '.'
-  1:24     hello                          identifier("hello")
-  3:1      import                         kwImport
-  ...
-  8:1      val                            kwVal
-  8:5      appName                        identifier("appName")
-  8:12     :                              ':'
-  8:14     String                         identifier("String")
-  8:21     =                              '='
-  8:23     "Moon Demo"                    string("Moon Demo")
-  ...
-  EOF
-
-Examples/hello.moon: 312 tokens
-OK
-```
 
 ---
 
