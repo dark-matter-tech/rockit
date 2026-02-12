@@ -601,9 +601,26 @@ fun parseWhenExpr(p: Map): Map {
             mapPut(branch, "isElse", true)
         } else {
             val patterns = listCreate()
-            listAppend(patterns, parseExpression(p, 0))
-            while (matchToken(p, "COMMA")) {
+            // Check for "is Type" pattern
+            if (check(p, "KW_IS")) {
+                advance(p)
+                val typeNode = parseType(p)
+                val isPattern = makeNode("isPattern")
+                mapPut(isPattern, "type", typeNode)
+                listAppend(patterns, isPattern)
+            } else {
                 listAppend(patterns, parseExpression(p, 0))
+            }
+            while (matchToken(p, "COMMA")) {
+                if (check(p, "KW_IS")) {
+                    advance(p)
+                    val typeNode = parseType(p)
+                    val isPattern = makeNode("isPattern")
+                    mapPut(isPattern, "type", typeNode)
+                    listAppend(patterns, isPattern)
+                } else {
+                    listAppend(patterns, parseExpression(p, 0))
+                }
             }
             mapPut(branch, "patterns", patterns)
         }

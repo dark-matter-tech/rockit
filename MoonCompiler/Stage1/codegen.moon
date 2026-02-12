@@ -77,6 +77,7 @@ fun makeCompiler(): Map {
     mapPut(c, "enumNames", mapCreate())   // enumName -> list of entry names
     mapPut(c, "objectNames", mapCreate()) // objectName -> true (singletons)
     mapPut(c, "interfaceNames", mapCreate()) // ifaceName -> list of method names
+    mapPut(c, "sealedNames", mapCreate())    // sealedName -> list of subclass names
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -1085,9 +1086,19 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
         } else {
             // Pattern matching branch
             val patterns = mapGet(branch, "patterns")
-            val patternReg = compileExpr(fs, listGet(patterns, 0))
+            val firstPattern = listGet(patterns, 0)
+            val patternKind = toString(mapGet(firstPattern, "kind"))
             val condReg = allocReg(fs)
-            emitBinaryOp(fs, "==", condReg, subjectReg, patternReg)
+            if (patternKind == "isPattern") {
+                // Type check pattern: is Type
+                val typeNode = mapGet(firstPattern, "type")
+                val typeName = toString(mapGet(typeNode, "name"))
+                emitTypeCheck(fs, condReg, subjectReg, typeName)
+            } else {
+                // Value equality pattern
+                val patternReg = compileExpr(fs, firstPattern)
+                emitBinaryOp(fs, "==", condReg, subjectReg, patternReg)
+            }
             val patches = emitBranch(fs, condReg)
             patchJump(fs, toInt(mapGet(patches, "thenPatch")))
 
@@ -1103,6 +1114,63 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
             patchJump(fs, toInt(mapGet(patches, "elsePatch")))
         }
         i = i + 1
+    }
+
+    // Exhaustiveness check for sealed class when expressions
+    val sealedNames = mapGet(mapGet(fs, "compiler"), "sealedNames")
+    var hasElse: Bool = false
+    val coveredTypes = listCreate()
+    var ci: Int = 0
+    while (ci < listSize(branches)) {
+        val br = listGet(branches, ci)
+        if (mapGet(br, "isElse") == true) {
+            hasElse = true
+        } else {
+            val pats = mapGet(br, "patterns")
+            if (listSize(pats) > 0) {
+                val pat = listGet(pats, 0)
+                if (toString(mapGet(pat, "kind")) == "isPattern") {
+                    val tNode = mapGet(pat, "type")
+                    listAppend(coveredTypes, toString(mapGet(tNode, "name")))
+                }
+            }
+        }
+        ci = ci + 1
+    }
+    if (!hasElse) {
+        if (listSize(coveredTypes) > 0) {
+            // Check each sealed class to see if all subclasses are covered
+            val sealedKeys = mapKeys(sealedNames)
+            var sk: Int = 0
+            while (sk < listSize(sealedKeys)) {
+                val sealedName = toString(listGet(sealedKeys, sk))
+                val subs = mapGet(sealedNames, sealedName)
+                if (listSize(subs) > 0) {
+                    var allCovered: Bool = true
+                    var si: Int = 0
+                    while (si < listSize(subs)) {
+                        val subName = toString(listGet(subs, si))
+                        if (!listContains(coveredTypes, subName)) {
+                            allCovered = false
+                        }
+                        si = si + 1
+                    }
+                    if (!allCovered) {
+                        // Find missing subclasses
+                        var mi: Int = 0
+                        while (mi < listSize(subs)) {
+                            val subName = toString(listGet(subs, mi))
+                            if (!listContains(coveredTypes, subName)) {
+                                val warning = stringConcat("warning: 'when' on sealed class '", stringConcat(sealedName, stringConcat("' missing branch for '", stringConcat(subName, "'"))))
+                                println(warning)
+                            }
+                            mi = mi + 1
+                        }
+                    }
+                }
+                sk = sk + 1
+            }
+        }
     }
 
     // Patch all end jumps
@@ -2122,7 +2190,7 @@ fun compileProgram(ast: Map): Map {
     val compiler = makeCompiler()
     val decls = mapGet(ast, "decls")
 
-    // Pass 1: Register all class, enum, and object names
+    // Pass 1: Register all class, enum, object, and interface names
     var i: Int = 0
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
@@ -2130,6 +2198,10 @@ fun compileProgram(ast: Map): Map {
         if (kind == "classDecl") {
             val cname = toString(mapGet(decl, "name"))
             mapPut(mapGet(compiler, "classNames"), cname, true)
+            // Register sealed classes
+            if (mapGet(decl, "isSealed") == true) {
+                mapPut(mapGet(compiler, "sealedNames"), cname, listCreate())
+            }
         }
         if (kind == "enumDecl") {
             compileEnumDecl(compiler, decl)
@@ -2139,6 +2211,30 @@ fun compileProgram(ast: Map): Map {
         }
         if (kind == "interfaceDecl") {
             compileInterfaceDecl(compiler, decl)
+        }
+        i = i + 1
+    }
+
+    // Pass 1b: Register subclass relationships
+    i = 0
+    while (i < listSize(decls)) {
+        val decl = listGet(decls, i)
+        val kind = toString(mapGet(decl, "kind"))
+        if (kind == "classDecl") {
+            val superTypes = mapGet(decl, "superTypes")
+            if (superTypes != null) {
+                val cname = toString(mapGet(decl, "name"))
+                var si: Int = 0
+                while (si < listSize(superTypes)) {
+                    val superType = listGet(superTypes, si)
+                    val superName = toString(mapGet(superType, "name"))
+                    val sealedSubs = mapGet(mapGet(compiler, "sealedNames"), superName)
+                    if (sealedSubs != null) {
+                        listAppend(sealedSubs, cname)
+                    }
+                    si = si + 1
+                }
+            }
         }
         i = i + 1
     }
