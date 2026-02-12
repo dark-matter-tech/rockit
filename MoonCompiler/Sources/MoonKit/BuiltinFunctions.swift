@@ -233,6 +233,52 @@ public final class BuiltinRegistry {
             return .null
         }
 
+        // File I/O
+        register(name: "fileRead") { args in
+            guard case .string(let path) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "fileRead")
+            }
+            do {
+                let contents = try String(contentsOfFile: path, encoding: .utf8)
+                return .string(contents)
+            } catch {
+                return .null
+            }
+        }
+
+        register(name: "fileWrite") { args in
+            guard args.count >= 2,
+                  case .string(let path) = args[0],
+                  case .string(let content) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, String", actual: "invalid args", operation: "fileWrite")
+            }
+            do {
+                try content.write(toFile: path, atomically: true, encoding: .utf8)
+                return .bool(true)
+            } catch {
+                return .bool(false)
+            }
+        }
+
+        register(name: "fileExists") { args in
+            guard case .string(let path) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "fileExists")
+            }
+            return .bool(FileManager.default.fileExists(atPath: path))
+        }
+
+        register(name: "fileDelete") { args in
+            guard case .string(let path) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "fileDelete")
+            }
+            do {
+                try FileManager.default.removeItem(atPath: path)
+                return .bool(true)
+            } catch {
+                return .bool(false)
+            }
+        }
+
         // Math
         register(name: "abs") { args in
             switch args.first {

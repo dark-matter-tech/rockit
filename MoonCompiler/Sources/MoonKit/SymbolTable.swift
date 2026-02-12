@@ -287,5 +287,17 @@ public final class SymbolTable {
         for (name, type) in stringBuiltins {
             globalScope.define(Symbol(name: name, type: type, kind: .function))
         }
+
+        // File I/O builtins
+        let fileBuiltins: [(String, Type)] = [
+            ("fileRead",   .function(parameterTypes: [.string], returnType: .nullable(.string))),
+            ("fileWrite",  .function(parameterTypes: [.string, .string], returnType: .bool)),
+            ("fileExists", .function(parameterTypes: [.string], returnType: .bool)),
+            ("fileDelete", .function(parameterTypes: [.string], returnType: .bool)),
+        ]
+
+        for (name, type) in fileBuiltins {
+            globalScope.define(Symbol(name: name, type: type, kind: .function))
+        }
     }
 }
