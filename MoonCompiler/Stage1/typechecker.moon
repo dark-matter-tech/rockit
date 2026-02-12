@@ -231,11 +231,11 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
         val classInfo = mapCreate()
         val fields = mapCreate()
         // Register constructor params as fields
-        val params = mapGet(decl, "params")
-        if (params != null) {
+        val ctorParams = mapGet(decl, "ctorParams")
+        if (ctorParams != null) {
             var j: Int = 0
-            while (j < listSize(params)) {
-                val p = listGet(params, j)
+            while (j < listSize(ctorParams)) {
+                val p = listGet(ctorParams, j)
                 val pname = toString(mapGet(p, "name"))
                 val ptype = mapGet(p, "type")
                 mapPut(fields, pname, if (ptype != null) { resolveTypeName(ptype) } else { "Any" })
@@ -248,43 +248,129 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
         // Register constructor as a function
         val ctorSig = mapCreate()
         var ctorArity: Int = 0
-        if (params != null) { ctorArity = listSize(params) }
+        if (ctorParams != null) { ctorArity = listSize(ctorParams) }
         mapPut(ctorSig, "arity", ctorArity)
         mapPut(ctorSig, "returnType", name)
         mapPut(ctorSig, "variadic", false)
         mapPut(mapGet(tc, "functions"), name, ctorSig)
 
         // Register methods
-        val members = mapGet(decl, "members")
-        if (members != null) {
-            var j: Int = 0
-            while (j < listSize(members)) {
-                val member = listGet(members, j)
-                if (toString(mapGet(member, "kind")) == "funDecl") {
-                    val mname = toString(mapGet(member, "name"))
-                    val fullName = stringConcat(name, stringConcat(".", mname))
-                    val mparams = mapGet(member, "params")
-                    var marity: Int = 0
-                    if (mparams != null) { marity = listSize(mparams) }
-                    val mret = mapGet(member, "returnType")
-                    val msig = mapCreate()
-                    mapPut(msig, "arity", marity + 1)
-                    mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
-                    mapPut(msig, "variadic", false)
-                    mapPut(mapGet(tc, "functions"), fullName, msig)
+        val classBody = mapGet(decl, "body")
+        if (classBody != null) {
+            if (isMap(classBody)) {
+                val members = mapGet(classBody, "members")
+                if (members != null) {
+                    var j: Int = 0
+                    while (j < listSize(members)) {
+                        val member = listGet(members, j)
+                        if (isMap(member)) {
+                            if (toString(mapGet(member, "kind")) == "funDecl") {
+                                val mname = toString(mapGet(member, "name"))
+                                val fullName = stringConcat(name, stringConcat(".", mname))
+                                val mparams = mapGet(member, "params")
+                                var marity: Int = 0
+                                if (mparams != null) { marity = listSize(mparams) }
+                                val mret = mapGet(member, "returnType")
+                                val msig = mapCreate()
+                                mapPut(msig, "arity", marity + 1)
+                                mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
+                                mapPut(msig, "variadic", false)
+                                mapPut(mapGet(tc, "functions"), fullName, msig)
+                            }
+                        }
+                        j = j + 1
+                    }
                 }
-                j = j + 1
             }
         }
     } else if (kind == "enumDecl") {
         val name = toString(mapGet(decl, "name"))
-        mapPut(mapGet(tc, "classes"), name, mapCreate())
+        val classInfo = mapCreate()
+        // Collect entry names
+        val entryList = listCreate()
+        val entries = mapGet(decl, "entries")
+        if (entries != null) {
+            var ei: Int = 0
+            while (ei < listSize(entries)) {
+                val entry = listGet(entries, ei)
+                if (isMap(entry)) {
+                    listAppend(entryList, toString(mapGet(entry, "name")))
+                }
+                ei = ei + 1
+            }
+        }
+        mapPut(classInfo, "enumEntries", entryList)
+        mapPut(mapGet(tc, "classes"), name, classInfo)
+        // Register constructor as a function
+        val ctorSig = mapCreate()
+        mapPut(ctorSig, "arity", 0)
+        mapPut(ctorSig, "returnType", name)
+        mapPut(ctorSig, "variadic", false)
+        mapPut(mapGet(tc, "functions"), name, ctorSig)
+        // Register methods
+        val methods = mapGet(decl, "methods")
+        if (methods != null) {
+            var mi: Int = 0
+            while (mi < listSize(methods)) {
+                val member = listGet(methods, mi)
+                if (isMap(member)) {
+                    if (toString(mapGet(member, "kind")) == "funDecl") {
+                        val mname = toString(mapGet(member, "name"))
+                        val fullName = stringConcat(name, stringConcat(".", mname))
+                        val mparams = mapGet(member, "params")
+                        var marity: Int = 0
+                        if (mparams != null) { marity = listSize(mparams) }
+                        val mret = mapGet(member, "returnType")
+                        val msig = mapCreate()
+                        mapPut(msig, "arity", marity + 1)
+                        mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
+                        mapPut(msig, "variadic", false)
+                        mapPut(mapGet(tc, "functions"), fullName, msig)
+                    }
+                }
+                mi = mi + 1
+            }
+        }
     } else if (kind == "objectDecl") {
         val name = toString(mapGet(decl, "name"))
         mapPut(mapGet(tc, "classes"), name, mapCreate())
     } else if (kind == "interfaceDecl") {
         val name = toString(mapGet(decl, "name"))
-        mapPut(mapGet(tc, "classes"), name, mapCreate())
+        val classInfo = mapCreate()
+        // Collect interface method names
+        val methodList = listCreate()
+        val ifaceBody = mapGet(decl, "body")
+        if (ifaceBody != null) {
+            if (isMap(ifaceBody)) {
+                val members = mapGet(ifaceBody, "members")
+                if (members != null) {
+                    var j: Int = 0
+                    while (j < listSize(members)) {
+                        val member = listGet(members, j)
+                        if (isMap(member)) {
+                            if (toString(mapGet(member, "kind")) == "funDecl") {
+                                val mname = toString(mapGet(member, "name"))
+                                listAppend(methodList, mname)
+                                // Register method signature
+                                val fullName = stringConcat(name, stringConcat(".", mname))
+                                val mparams = mapGet(member, "params")
+                                var marity: Int = 0
+                                if (mparams != null) { marity = listSize(mparams) }
+                                val mret = mapGet(member, "returnType")
+                                val msig = mapCreate()
+                                mapPut(msig, "arity", marity + 1)
+                                mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
+                                mapPut(msig, "variadic", false)
+                                mapPut(mapGet(tc, "functions"), fullName, msig)
+                            }
+                        }
+                        j = j + 1
+                    }
+                }
+            }
+        }
+        mapPut(classInfo, "interfaceMethods", methodList)
+        mapPut(mapGet(tc, "classes"), name, classInfo)
     }
 }
 
@@ -292,14 +378,14 @@ fun resolveTypeName(typeNode: Map): String {
     if (typeNode == null) { return "Any" }
     if (!isMap(typeNode)) { return toString(typeNode) }
     val kind = toString(mapGet(typeNode, "kind"))
-    if (kind == "simpleType") {
+    if (kind == "type") {
         val name = toString(mapGet(typeNode, "name"))
         val nullable = mapGet(typeNode, "nullable")
         if (nullable == true) {
             return stringConcat(name, "?")
         }
         return name
-    } else if (kind == "functionType") {
+    } else if (kind == "funcType") {
         return "Function"
     }
     return "Any"
@@ -352,7 +438,10 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
         tcPopScope(tc)
     } else if (kind == "classDecl") {
         // Check methods
-        val members = mapGet(decl, "members")
+        val classBody = mapGet(decl, "body")
+        if (classBody == null) { return }
+        if (!isMap(classBody)) { return }
+        val members = mapGet(classBody, "members")
         if (members != null) {
             var i: Int = 0
             while (i < listSize(members)) {
@@ -366,11 +455,11 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
                     val name = toString(mapGet(decl, "name"))
                     tcDefine(tc, "this", name)
                     // Register class fields in scope
-                    val params = mapGet(decl, "params")
-                    if (params != null) {
+                    val ctorParams = mapGet(decl, "ctorParams")
+                    if (ctorParams != null) {
                         var j: Int = 0
-                        while (j < listSize(params)) {
-                            val p = listGet(params, j)
+                        while (j < listSize(ctorParams)) {
+                            val p = listGet(ctorParams, j)
                             val pname = toString(mapGet(p, "name"))
                             val ptype = mapGet(p, "type")
                             var ptName: String = "Any"
@@ -381,6 +470,57 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
                     }
                     tcCheckDecl(tc, member)
                     tcPopScope(tc)
+                }
+                i = i + 1
+            }
+        }
+        // Check interface conformance
+        val superTypes = mapGet(decl, "superTypes")
+        if (superTypes != null) {
+            val className = toString(mapGet(decl, "name"))
+            val classes = mapGet(tc, "classes")
+            var si: Int = 0
+            while (si < listSize(superTypes)) {
+                val superType = listGet(superTypes, si)
+                if (isMap(superType)) {
+                    val superName = toString(mapGet(superType, "name"))
+                    val superInfo = mapGet(classes, superName)
+                    if (superInfo != null) {
+                        if (isMap(superInfo)) {
+                            val ifaceMethods = mapGet(superInfo, "interfaceMethods")
+                            if (ifaceMethods != null) {
+                                var mi: Int = 0
+                                while (mi < listSize(ifaceMethods)) {
+                                    val reqMethod = toString(listGet(ifaceMethods, mi))
+                                    val fullName = stringConcat(className, stringConcat(".", reqMethod))
+                                    val fns = mapGet(tc, "functions")
+                                    if (mapGet(fns, fullName) == null) {
+                                        tcWarn(tc, stringConcat("class '", stringConcat(className, stringConcat("' missing interface method '", stringConcat(reqMethod, stringConcat("' from '", stringConcat(superName, "'")))))), decl)
+                                    }
+                                    mi = mi + 1
+                                }
+                            }
+                        }
+                    }
+                }
+                si = si + 1
+            }
+        }
+    } else if (kind == "enumDecl") {
+        // Check enum method bodies
+        val methods = mapGet(decl, "methods")
+        if (methods != null) {
+            var i: Int = 0
+            while (i < listSize(methods)) {
+                val member = listGet(methods, i)
+                if (isMap(member)) {
+                    if (toString(mapGet(member, "kind")) == "funDecl") {
+                        tcPushScope(tc)
+                        val name = toString(mapGet(decl, "name"))
+                        tcDefine(tc, "this", name)
+                        tcCheckDecl(tc, member)
+                        tcPopScope(tc)
+                    }
                 }
                 i = i + 1
             }
@@ -530,10 +670,24 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
         if (catchBody != null) {
             tcPushScope(tc)
             val catchVar = mapGet(stmt, "catchVar")
-            if (catchVar != null) { tcDefine(tc, toString(catchVar), "Any") }
+            if (catchVar != null) {
+                val catchType = mapGet(stmt, "catchType")
+                var catchTypeName: String = "Any"
+                if (catchType != null) { catchTypeName = resolveTypeName(catchType) }
+                tcDefine(tc, toString(catchVar), catchTypeName)
+            }
             val cStmts = mapGet(catchBody, "stmts")
             if (cStmts != null) { tcCheckStmts(tc, cStmts) }
             tcPopScope(tc)
+        }
+        val finallyBody = mapGet(stmt, "finallyBody")
+        if (finallyBody != null) {
+            if (isMap(finallyBody)) {
+                tcPushScope(tc)
+                val fStmts = mapGet(finallyBody, "stmts")
+                if (fStmts != null) { tcCheckStmts(tc, fStmts) }
+                tcPopScope(tc)
+            }
         }
     } else if (kind == "funDecl") {
         // Nested function
@@ -575,32 +729,40 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
     } else if (kind == "when") {
         val subject = mapGet(stmt, "subject")
         if (subject != null) { tcInferExpr(tc, subject) }
-        val entries = mapGet(stmt, "entries")
-        if (entries != null) {
+        val branches = mapGet(stmt, "branches")
+        if (branches != null) {
             var wi: Int = 0
-            while (wi < listSize(entries)) {
-                val entry = listGet(entries, wi)
-                if (isMap(entry)) {
-                    val conditions = mapGet(entry, "conditions")
-                    if (conditions != null) {
+            while (wi < listSize(branches)) {
+                val branch = listGet(branches, wi)
+                if (isMap(branch)) {
+                    val patterns = mapGet(branch, "patterns")
+                    if (patterns != null) {
                         var ci: Int = 0
-                        while (ci < listSize(conditions)) {
-                            val cond = listGet(conditions, ci)
-                            if (isMap(cond)) { tcInferExpr(tc, cond) }
+                        while (ci < listSize(patterns)) {
+                            val pat = listGet(patterns, ci)
+                            if (isMap(pat)) {
+                                val patKind = toString(mapGet(pat, "kind"))
+                                if (patKind != "isPattern") {
+                                    tcInferExpr(tc, pat)
+                                }
+                            }
                             ci = ci + 1
                         }
                     }
-                    val body = mapGet(entry, "body")
+                    val body = mapGet(branch, "body")
                     if (body != null) {
                         if (isMap(body)) {
+                            tcPushScope(tc)
                             val bStmts = mapGet(body, "stmts")
                             if (bStmts != null) { tcCheckStmts(tc, bStmts) }
+                            tcPopScope(tc)
                         }
                     }
                 }
                 wi = wi + 1
             }
         }
+        tcCheckWhenExhaustiveness(tc, stmt, branches)
     } else if (kind == "block") {
         tcPushScope(tc)
         val stmts = mapGet(stmt, "stmts")
@@ -774,28 +936,42 @@ fun tcInferExpr(tc: Map, expr: Map): String {
     if (kind == "when") {
         val subject = mapGet(expr, "subject")
         if (subject != null) { tcInferExpr(tc, subject) }
-        val entries = mapGet(expr, "entries")
-        if (entries != null) {
+        val branches = mapGet(expr, "branches")
+        if (branches != null) {
             var i: Int = 0
-            while (i < listSize(entries)) {
-                val entry = listGet(entries, i)
-                val conditions = mapGet(entry, "conditions")
-                if (conditions != null) {
-                    var j: Int = 0
-                    while (j < listSize(conditions)) {
-                        val cond = listGet(conditions, j)
-                        if (cond != null) { tcInferExpr(tc, cond) }
-                        j = j + 1
+            while (i < listSize(branches)) {
+                val branch = listGet(branches, i)
+                if (isMap(branch)) {
+                    val patterns = mapGet(branch, "patterns")
+                    if (patterns != null) {
+                        var j: Int = 0
+                        while (j < listSize(patterns)) {
+                            val pat = listGet(patterns, j)
+                            if (pat != null) {
+                                if (isMap(pat)) {
+                                    val patKind = toString(mapGet(pat, "kind"))
+                                    if (patKind != "isPattern") {
+                                        tcInferExpr(tc, pat)
+                                    }
+                                }
+                            }
+                            j = j + 1
+                        }
                     }
-                }
-                val body = mapGet(entry, "body")
-                if (body != null) {
-                    val bStmts = mapGet(body, "stmts")
-                    if (bStmts != null) { tcCheckStmts(tc, bStmts) }
+                    val body = mapGet(branch, "body")
+                    if (body != null) {
+                        if (isMap(body)) {
+                            tcPushScope(tc)
+                            val bStmts = mapGet(body, "stmts")
+                            if (bStmts != null) { tcCheckStmts(tc, bStmts) }
+                            tcPopScope(tc)
+                        }
+                    }
                 }
                 i = i + 1
             }
         }
+        tcCheckWhenExhaustiveness(tc, expr, branches)
         return "Any"
     }
 
@@ -868,6 +1044,93 @@ fun tcInferExpr(tc: Map, expr: Map): String {
 
     // Default: bare expression in statement position
     return "Any"
+}
+
+// ---------------------------------------------------------------------------
+// When exhaustiveness checking
+// ---------------------------------------------------------------------------
+
+fun tcCheckWhenExhaustiveness(tc: Map, node: Map, branches: List): Unit {
+    if (branches == null) { return }
+    var hasElse: Bool = false
+    val coveredTypes = listCreate()
+    val coveredEntries = listCreate()
+    var bi: Int = 0
+    while (bi < listSize(branches)) {
+        val branch = listGet(branches, bi)
+        if (!isMap(branch)) {
+            bi = bi + 1
+            continue
+        }
+        if (mapGet(branch, "isElse") == true) {
+            hasElse = true
+        } else {
+            val patterns = mapGet(branch, "patterns")
+            if (patterns != null) {
+                var pi: Int = 0
+                while (pi < listSize(patterns)) {
+                    val pat = listGet(patterns, pi)
+                    if (isMap(pat)) {
+                        val patKind = toString(mapGet(pat, "kind"))
+                        if (patKind == "isPattern") {
+                            val tNode = mapGet(pat, "type")
+                            if (tNode != null) {
+                                if (isMap(tNode)) {
+                                    listAppend(coveredTypes, toString(mapGet(tNode, "name")))
+                                }
+                            }
+                        } else if (patKind == "member") {
+                            val patName = mapGet(pat, "name")
+                            if (patName != null) {
+                                listAppend(coveredEntries, toString(patName))
+                            }
+                        }
+                    }
+                    pi = pi + 1
+                }
+            }
+        }
+        bi = bi + 1
+    }
+    if (hasElse) { return }
+
+    // Check enum exhaustiveness
+    val classes = mapGet(tc, "classes")
+    val classKeys = mapKeys(classes)
+    var ck: Int = 0
+    while (ck < listSize(classKeys)) {
+        val cname = toString(listGet(classKeys, ck))
+        val cinfo = mapGet(classes, cname)
+        if (isMap(cinfo)) {
+            val enumEntries = mapGet(cinfo, "enumEntries")
+            if (enumEntries != null) {
+                if (listSize(enumEntries) > 0) {
+                    // Check if any entries from this enum are covered
+                    var anyMatch: Bool = false
+                    var ei: Int = 0
+                    while (ei < listSize(enumEntries)) {
+                        val ename = toString(listGet(enumEntries, ei))
+                        if (listContains(coveredEntries, ename)) {
+                            anyMatch = true
+                        }
+                        ei = ei + 1
+                    }
+                    // If some entries match but not all, warn about missing ones
+                    if (anyMatch) {
+                        var mi: Int = 0
+                        while (mi < listSize(enumEntries)) {
+                            val ename = toString(listGet(enumEntries, mi))
+                            if (!listContains(coveredEntries, ename)) {
+                                tcWarn(tc, stringConcat("'when' missing branch for '", stringConcat(cname, stringConcat(".", stringConcat(ename, "'")))), node)
+                            }
+                            mi = mi + 1
+                        }
+                    }
+                }
+            }
+        }
+        ck = ck + 1
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -1155,11 +1155,32 @@ fun parseEnumDecl(p: Map): Map {
             listAppend(entries, entry)
             matchToken(p, "COMMA")
         } else {
-            // Methods or other members after entries
+            // Non-entry token — switch to method parsing
             break
         }
     }
     mapPut(node, "entries", entries)
+
+    // Parse member methods after entries
+    val methods = listCreate()
+    skipNewlines(p)
+    while (!check(p, "RBRACE") && !parserAtEnd(p)) {
+        skipNewlines(p)
+        if (check(p, "RBRACE")) { break }
+        val tt2 = peekType(p)
+        if (tt2 == "KW_FUN") {
+            listAppend(methods, parseFunDecl(p))
+        } else if (tt2 == "KW_OVERRIDE") {
+            advance(p)
+            val m = parseFunDecl(p)
+            mapPut(m, "isOverride", true)
+            listAppend(methods, m)
+        } else {
+            advance(p)
+        }
+        skipNewlines(p)
+    }
+    mapPut(node, "methods", methods)
     expect(p, "RBRACE")
     return node
 }

@@ -659,9 +659,10 @@ fun compileExpr(fs: Map, node: Map): Int {
             val objName = toString(mapGet(obj, "name"))
             val enumEntries = mapGet(mapGet(mapGet(fs, "compiler"), "enumNames"), objName)
             if (enumEntries != null) {
-                // Enum access → emit constant string "EnumName.ENTRY"
+                // Enum access → call initializer function
                 val dest = allocReg(fs)
-                emitConstString(fs, dest, stringConcat(objName, stringConcat(".", fieldName)))
+                val initName = stringConcat("__init_", stringConcat(objName, stringConcat("_", fieldName)))
+                emitCall(fs, dest, initName, listCreate())
                 return dest
             }
         }
@@ -1382,25 +1383,56 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
                 emitStore(fs, dest, valReg)
             }
         } else {
-            // Pattern matching branch
+            // Pattern matching branch — OR-combine all patterns
             val patterns = mapGet(branch, "patterns")
-            val firstPattern = listGet(patterns, 0)
-            val patternKind = toString(mapGet(firstPattern, "kind"))
-            var condReg: Int = 0
-            if (subject == null) {
-                // No subject — pattern is a boolean condition
-                condReg = compileExpr(fs, firstPattern)
-            } else if (patternKind == "isPattern") {
-                // Type check pattern: is Type
-                condReg = allocReg(fs)
-                val typeNode = mapGet(firstPattern, "type")
-                val typeName = toString(mapGet(typeNode, "name"))
-                emitTypeCheck(fs, condReg, subjectReg, typeName)
-            } else {
-                // Value equality pattern
-                condReg = allocReg(fs)
-                val patternReg = compileExpr(fs, firstPattern)
-                emitBinaryOp(fs, "==", condReg, subjectReg, patternReg)
+            var condReg: Int = allocReg(fs)
+            emitConstFalse(fs, condReg)
+            var pi: Int = 0
+            while (pi < listSize(patterns)) {
+                val pattern = listGet(patterns, pi)
+                val patKind = toString(mapGet(pattern, "kind"))
+                val singleCond = allocReg(fs)
+                if (subject == null) {
+                    // No subject — pattern is a boolean condition
+                    val exprReg = compileExpr(fs, pattern)
+                    emitStore(fs, singleCond, exprReg)
+                } else if (patKind == "isPattern") {
+                    // Type check pattern: is Type
+                    val typeNode = mapGet(pattern, "type")
+                    val typeName = toString(mapGet(typeNode, "name"))
+                    emitTypeCheck(fs, singleCond, subjectReg, typeName)
+                } else {
+                    // Value equality pattern — check if it's an enum member
+                    var isEnumPat: Bool = false
+                    if (patKind == "member") {
+                        val patObj = mapGet(pattern, "object")
+                        if (patObj != null) {
+                            if (isMap(patObj)) {
+                                if (toString(mapGet(patObj, "kind")) == "ident") {
+                                    val patObjName = toString(mapGet(patObj, "name"))
+                                    val patEnumEntries = mapGet(mapGet(mapGet(fs, "compiler"), "enumNames"), patObjName)
+                                    if (patEnumEntries != null) {
+                                        isEnumPat = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (isEnumPat) {
+                        // Compare __variant fields
+                        val subjectVariant = allocReg(fs)
+                        emitGetField(fs, subjectVariant, subjectReg, "__variant")
+                        val patternReg = compileExpr(fs, pattern)
+                        val patternVariant = allocReg(fs)
+                        emitGetField(fs, patternVariant, patternReg, "__variant")
+                        emitBinaryOp(fs, "==", singleCond, subjectVariant, patternVariant)
+                    } else {
+                        val patternReg = compileExpr(fs, pattern)
+                        emitBinaryOp(fs, "==", singleCond, subjectReg, patternReg)
+                    }
+                }
+                emitBinaryOp(fs, "||", condReg, condReg, singleCond)
+                pi = pi + 1
             }
             val patches = emitBranch(fs, condReg)
             patchJump(fs, toInt(mapGet(patches, "thenPatch")))
@@ -2531,7 +2563,7 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
 }
 
 // ---------------------------------------------------------------------------
-// Enum compilation (simplified: entries are string constants)
+// Enum compilation — objects with __variant field
 // ---------------------------------------------------------------------------
 
 fun compileEnumDecl(compiler: Map, decl: Map): Unit {
@@ -2547,6 +2579,115 @@ fun compileEnumDecl(compiler: Map, decl: Map): Unit {
         }
     }
     mapPut(mapGet(compiler, "enumNames"), enumName, entryNames)
+
+    // Build type record with __variant field
+    val fields = listCreate()
+    val variantField = mapCreate()
+    mapPut(variantField, "name", "__variant")
+    mapPut(variantField, "typeName", "String")
+    listAppend(fields, variantField)
+
+    val methodNames = listCreate()
+
+    // Build type record
+    val typeRec = mapCreate()
+    val nameIdx = addTypeName(compiler, enumName)
+    mapPut(typeRec, "nameIdx", nameIdx)
+    mapPut(typeRec, "fields", fields)
+    mapPut(typeRec, "methods", methodNames)
+    listAppend(mapGet(compiler, "types"), typeRec)
+    mapPut(mapGet(compiler, "classNames"), enumName, typeRec)
+
+    // Generate initializer function for each entry
+    var ei: Int = 0
+    while (ei < listSize(entryNames)) {
+        val entryName = toString(listGet(entryNames, ei))
+        val initName = stringConcat("__init_", stringConcat(enumName, stringConcat("_", entryName)))
+
+        // Build synthetic function body:
+        // val v = "EntryName"
+        // return NewObject(EnumName, v)
+        val stmts = listCreate()
+
+        // val v = "EntryName"
+        val valStmt = makeNode("valDecl")
+        mapPut(valStmt, "name", "__v")
+        val strLit = makeNode("stringLit")
+        mapPut(strLit, "value", entryName)
+        mapPut(valStmt, "init", strLit)
+        listAppend(stmts, valStmt)
+
+        // return EnumName($v)  — constructor call
+        val ctorCall = makeNode("call")
+        val calleeNode = makeNode("ident")
+        mapPut(calleeNode, "name", enumName)
+        mapPut(ctorCall, "callee", calleeNode)
+        val argList = listCreate()
+        val arg1 = mapCreate()
+        mapPut(arg1, "kind", "callArg")
+        val argVal = makeNode("ident")
+        mapPut(argVal, "name", "__v")
+        mapPut(arg1, "value", argVal)
+        listAppend(argList, arg1)
+        mapPut(ctorCall, "args", argList)
+
+        val retNode = makeNode("return")
+        mapPut(retNode, "value", ctorCall)
+        listAppend(stmts, retNode)
+
+        val bodyBlock = makeNode("block")
+        mapPut(bodyBlock, "stmts", stmts)
+
+        val initDecl = mapCreate()
+        mapPut(initDecl, "kind", "funDecl")
+        mapPut(initDecl, "name", initName)
+        mapPut(initDecl, "params", listCreate())
+        mapPut(initDecl, "body", bodyBlock)
+        compileFunction(compiler, initDecl)
+
+        ei = ei + 1
+    }
+
+    // Compile enum methods (same pattern as interface default methods)
+    val methods = mapGet(decl, "methods")
+    if (methods != null) {
+        var mi: Int = 0
+        while (mi < listSize(methods)) {
+            val member = listGet(methods, mi)
+            if (isMap(member)) {
+                val mkind = toString(mapGet(member, "kind"))
+                if (mkind == "funDecl") {
+                    val methodName = toString(mapGet(member, "name"))
+                    listAppend(methodNames, methodName)
+                    val methodBody = mapGet(member, "body")
+                    if (methodBody != null) {
+                        val fullName = stringConcat(enumName, stringConcat(".", methodName))
+                        val methodParams = listCreate()
+                        val thisParam = mapCreate()
+                        mapPut(thisParam, "kind", "param")
+                        mapPut(thisParam, "name", "this")
+                        listAppend(methodParams, thisParam)
+                        val origParams = mapGet(member, "params")
+                        if (origParams != null) {
+                            var pi: Int = 0
+                            while (pi < listSize(origParams)) {
+                                listAppend(methodParams, listGet(origParams, pi))
+                                pi = pi + 1
+                            }
+                        }
+                        val methodDecl = mapCreate()
+                        mapPut(methodDecl, "kind", "funDecl")
+                        mapPut(methodDecl, "name", fullName)
+                        mapPut(methodDecl, "params", methodParams)
+                        mapPut(methodDecl, "body", methodBody)
+                        mapPut(methodDecl, "returnType", mapGet(member, "returnType"))
+                        compileFunction(compiler, methodDecl)
+                    }
+                }
+            }
+            mi = mi + 1
+        }
+    }
 }
 
 fun compileInterfaceDecl(compiler: Map, decl: Map): Unit {
