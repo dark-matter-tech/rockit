@@ -285,6 +285,8 @@ public final class SymbolTable {
         // String operation builtins
         let stringBuiltins: [(String, Type)] = [
             ("charAt",          .function(parameterTypes: [.string, .int], returnType: .string)),
+            ("charCodeAt",      .function(parameterTypes: [.string, .int], returnType: .int)),
+            ("substring",       .function(parameterTypes: [.string, .int, .int], returnType: .string)),
             ("stringIndexOf",   .function(parameterTypes: [.string, .string], returnType: .int)),
             ("stringSplit",     .function(parameterTypes: [.string, .string],
                                          returnType: .classType(name: "List", typeArguments: []))),
@@ -324,10 +326,12 @@ public final class SymbolTable {
 
         // File I/O builtins
         let fileBuiltins: [(String, Type)] = [
-            ("fileRead",   .function(parameterTypes: [.string], returnType: .nullable(.string))),
-            ("fileWrite",  .function(parameterTypes: [.string, .string], returnType: .bool)),
-            ("fileExists", .function(parameterTypes: [.string], returnType: .bool)),
-            ("fileDelete", .function(parameterTypes: [.string], returnType: .bool)),
+            ("fileRead",       .function(parameterTypes: [.string], returnType: .nullable(.string))),
+            ("fileWrite",      .function(parameterTypes: [.string, .string], returnType: .bool)),
+            ("fileWriteBytes", .function(parameterTypes: [.string, .classType(name: "List", typeArguments: [])],
+                                         returnType: .unit)),
+            ("fileExists",     .function(parameterTypes: [.string], returnType: .bool)),
+            ("fileDelete",     .function(parameterTypes: [.string], returnType: .bool)),
         ]
 
         for (name, type) in fileBuiltins {

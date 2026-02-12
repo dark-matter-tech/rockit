@@ -130,6 +130,31 @@ public final class BuiltinRegistry {
             return .string(String(s[charIdx]))
         }
 
+        register(name: "charCodeAt") { args in
+            guard args.count >= 2,
+                  case .string(let s) = args[0],
+                  case .int(let index) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, Int", actual: "invalid args", operation: "charCodeAt")
+            }
+            guard index >= 0, Int(index) < s.count else {
+                throw VMError.indexOutOfBounds(index: Int(index), count: s.count)
+            }
+            let charIdx = s.index(s.startIndex, offsetBy: Int(index))
+            return .int(Int64(s[charIdx].unicodeScalars.first!.value))
+        }
+
+        register(name: "substring") { args in
+            guard args.count >= 3,
+                  case .string(let s) = args[0],
+                  case .int(let start) = args[1],
+                  case .int(let end) = args[2] else {
+                throw VMError.typeMismatch(expected: "String, Int, Int", actual: "invalid args", operation: "substring")
+            }
+            let startIdx = s.index(s.startIndex, offsetBy: max(0, min(Int(start), s.count)))
+            let endIdx = s.index(s.startIndex, offsetBy: max(0, min(Int(end), s.count)))
+            return .string(String(s[startIdx..<endIdx]))
+        }
+
         register(name: "stringIndexOf") { args in
             guard args.count >= 2,
                   case .string(let s) = args[0],
@@ -376,6 +401,7 @@ public final class BuiltinRegistry {
         registerHashMapBuiltins(heap: heap, arc: arc)
         registerHeapAwareStringBuiltins(heap: heap)
         registerProcessBuiltins(heap: heap)
+        registerFileIOBuiltins(heap: heap)
     }
 
     // MARK: List Builtins
@@ -685,6 +711,57 @@ public final class BuiltinRegistry {
                 result.append(Character(scalar))
             }
             return .string(result)
+        }
+    }
+
+    // MARK: Heap-Aware File I/O Builtins
+
+    private func registerFileIOBuiltins(heap: Heap) {
+        register(name: "fileWriteBytes") { args in
+            guard args.count >= 2,
+                  case .string(let path) = args[0],
+                  case .objectRef(let id) = args[1] else {
+                throw VMError.typeMismatch(
+                    expected: "String, List of Int",
+                    actual: "invalid args",
+                    operation: "fileWriteBytes"
+                )
+            }
+            let obj = try heap.get(id)
+            guard let elements = obj.listStorage else {
+                throw VMError.typeMismatch(
+                    expected: "List",
+                    actual: obj.typeName,
+                    operation: "fileWriteBytes"
+                )
+            }
+            var bytes: [UInt8] = []
+            bytes.reserveCapacity(elements.count)
+            for (index, element) in elements.enumerated() {
+                guard case .int(let value) = element else {
+                    throw VMError.typeMismatch(
+                        expected: "Int",
+                        actual: element.typeName,
+                        operation: "fileWriteBytes (element \(index))"
+                    )
+                }
+                guard value >= 0, value <= 255 else {
+                    throw VMError.typeMismatch(
+                        expected: "Int in range 0-255",
+                        actual: "Int(\(value))",
+                        operation: "fileWriteBytes (element \(index))"
+                    )
+                }
+                bytes.append(UInt8(value))
+            }
+            let data = Data(bytes)
+            let url = URL(fileURLWithPath: path)
+            do {
+                try data.write(to: url)
+                return .unit
+            } catch {
+                throw VMError.userException(message: "fileWriteBytes: failed to write to '\(path)': \(error.localizedDescription)")
+            }
         }
     }
 }

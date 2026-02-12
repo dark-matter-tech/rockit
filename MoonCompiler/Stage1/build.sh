@@ -10,7 +10,7 @@ strip_main() {
     awk '/^fun main\(\)/ { found=1 } !found { print }' "$1"
 }
 
-# Default: build lexer + parser into a combined file
+# Default: build lexer + parser + codegen into a combined file
 OUTPUT="${STAGE1_DIR}/moonc.moon"
 
 echo "// moonc.moon — Stage 1 Moon Compiler (auto-generated)" > "$OUTPUT"
@@ -21,7 +21,11 @@ echo "" >> "$OUTPUT"
 strip_main "${STAGE1_DIR}/lexer.moon" >> "$OUTPUT"
 echo "" >> "$OUTPUT"
 
-# Parser (with main)
-cat "${STAGE1_DIR}/parser.moon" >> "$OUTPUT"
+# Parser (without main)
+strip_main "${STAGE1_DIR}/parser.moon" >> "$OUTPUT"
+echo "" >> "$OUTPUT"
+
+# Code generator (with main)
+cat "${STAGE1_DIR}/codegen.moon" >> "$OUTPUT"
 
 echo "Built: $OUTPUT"

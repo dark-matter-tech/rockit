@@ -264,7 +264,8 @@ fun parsePrimary(p: Map): Map {
     // Unary minus
     if (tt == "MINUS") {
         advance(p)
-        val operand = parsePrimary(p)
+        var operand = parsePrimary(p)
+        operand = parsePostfix(p, operand)
         val node = makeNodeAt("unary", line, col)
         mapPut(node, "op", "-")
         mapPut(node, "operand", operand)
@@ -274,7 +275,8 @@ fun parsePrimary(p: Map): Map {
     // Logical NOT
     if (tt == "BANG") {
         advance(p)
-        val operand = parsePrimary(p)
+        var operand = parsePrimary(p)
+        operand = parsePostfix(p, operand)
         val node = makeNodeAt("unary", line, col)
         mapPut(node, "op", "!")
         mapPut(node, "operand", operand)
