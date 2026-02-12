@@ -80,6 +80,7 @@ fun makeCompiler(): Map {
     mapPut(c, "sealedNames", mapCreate())    // sealedName -> list of subclass names
     mapPut(c, "funcSignatures", mapCreate()) // funcName -> params list (for default args)
     mapPut(c, "typeAliases", mapCreate())    // aliasName -> targetName
+    mapPut(c, "extensionFuncs", mapCreate()) // "TypeName.method" -> true
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -138,6 +139,7 @@ fun makeFuncState(compiler: Map, name: String, params: List): Map {
     mapPut(fs, "labels", mapCreate())       // label -> bytecode offset
     mapPut(fs, "labelCounter", 0)
     mapPut(fs, "loopStack", listCreate())   // [{breakLabel, continueLabel}]
+    mapPut(fs, "localFuncs", mapCreate())  // localName -> mangledName
 
     // Register params as locals
     var i: Int = 0
@@ -821,7 +823,7 @@ fun compileExpr(fs: Map, node: Map): Int {
 
         // Simple function call or constructor: funcName(args)
         if (calleeKind == "ident") {
-            val funcName = toString(mapGet(callee, "name"))
+            var funcName: String = toString(mapGet(callee, "name"))
 
             // Check if this is a class constructor
             val classNames = mapGet(mapGet(fs, "compiler"), "classNames")
@@ -868,26 +870,78 @@ fun compileExpr(fs: Map, node: Map): Int {
                 return dest
             }
 
-            // Regular function call (use this.method() for explicit method calls)
-            val argRegs = listCreate()
-            var i: Int = 0
-            while (i < listSize(callArgs)) {
-                val argNode = listGet(callArgs, i)
-                val argKind = toString(mapGet(argNode, "kind"))
-                if (argKind == "namedArg") {
-                    listAppend(argRegs, compileExpr(fs, mapGet(argNode, "value")))
-                } else {
-                    listAppend(argRegs, compileExpr(fs, argNode))
-                }
-                i = i + 1
+            // Resolve local function names to mangled names
+            val localFunc = mapGet(mapGet(fs, "localFuncs"), funcName)
+            if (localFunc != null) {
+                funcName = toString(localFunc)
             }
-            // Pad with null for default params if fewer args provided
+
+            // Regular function call — handle named args and defaults
             val sig = mapGet(mapGet(mapGet(fs, "compiler"), "funcSignatures"), funcName)
-            if (sig != null) {
-                while (listSize(argRegs) < listSize(sig)) {
-                    val nullReg = allocReg(fs)
-                    emitConstNull(fs, nullReg)
-                    listAppend(argRegs, nullReg)
+
+            // Check if any args are named
+            var hasNamed: Bool = false
+            var ci: Int = 0
+            while (ci < listSize(callArgs)) {
+                if (toString(mapGet(listGet(callArgs, ci), "kind")) == "namedArg") {
+                    hasNamed = true
+                }
+                ci = ci + 1
+            }
+
+            val argRegs = listCreate()
+            if (hasNamed) {
+                if (sig != null) {
+                    // Build named→register map for named args, track positional args
+                    val namedMap = mapCreate()
+                    val positional = listCreate()
+                    var i: Int = 0
+                    while (i < listSize(callArgs)) {
+                        val argNode = listGet(callArgs, i)
+                        if (toString(mapGet(argNode, "kind")) == "namedArg") {
+                            val aName = toString(mapGet(argNode, "name"))
+                            mapPut(namedMap, aName, compileExpr(fs, mapGet(argNode, "value")))
+                        } else {
+                            listAppend(positional, compileExpr(fs, argNode))
+                        }
+                        i = i + 1
+                    }
+                    // Reorder: for each param, use named value if available, else positional, else null
+                    var pi: Int = 0
+                    var posIdx: Int = 0
+                    while (pi < listSize(sig)) {
+                        val paramName = toString(mapGet(listGet(sig, pi), "name"))
+                        val namedVal = mapGet(namedMap, paramName)
+                        if (namedVal != null) {
+                            listAppend(argRegs, toInt(namedVal))
+                        } else {
+                            if (posIdx < listSize(positional)) {
+                                listAppend(argRegs, toInt(listGet(positional, posIdx)))
+                                posIdx = posIdx + 1
+                            } else {
+                                val nullReg = allocReg(fs)
+                                emitConstNull(fs, nullReg)
+                                listAppend(argRegs, nullReg)
+                            }
+                        }
+                        pi = pi + 1
+                    }
+                }
+            }
+            if (!hasNamed) {
+                var i: Int = 0
+                while (i < listSize(callArgs)) {
+                    val argNode = listGet(callArgs, i)
+                    listAppend(argRegs, compileExpr(fs, argNode))
+                    i = i + 1
+                }
+                // Pad with null for default params if fewer args provided
+                if (sig != null) {
+                    while (listSize(argRegs) < listSize(sig)) {
+                        val nullReg = allocReg(fs)
+                        emitConstNull(fs, nullReg)
+                        listAppend(argRegs, nullReg)
+                    }
                 }
             }
             val dest = allocReg(fs)
@@ -899,12 +953,13 @@ fun compileExpr(fs: Map, node: Map): Int {
         if (calleeKind == "member") {
             val memberObj = mapGet(callee, "object")
             val methodName = toString(mapGet(callee, "name"))
-            // Check if this is an object (singleton) method call: ObjectName.method()
+            // Check if this is an object/companion method call: Name.method()
             val memberObjKind = toString(mapGet(memberObj, "kind"))
             if (memberObjKind == "ident") {
                 val memberObjName = toString(mapGet(memberObj, "name"))
                 val isObject = mapGet(mapGet(mapGet(fs, "compiler"), "objectNames"), memberObjName)
-                if (isObject != null) {
+                val isClass = mapGet(mapGet(mapGet(fs, "compiler"), "classNames"), memberObjName)
+                if (isObject != null || isClass != null) {
                     // Static call to ObjectName.method
                     val fullName = stringConcat(memberObjName, stringConcat(".", methodName))
                     val argRegs = listCreate()
@@ -938,6 +993,33 @@ fun compileExpr(fs: Map, node: Map): Int {
                 }
                 i = i + 1
             }
+
+            // Check for extension functions before falling back to VCALL
+            val extFuncs = mapGet(mapGet(fs, "compiler"), "extensionFuncs")
+            val extKeys = mapKeys(extFuncs)
+            var extFound: String = ""
+            var ei: Int = 0
+            while (ei < listSize(extKeys)) {
+                val extName = toString(listGet(extKeys, ei))
+                if (endsWith(extName, stringConcat(".", methodName))) {
+                    extFound = extName
+                }
+                ei = ei + 1
+            }
+            if (stringLength(extFound) > 0) {
+                // Extension function call: prepend receiver as first arg
+                val extArgs = listCreate()
+                listAppend(extArgs, objReg)
+                var ea: Int = 0
+                while (ea < listSize(argRegs)) {
+                    listAppend(extArgs, toInt(listGet(argRegs, ea)))
+                    ea = ea + 1
+                }
+                val dest = allocReg(fs)
+                emitCall(fs, dest, extFound, extArgs)
+                return dest
+            }
+
             val dest = allocReg(fs)
             emitVcall(fs, dest, objReg, methodName, argRegs)
             return dest
@@ -1534,6 +1616,100 @@ fun compileStmt(fs: Map, node: Map): Unit {
         return
     }
 
+    if (kind == "forDestructure") {
+        // for ((k, v) in map) { body }
+        // Strategy: get keys, iterate by index, get value for each key
+        val vars = mapGet(node, "variables")
+        val iterable = mapGet(node, "iterable")
+        val iterReg = compileExpr(fs, iterable)
+
+        // Get keys list
+        val keysArgs = listCreate()
+        listAppend(keysArgs, iterReg)
+        val keysReg = allocReg(fs)
+        emitCall(fs, keysReg, "mapKeys", keysArgs)
+
+        // Size of keys
+        val sizeArgs = listCreate()
+        listAppend(sizeArgs, keysReg)
+        val sizeReg = allocReg(fs)
+        emitCall(fs, sizeReg, "listSize", sizeArgs)
+
+        // Index counter
+        val indexSlot = allocReg(fs)
+        val zeroReg = allocReg(fs)
+        emitConstInt(fs, zeroReg, 0)
+        emitStore(fs, indexSlot, zeroReg)
+
+        val loopStart = currentOffset(fs)
+        val breakLabel = newLabel(fs)
+        val continueLabel = newLabel(fs)
+
+        val loopCtx = mapCreate()
+        mapPut(loopCtx, "breakLabel", breakLabel)
+        mapPut(loopCtx, "continueLabel", continueLabel)
+        listAppend(mapGet(fs, "loopStack"), loopCtx)
+
+        // Condition: index < size
+        markLabel(fs, continueLabel)
+        val idxLoadReg = allocReg(fs)
+        emitLoad(fs, idxLoadReg, indexSlot)
+        val condReg = allocReg(fs)
+        emitBinaryOp(fs, "<", condReg, idxLoadReg, sizeReg)
+        val patches = emitBranch(fs, condReg)
+        patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+
+        // Get key at index
+        val getKeyArgs = listCreate()
+        listAppend(getKeyArgs, keysReg)
+        val idxReg2 = allocReg(fs)
+        emitLoad(fs, idxReg2, indexSlot)
+        listAppend(getKeyArgs, idxReg2)
+        val keyReg = allocReg(fs)
+        emitCall(fs, keyReg, "listGet", getKeyArgs)
+
+        // Bind first variable (key)
+        val keySlot = allocReg(fs)
+        emitStore(fs, keySlot, keyReg)
+        mapPut(mapGet(fs, "locals"), toString(listGet(vars, 0)), keySlot)
+
+        // If two variables, get value from map
+        if (listSize(vars) > 1) {
+            val getValArgs = listCreate()
+            listAppend(getValArgs, iterReg)
+            listAppend(getValArgs, keyReg)
+            val valReg = allocReg(fs)
+            emitCall(fs, valReg, "mapGet", getValArgs)
+            val valSlot = allocReg(fs)
+            emitStore(fs, valSlot, valReg)
+            mapPut(mapGet(fs, "locals"), toString(listGet(vars, 1)), valSlot)
+        }
+
+        // Body
+        compileBlock(fs, mapGet(node, "body"))
+
+        // Increment index
+        val curIdx = allocReg(fs)
+        emitLoad(fs, curIdx, indexSlot)
+        val oneReg = allocReg(fs)
+        emitConstInt(fs, oneReg, 1)
+        val newIdx = allocReg(fs)
+        emitBinaryOp(fs, "+", newIdx, curIdx, oneReg)
+        emitStore(fs, indexSlot, newIdx)
+
+        // Loop back
+        emitByte(fs, OP_JUMP())
+        emitU32(fs, loopStart)
+
+        // Exit
+        patchJump(fs, toInt(mapGet(patches, "elsePatch")))
+        markLabel(fs, breakLabel)
+
+        val fdStack = mapGet(fs, "loopStack")
+        listRemoveAt(fdStack, listSize(fdStack) - 1)
+        return
+    }
+
     if (kind == "break") {
         val stack = mapGet(fs, "loopStack")
         if (listSize(stack) > 0) {
@@ -1621,6 +1797,34 @@ fun compileStmt(fs: Map, node: Map): Unit {
         return
     }
 
+    if (kind == "funDecl") {
+        // Nested/local function — compile with mangled name
+        val localName = toString(mapGet(node, "name"))
+        val enclosing = toString(mapGet(fs, "name"))
+        val mangledName = stringConcat(enclosing, stringConcat("$", localName))
+
+        // Create a modified decl with the mangled name
+        val localDecl = mapCreate()
+        mapPut(localDecl, "kind", "funDecl")
+        mapPut(localDecl, "name", mangledName)
+        mapPut(localDecl, "params", mapGet(node, "params"))
+        mapPut(localDecl, "body", mapGet(node, "body"))
+        mapPut(localDecl, "returnType", mapGet(node, "returnType"))
+
+        // Compile it as a top-level function
+        val compiler = mapGet(fs, "compiler")
+        compileFunction(compiler, localDecl)
+
+        // Register the mangled name so calls to localName resolve to mangledName
+        mapPut(mapGet(fs, "localFuncs"), localName, mangledName)
+        // Also register in funcSignatures for the mangled name
+        val fparams = mapGet(node, "params")
+        if (fparams != null) {
+            mapPut(mapGet(compiler, "funcSignatures"), mangledName, fparams)
+        }
+        return
+    }
+
     // Expression statement
     compileExpr(fs, node)
 }
@@ -1648,8 +1852,23 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
     val params = mapGet(decl, "params")
     if (params == null) { return }
 
+    // Extension function: prepend receiver as implicit "this" parameter
+    val receiverType = mapGet(decl, "receiverType")
+    val effectiveParams = listCreate()
+    if (receiverType != null) {
+        val thisParam = mapCreate()
+        mapPut(thisParam, "name", "this")
+        mapPut(thisParam, "kind", "param")
+        listAppend(effectiveParams, thisParam)
+    }
+    var epi: Int = 0
+    while (epi < listSize(params)) {
+        listAppend(effectiveParams, listGet(params, epi))
+        epi = epi + 1
+    }
+
     val nameIdx = addFuncName(compiler, name)
-    val fs = makeFuncState(compiler, name, params)
+    val fs = makeFuncState(compiler, name, effectiveParams)
 
     // Set class context if this is a method
     val methodClassName = mapGet(decl, "_className")
@@ -1661,16 +1880,16 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
 
     // Load params into alloc slots
     var i: Int = 0
-    while (i < listSize(params)) {
+    while (i < listSize(effectiveParams)) {
         val paramReg = allocReg(fs)
         emitLoadParam(fs, paramReg, i)
-        val pname = toString(mapGet(listGet(params, i), "name"))
+        val pname = toString(mapGet(listGet(effectiveParams, i), "name"))
         val slot = allocReg(fs)
         emitStore(fs, slot, paramReg)
         mapPut(mapGet(fs, "locals"), pname, slot)
 
         // Handle default parameter values
-        val paramNode = listGet(params, i)
+        val paramNode = listGet(effectiveParams, i)
         val defaultExpr = mapGet(paramNode, "default")
         if (defaultExpr != null) {
             // If param is null (omitted by caller), use default value
@@ -1738,10 +1957,10 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
     // Build function record
     val funcRec = mapCreate()
     mapPut(funcRec, "nameIdx", nameIdx)
-    mapPut(funcRec, "paramCount", listSize(params))
+    mapPut(funcRec, "paramCount", listSize(effectiveParams))
     mapPut(funcRec, "regCount", toInt(mapGet(fs, "regCount")))
     mapPut(funcRec, "bytecode", bc)
-    mapPut(funcRec, "params", params)
+    mapPut(funcRec, "params", effectiveParams)
 
     // Determine return type tag
     val retType = mapGet(decl, "returnType")
@@ -1875,6 +2094,30 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
                     mapPut(methodDecl, "_classMethods", methods)
 
                     compileFunction(compiler, methodDecl)
+                }
+                if (mkind == "companionObject") {
+                    // Compile companion methods as ClassName.method (static, no 'this')
+                    val compBody = mapGet(member, "body")
+                    if (compBody != null) {
+                        val compMembers = mapGet(compBody, "members")
+                        if (compMembers != null) {
+                            var ci: Int = 0
+                            while (ci < listSize(compMembers)) {
+                                val compMember = listGet(compMembers, ci)
+                                if (toString(mapGet(compMember, "kind")) == "funDecl") {
+                                    val compMethodName = toString(mapGet(compMember, "name"))
+                                    val compDecl = mapCreate()
+                                    mapPut(compDecl, "kind", "funDecl")
+                                    mapPut(compDecl, "name", stringConcat(className, stringConcat(".", compMethodName)))
+                                    mapPut(compDecl, "params", mapGet(compMember, "params"))
+                                    mapPut(compDecl, "body", mapGet(compMember, "body"))
+                                    mapPut(compDecl, "returnType", mapGet(compMember, "returnType"))
+                                    compileFunction(compiler, compDecl)
+                                }
+                                ci = ci + 1
+                            }
+                        }
+                    }
                 }
                 i = i + 1
             }
@@ -2413,6 +2656,11 @@ fun compileProgram(ast: Map): Map {
             val fparams = mapGet(decl, "params")
             if (fparams != null) {
                 mapPut(mapGet(compiler, "funcSignatures"), fname, fparams)
+            }
+            // Register extension functions
+            val recvType = mapGet(decl, "receiverType")
+            if (recvType != null) {
+                mapPut(mapGet(compiler, "extensionFuncs"), fname, true)
             }
         }
         i = i + 1

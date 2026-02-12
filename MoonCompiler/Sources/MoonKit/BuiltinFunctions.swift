@@ -650,18 +650,24 @@ public final class BuiltinRegistry {
 
     private func registerProcessBuiltins(heap: Heap) {
         // Override the simple processArgs with a heap-aware version that returns a List.
-        // Filters out compiler arguments — returns only the source file and any args after it.
+        // Returns args after "--" when present, otherwise args starting from source file.
         register(name: "processArgs") { _ in
             let allArgs = CommandLine.arguments
-            // Find the source file (.moon or .moonb) and return it + everything after
             var userArgs: [String] = []
-            var foundSource = false
-            for arg in allArgs {
-                if foundSource {
-                    userArgs.append(arg)
-                } else if arg.hasSuffix(".moon") || arg.hasSuffix(".moonb") {
-                    userArgs.append(arg)
-                    foundSource = true
+
+            // If there's a "--" separator, return everything after it
+            if let dashIdx = allArgs.firstIndex(of: "--") {
+                userArgs = Array(allArgs[(dashIdx + 1)...])
+            } else {
+                // Find the source file (.moon or .moonb) and return it + everything after
+                var foundSource = false
+                for arg in allArgs {
+                    if foundSource {
+                        userArgs.append(arg)
+                    } else if arg.hasSuffix(".moon") || arg.hasSuffix(".moonb") {
+                        userArgs.append(arg)
+                        foundSource = true
+                    }
                 }
             }
             if userArgs.isEmpty {

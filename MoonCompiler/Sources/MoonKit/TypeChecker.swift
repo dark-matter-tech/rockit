@@ -759,20 +759,27 @@ public final class TypeChecker {
         let iterableType = checkExpression(f.iterable)
         symbolTable.pushScope()
 
-        // Infer loop variable type from iterable
-        let varType: Type
-        if case .classType(let name, let args) = iterableType,
-           (name == "List" || name == "MutableList" || name == "Set" || name == "MutableSet"),
-           let elementType = args.first {
-            varType = elementType
-        } else if iterableType.isError {
-            varType = .error
+        if let destructured = f.destructuredVariables, destructured.count >= 2 {
+            // Map destructuring: for ((k, v) in map) — declare both k and v as Any
+            for varName in destructured {
+                symbolTable.define(Symbol(name: varName, type: .typeParameter(name: "Any", bound: nil), kind: .variable(isMutable: false), span: f.span))
+            }
         } else {
-            // Ranges produce Int
-            varType = .int
-        }
+            // Infer loop variable type from iterable
+            let varType: Type
+            if case .classType(let name, let args) = iterableType,
+               (name == "List" || name == "MutableList" || name == "Set" || name == "MutableSet"),
+               let elementType = args.first {
+                varType = elementType
+            } else if iterableType.isError {
+                varType = .error
+            } else {
+                // Ranges produce Int
+                varType = .int
+            }
 
-        symbolTable.define(Symbol(name: f.variable, type: varType, kind: .variable(isMutable: false), span: f.span))
+            symbolTable.define(Symbol(name: f.variable, type: varType, kind: .variable(isMutable: false), span: f.span))
+        }
         checkBlock(f.body)
         symbolTable.popScope()
     }

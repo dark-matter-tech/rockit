@@ -331,6 +331,13 @@ public final class Lexer {
         let startCol = column
         advance() // consume opening "
 
+        // Check for triple-quoted (multi-line) string: """..."""
+        if peek() == "\"" && peekNext() == "\"" {
+            advance() // consume second "
+            advance() // consume third "
+            return lexTripleQuotedString(startLine: startLine, startCol: startCol)
+        }
+
         var value = ""
 
         while !isAtEnd && peek() != "\"" && peek() != "\n" {
@@ -406,6 +413,81 @@ public final class Lexer {
         }
 
         return makeTokenAt(.stringLiteral(value), lexeme: "\"\(value)\"", line: startLine, col: startCol)
+    }
+
+    /// Lex a triple-quoted (multi-line) string: """..."""
+    private func lexTripleQuotedString(startLine: Int, startCol: Int) -> Token {
+        var value = ""
+
+        // Skip leading newline if present
+        if !isAtEnd && peek() == "\n" {
+            advance()
+        }
+
+        while !isAtEnd {
+            // Check for closing """
+            if peek() == "\"" && peekNext() == "\"" {
+                let afterSecond = chars.index(after: chars.index(after: index))
+                if afterSecond < chars.endIndex && chars[afterSecond] == "\"" {
+                    advance() // consume first "
+                    advance() // consume second "
+                    advance() // consume third "
+                    return makeTokenAt(.stringLiteral(value), lexeme: "\"\"\"\(value)\"\"\"",
+                                       line: startLine, col: startCol)
+                }
+            }
+
+            if peek() == "\\" {
+                advance()
+                guard !isAtEnd else { break }
+                let escaped = advance()
+                switch escaped {
+                case "n":  value.append("\n")
+                case "t":  value.append("\t")
+                case "r":  value.append("\r")
+                case "\\": value.append("\\")
+                case "\"": value.append("\"")
+                case "$":  value.append("$")
+                case "0":  value.append("\0")
+                default:
+                    value.append("\\")
+                    value.append(Character(escaped))
+                }
+                continue
+            }
+
+            // String interpolation: ${...}
+            if peek() == "$" && peekNext() == "{" {
+                advance() // $
+                advance() // {
+                value.append("${")
+                var depth = 1
+                while !isAtEnd && depth > 0 {
+                    if peek() == "{" { depth += 1 }
+                    if peek() == "}" { depth -= 1 }
+                    if depth > 0 { value.append(Character(advance())) }
+                }
+                if !isAtEnd { advance() } // closing }
+                value.append("}")
+                continue
+            }
+
+            // Simple $identifier interpolation
+            if peek() == "$" && peekNext().isIdentStart {
+                advance() // $
+                value.append("$")
+                while !isAtEnd && peek().isIdentContinue {
+                    value.append(Character(advance()))
+                }
+                continue
+            }
+
+            value.append(Character(advance()))
+        }
+
+        diagnostics.error("unterminated multi-line string literal", at: loc(startLine, startCol))
+        return makeTokenAt(.stringLiteral(value), lexeme: "\"\"\"\(value)\"\"\"",
+                           line: startLine, col: startCol)
     }
 
     // MARK: - Identifiers & Keywords

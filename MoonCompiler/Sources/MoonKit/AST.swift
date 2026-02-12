@@ -96,6 +96,7 @@ public struct FunctionDecl {
     public let annotations: [Annotation]
     public let modifiers: Set<Modifier>
     public let name: String
+    public let receiverType: String?
     public let typeParameters: [TypeParameter]
     public let parameters: [Parameter]
     public let returnType: TypeNode?
@@ -103,11 +104,13 @@ public struct FunctionDecl {
     public let span: SourceSpan
 
     public init(annotations: [Annotation], modifiers: Set<Modifier>, name: String,
+                receiverType: String? = nil,
                 typeParameters: [TypeParameter], parameters: [Parameter],
                 returnType: TypeNode?, body: FunctionBody?, span: SourceSpan) {
         self.annotations = annotations
         self.modifiers = modifiers
         self.name = name
+        self.receiverType = receiverType
         self.typeParameters = typeParameters
         self.parameters = parameters
         self.returnType = returnType
@@ -270,6 +273,7 @@ public struct EnumEntry {
 public struct ObjectDecl {
     public let annotations: [Annotation]
     public let modifiers: Set<Modifier>
+    public let isCompanion: Bool
     public let name: String
     public let superTypes: [TypeNode]
     public let superCallArgs: [CallArgument]
@@ -277,10 +281,12 @@ public struct ObjectDecl {
     public let span: SourceSpan
 
     public init(annotations: [Annotation], modifiers: Set<Modifier>, name: String,
+                isCompanion: Bool = false,
                 superTypes: [TypeNode], superCallArgs: [CallArgument],
                 members: [Declaration], span: SourceSpan) {
         self.annotations = annotations
         self.modifiers = modifiers
+        self.isCompanion = isCompanion
         self.name = name
         self.superTypes = superTypes
         self.superCallArgs = superCallArgs
@@ -431,12 +437,23 @@ public enum AssignmentOp {
 /// For-in loop
 public struct ForLoop {
     public let variable: String
+    /// Destructured variable names for map iteration: `for ((k, v) in map)`
+    public let destructuredVariables: [String]?
     public let iterable: Expression
     public let body: Block
     public let span: SourceSpan
 
     public init(variable: String, iterable: Expression, body: Block, span: SourceSpan) {
         self.variable = variable
+        self.destructuredVariables = nil
+        self.iterable = iterable
+        self.body = body
+        self.span = span
+    }
+
+    public init(destructuredVariables: [String], iterable: Expression, body: Block, span: SourceSpan) {
+        self.variable = destructuredVariables.joined(separator: "_")
+        self.destructuredVariables = destructuredVariables
         self.iterable = iterable
         self.body = body
         self.span = span
@@ -704,7 +721,11 @@ extension Declaration {
             if !f.modifiers.isEmpty {
                 header += f.modifiers.map { "\($0)" }.joined(separator: " ") + " "
             }
-            header += "fun \(f.name)"
+            if let receiver = f.receiverType {
+                header += "fun \(receiver).\(f.name)"
+            } else {
+                header += "fun \(f.name)"
+            }
             if !f.typeParameters.isEmpty {
                 header += "<\(f.typeParameters.map { $0.name }.joined(separator: ", "))>"
             }
@@ -766,7 +787,8 @@ extension Declaration {
             return lines.joined(separator: "\n")
 
         case .objectDecl(let o):
-            var lines = ["\(pad)ObjectDecl: \(o.name)"]
+            let companionPrefix = o.isCompanion ? "companion " : ""
+            var lines = ["\(pad)ObjectDecl: \(companionPrefix)\(o.name)"]
             for m in o.members {
                 lines.append(m.dump(indent: indent + 1))
             }
@@ -847,6 +869,9 @@ extension Statement {
         case .assignment(let a):
             return "\(pad)Assignment(\(a.op))\n\(a.target.dump(indent: indent + 1))\n\(a.value.dump(indent: indent + 1))"
         case .forLoop(let f):
+            if let vars = f.destructuredVariables {
+                return "\(pad)For((\(vars.joined(separator: ", "))) in)\n\(f.iterable.dump(indent: indent + 1))\n\(f.body.dump(indent: indent + 1))"
+            }
             return "\(pad)For(\(f.variable) in)\n\(f.iterable.dump(indent: indent + 1))\n\(f.body.dump(indent: indent + 1))"
         case .whileLoop(let w):
             return "\(pad)While\n\(w.condition.dump(indent: indent + 1))\n\(w.body.dump(indent: indent + 1))"

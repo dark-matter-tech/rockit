@@ -825,6 +825,27 @@ fun parseFor(p: Map): Map {
     val col = peekCol(p)
     expect(p, "KW_FOR")
     expect(p, "LPAREN")
+
+    // Check for destructuring: for ((k, v) in map)
+    if (check(p, "LPAREN")) {
+        advance(p)
+        val vars = listCreate()
+        listAppend(vars, toString(mapGet(expect(p, "IDENT"), "value")))
+        while (matchToken(p, "COMMA")) {
+            listAppend(vars, toString(mapGet(expect(p, "IDENT"), "value")))
+        }
+        expect(p, "RPAREN")
+        expect(p, "KW_IN")
+        val iterable = parseExpression(p, 0)
+        expect(p, "RPAREN")
+        val body = parseBlock(p)
+        val node = makeNodeAt("forDestructure", line, col)
+        mapPut(node, "variables", vars)
+        mapPut(node, "iterable", iterable)
+        mapPut(node, "body", body)
+        return node
+    }
+
     val varName = toString(mapGet(expect(p, "IDENT"), "value"))
     expect(p, "KW_IN")
     val iterable = parseExpression(p, 0)
@@ -875,8 +896,16 @@ fun parseFunDecl(p: Map): Map {
     val line = peekLine(p)
     val col = peekCol(p)
     expect(p, "KW_FUN")
-    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    var name: String = toString(mapGet(expect(p, "IDENT"), "value"))
     val node = makeNodeAt("funDecl", line, col)
+
+    // Extension function: fun TypeName.methodName(...)
+    if (check(p, "DOT")) {
+        advance(p)
+        val methodName = toString(mapGet(expect(p, "IDENT"), "value"))
+        mapPut(node, "receiverType", name)
+        name = stringConcat(name, stringConcat(".", methodName))
+    }
     mapPut(node, "name", name)
 
     // Type parameters: <T, U>
@@ -1052,8 +1081,18 @@ fun parseClassBody(p: Map): Map {
                     mapPut(member, "isOverride", true)
                     listAppend(members, member)
                 } else {
-                    // Skip unknown tokens in class body
-                    advance(p)
+                    if (tt == "KW_COMPANION") {
+                        advance(p)
+                        expect(p, "KW_OBJECT")
+                        skipNewlines(p)
+                        val companionBody = parseClassBody(p)
+                        val compNode = makeNode("companionObject")
+                        mapPut(compNode, "body", companionBody)
+                        listAppend(members, compNode)
+                    } else {
+                        // Skip unknown tokens in class body
+                        advance(p)
+                    }
                 }
             }
         }
@@ -1527,7 +1566,7 @@ fun makeIndent(n: Int): String {
 // Main — parse a file and dump AST
 // ---------------------------------------------------------------------------
 
-fun main(): Unit {
+fun parserTestMain(): Unit {
     val args = processArgs()
     var source: String = ""
     var filename: String = "<demo>"

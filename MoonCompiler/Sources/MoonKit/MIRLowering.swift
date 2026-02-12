@@ -25,6 +25,9 @@ public final class MIRLowering {
     private var globals: [MIRGlobal] = []
     private var typeDecls: [MIRTypeDecl] = []
 
+    /// Extension function names: maps "ReceiverType.method" to true
+    private var extensionFunctions: Set<String> = []
+
     public init(typeCheckResult: TypeCheckResult) {
         self.result = typeCheckResult
         self.diagnostics = typeCheckResult.diagnostics
@@ -32,6 +35,13 @@ public final class MIRLowering {
 
     /// Lower the entire AST to a MIR module.
     public func lower() -> MIRModule {
+        // Pre-scan for extension functions
+        for decl in result.ast.declarations {
+            if case .function(let f) = decl, let receiverType = f.receiverType {
+                extensionFunctions.insert("\(receiverType).\(f.name)")
+            }
+        }
+
         for decl in result.ast.declarations {
             lowerDeclaration(decl)
         }
@@ -71,9 +81,19 @@ public final class MIRLowering {
 
     private func lowerFunction(_ f: FunctionDecl) {
         let savedLocals = locals
+        let savedBuilder = builder
+        builder = MIRBuilder()
         locals = [:]
 
-        let params: [(String, MIRType)] = f.parameters.map { p in
+        var params: [(String, MIRType)] = []
+
+        // Extension functions get an implicit 'this' parameter
+        if let receiverType = f.receiverType {
+            let mirType = MIRType.reference(receiverType)
+            params.append(("this", mirType))
+        }
+
+        params += f.parameters.map { p in
             let type: MIRType
             if let typeNode = p.type {
                 let resolved = result.symbolTable.lookup(p.name)?.type ?? .error
@@ -94,7 +114,9 @@ public final class MIRLowering {
         }
 
         let funcName: String
-        if let className = currentClassName {
+        if let receiverType = f.receiverType {
+            funcName = "\(receiverType).\(f.name)"
+        } else if let className = currentClassName {
             funcName = "\(className).\(f.name)"
         } else {
             funcName = f.name
@@ -135,6 +157,7 @@ public final class MIRLowering {
         functions.append(mirFunc)
 
         locals = savedLocals
+        builder = savedBuilder
     }
 
     // MARK: - Top-Level Property
@@ -205,6 +228,12 @@ public final class MIRLowering {
                 fields.append((p.name, propType))
             case .function(let f):
                 methodNames.append("\(c.name).\(f.name)")
+            case .objectDecl(let obj) where obj.isCompanion:
+                for companionMember in obj.members {
+                    if case .function(let f) = companionMember {
+                        methodNames.append("\(c.name).\(f.name)")
+                    }
+                }
             default:
                 break
             }
@@ -218,6 +247,14 @@ public final class MIRLowering {
         for member in c.members {
             if case .function(let f) = member {
                 lowerFunction(f)
+            }
+            // Companion object: lower its methods as ClassName.method (static, no 'this')
+            if case .objectDecl(let obj) = member, obj.isCompanion {
+                for companionMember in obj.members {
+                    if case .function(let f) = companionMember {
+                        lowerFunction(f)
+                    }
+                }
             }
         }
         currentClassName = savedClassName
@@ -601,6 +638,12 @@ public final class MIRLowering {
             return
         }
 
+        // Map destructuring: for ((k, v) in map)
+        if let destructured = f.destructuredVariables, destructured.count >= 2 {
+            lowerForLoopMapDestructure(keyVar: destructured[0], valueVar: destructured[1], iterable: f.iterable, body: f.body)
+            return
+        }
+
         // Collection iteration via index-based loop using listSize/listGet
         lowerForLoopList(variable: f.variable, iterable: f.iterable, body: f.body)
     }
@@ -720,6 +763,77 @@ public final class MIRLowering {
         builder.startBlock(label: exitLabel)
     }
 
+    /// Lower a for loop with map destructuring: `for ((k, v) in map)`.
+    /// Strategy: keys = mapKeys(map), iterate keys by index, mapGet for values.
+    private func lowerForLoopMapDestructure(keyVar: String, valueVar: String, iterable: Expression, body: Block) {
+        let headerLabel = builder.newBlockLabel("for.header")
+        let bodyLabel = builder.newBlockLabel("for.body")
+        let incrLabel = builder.newBlockLabel("for.incr")
+        let exitLabel = builder.newBlockLabel("for.exit")
+
+        loopStack.append((continueLabel: incrLabel, breakLabel: exitLabel))
+
+        // Evaluate the map expression once
+        let mapTemp = lowerExpression(iterable)
+
+        // Get keys list: keys = mapKeys(map)
+        let keysTemp = builder.newTemp()
+        builder.emit(.call(dest: keysTemp, function: "mapKeys", args: [mapTemp]))
+
+        // Get keys list size
+        let sizeTemp = builder.newTemp()
+        builder.emit(.call(dest: sizeTemp, function: "listSize", args: [keysTemp]))
+
+        // Alloc index counter, initialize to 0
+        let indexSlot = builder.emitAlloc(type: .int)
+        let zero = builder.emitConstInt(0)
+        builder.emitStore(dest: indexSlot, src: zero)
+
+        builder.terminate(.jump(headerLabel))
+
+        // Header: index < size?
+        builder.startBlock(label: headerLabel)
+        let currentIdx = builder.emitLoad(src: indexSlot)
+        let cond = builder.newTemp()
+        builder.emit(.lt(dest: cond, lhs: currentIdx, rhs: sizeTemp, type: .int))
+        builder.terminate(.branch(condition: cond, thenLabel: bodyLabel, elseLabel: exitLabel))
+
+        // Body: k = listGet(keys, index), v = mapGet(map, k)
+        builder.startBlock(label: bodyLabel)
+        let idx = builder.emitLoad(src: indexSlot)
+        let keyElement = builder.newTemp()
+        builder.emit(.call(dest: keyElement, function: "listGet", args: [keysTemp, idx]))
+
+        let keySlot = builder.emitAlloc(type: .reference("Any"))
+        locals[keyVar] = keySlot
+        builder.emitStore(dest: keySlot, src: keyElement)
+
+        let valueElement = builder.newTemp()
+        builder.emit(.call(dest: valueElement, function: "mapGet", args: [mapTemp, keyElement]))
+
+        let valueSlot = builder.emitAlloc(type: .reference("Any"))
+        locals[valueVar] = valueSlot
+        builder.emitStore(dest: valueSlot, src: valueElement)
+
+        lowerBlock(body)
+        if !builder.isTerminated {
+            builder.terminate(.jump(incrLabel))
+        }
+
+        // Increment: index++
+        builder.startBlock(label: incrLabel)
+        let cur = builder.emitLoad(src: indexSlot)
+        let one = builder.emitConstInt(1)
+        let next = builder.newTemp()
+        builder.emit(.add(dest: next, lhs: cur, rhs: one, type: .int))
+        builder.emitStore(dest: indexSlot, src: next)
+        builder.terminate(.jump(headerLabel))
+
+        loopStack.removeLast()
+
+        builder.startBlock(label: exitLabel)
+    }
+
     // MARK: - Expression Lowering
 
     /// Lower an expression, returning the temp holding the result.
@@ -754,6 +868,9 @@ public final class MIRLowering {
             return builder.emitLoad(src: "global.\(name)")
 
         case .this:
+            if let slot = locals["this"] {
+                return builder.emitLoad(src: slot)
+            }
             return builder.emitLoad(src: "this")
 
         case .super:
@@ -921,7 +1038,27 @@ public final class MIRLowering {
 
         // Handle method calls: callee is memberAccess
         if case .memberAccess(let obj, let method, _) = callee {
+            // Check for static/companion method calls: ClassName.method()
+            if case .identifier(let typeName, _) = obj {
+                // If the identifier is a type declaration (class, enum, object), call as static method
+                if result.symbolTable.lookupType(typeName) != nil {
+                    let dest = builder.newTemp()
+                    builder.emit(.call(dest: dest, function: "\(typeName).\(method)", args: argTemps))
+                    return dest
+                }
+            }
+
             let objTemp = lowerExpression(obj)
+
+            // Check if this is an extension function call
+            for extName in extensionFunctions {
+                if extName.hasSuffix(".\(method)") {
+                    let dest = builder.newTemp()
+                    builder.emit(.call(dest: dest, function: extName, args: [objTemp] + argTemps))
+                    return dest
+                }
+            }
+
             let dest = builder.newTemp()
             builder.emit(.virtualCall(dest: dest, object: objTemp, method: method, args: argTemps))
             return dest

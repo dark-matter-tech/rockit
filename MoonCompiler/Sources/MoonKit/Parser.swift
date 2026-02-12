@@ -352,6 +352,8 @@ public final class Parser {
             return .enumDecl(parseEnumClassDecl(annotations: annotations))
         case .kwObject:
             return .objectDecl(parseObjectDecl(annotations: annotations, modifiers: modifiers))
+        case .kwCompanion:
+            return .objectDecl(parseCompanionObjectDecl(annotations: annotations, modifiers: modifiers))
         case .kwActor:
             return .actorDecl(parseActorDecl(annotations: annotations))
         case .kwView:
@@ -373,7 +375,23 @@ public final class Parser {
                                    modifiers: Set<Modifier>) -> FunctionDecl {
         let start = expect(.kwFun, "expected 'fun'")
         skipNewlines()
-        let name = expectIdentifier("expected function name")
+        let firstName = expectIdentifier("expected function name")
+
+        // Check for extension function: fun TypeName.methodName(...)
+        var name = firstName
+        var receiverType: String? = nil
+        if check(.dot) {
+            let saved = save()
+            advance() // consume '.'
+            if let methodName = checkIdentifier() {
+                advance()
+                receiverType = firstName
+                name = methodName
+            } else {
+                restore(saved)
+            }
+        }
+
         let typeParams = parseTypeParameterList()
         expect(.leftParen, "expected '(' after function name")
         parenDepth += 1
@@ -384,7 +402,8 @@ public final class Parser {
         skipNewlines()
         let body = parseFunctionBody()
         return FunctionDecl(annotations: annotations, modifiers: modifiers,
-                            name: name, typeParameters: typeParams,
+                            name: name, receiverType: receiverType,
+                            typeParameters: typeParams,
                             parameters: params, returnType: returnType,
                             body: body, span: spanFrom(start))
     }
@@ -633,6 +652,32 @@ public final class Parser {
             members = parseClassBody()
         }
         return ObjectDecl(annotations: annotations, modifiers: modifiers, name: name,
+                          superTypes: superTypes, superCallArgs: superCallArgs,
+                          members: members, span: spanFrom(start))
+    }
+
+    // MARK: - Companion Object Declaration
+
+    private func parseCompanionObjectDecl(annotations: [Annotation],
+                                          modifiers: Set<Modifier>) -> ObjectDecl {
+        let start = expect(.kwCompanion, "expected 'companion'")
+        skipNewlines()
+        expect(.kwObject, "expected 'object' after 'companion'")
+        skipNewlines()
+        // Companion objects may optionally have a name
+        var name = "Companion"
+        if let ident = checkIdentifier() {
+            name = ident
+            advance()
+        }
+        let (superTypes, superCallArgs) = parseInheritanceClause()
+        skipNewlines()
+        var members: [Declaration] = []
+        if check(.leftBrace) {
+            members = parseClassBody()
+        }
+        return ObjectDecl(annotations: annotations, modifiers: modifiers, name: name,
+                          isCompanion: true,
                           superTypes: superTypes, superCallArgs: superCallArgs,
                           members: members, span: spanFrom(start))
     }
@@ -930,6 +975,28 @@ public final class Parser {
         let start = expect(.kwFor, "expected 'for'")
         expect(.leftParen, "expected '(' after 'for'")
         parenDepth += 1
+
+        // Check for destructuring pattern: for ((k, v) in expr)
+        if check(.leftParen) {
+            advance() // consume inner '('
+            var destructured: [String] = []
+            destructured.append(expectIdentifier("expected destructured variable name"))
+            while match(.comma) {
+                skipNewlines()
+                destructured.append(expectIdentifier("expected destructured variable name"))
+            }
+            expect(.rightParen, "expected ')' after destructured variables")
+            skipNewlines()
+            expect(.kwIn, "expected 'in'")
+            let iterable = parseExpression()
+            parenDepth -= 1
+            expect(.rightParen, "expected ')' after for clause")
+            skipNewlines()
+            let body = parseBlock()
+            return ForLoop(destructuredVariables: destructured, iterable: iterable,
+                           body: body, span: spanFrom(start))
+        }
+
         let variable = expectIdentifier("expected loop variable")
         expect(.kwIn, "expected 'in'")
         let iterable = parseExpression()

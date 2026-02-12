@@ -247,6 +247,34 @@ fun scanString(lex: Map): String {
     return result
 }
 
+fun scanTripleString(lex: Map): String {
+    // Already consumed opening """
+    var result: String = ""
+    while (!lexAtEnd(lex)) {
+        val ch = lexAdvance(lex)
+        if (ch == "\"") {
+            if (lexPeek(lex) == "\"") {
+                lexAdvance(lex)
+                if (lexPeek(lex) == "\"") {
+                    lexAdvance(lex)
+                    return result
+                }
+                // Only two quotes — add them to result
+                result = stringConcat(result, "\"\"")
+                continue
+            }
+            result = stringConcat(result, "\"")
+            continue
+        }
+        if (ch == "\n") {
+            mapPut(lex, "line", toInt(mapGet(lex, "line")) + 1)
+            mapPut(lex, "col", 1)
+        }
+        result = stringConcat(result, ch)
+    }
+    return result
+}
+
 fun scanNumber(lex: Map, startCh: String): Map {
     // Returns a map with "type" (INT_LIT or FLOAT_LIT) and "value"
     val result = mapCreate()
@@ -433,6 +461,20 @@ fun tokenize(source: String): List {
 
         // String literals
         if (ch == "\"") {
+            // Check for triple-quoted multi-line string
+            if (lexPeek(lex) == "\"") {
+                val saved = toInt(mapGet(lex, "pos"))
+                lexAdvance(lex)
+                if (lexPeek(lex) == "\"") {
+                    lexAdvance(lex)
+                    // Triple-quoted string: scan until """
+                    val str = scanTripleString(lex)
+                    lexEmit(lex, "STRING_LIT", str, line, col)
+                    continue
+                }
+                // Only two quotes — empty string ""
+                mapPut(lex, "pos", saved)
+            }
             val str = scanString(lex)
             lexEmit(lex, "STRING_LIT", str, line, col)
             continue
@@ -681,7 +723,7 @@ fun padRight(s: String, width: Int): String {
 // Main — tokenize a file or inline source
 // ---------------------------------------------------------------------------
 
-fun main(): Unit {
+fun lexerTestMain(): Unit {
     val args = processArgs()
     var source: String = ""
 
