@@ -389,6 +389,18 @@ fun emitVcall(fs: Map, dest: Int, objReg: Int, methodName: String, args: List): 
     }
 }
 
+fun emitNullCheck(fs: Map, dest: Int, src: Int): Unit {
+    emitByte(fs, OP_NULL_CHECK())
+    emitU16(fs, dest)
+    emitU16(fs, src)
+}
+
+fun emitIsNull(fs: Map, dest: Int, src: Int): Unit {
+    emitByte(fs, OP_IS_NULL())
+    emitU16(fs, dest)
+    emitU16(fs, src)
+}
+
 // ---------------------------------------------------------------------------
 // String interpolation helper
 // ---------------------------------------------------------------------------
@@ -616,6 +628,36 @@ fun compileExpr(fs: Map, node: Map): Int {
         return dest
     }
 
+    // Null-safe member access: obj?.member
+    // If obj is null → result is null; otherwise → GET_FIELD
+    if (kind == "nullSafeMember") {
+        val obj = mapGet(node, "object")
+        val fieldName = toString(mapGet(node, "name"))
+        val objReg = compileExpr(fs, obj)
+        val dest = allocReg(fs)
+        val isNullReg = allocReg(fs)
+        emitIsNull(fs, isNullReg, objReg)
+        val patches = emitBranch(fs, isNullReg)
+        // Then: isNull was true → result = null
+        patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+        emitConstNull(fs, dest)
+        val jumpEnd = emitJump(fs)
+        // Else: isNull was false → get field
+        patchJump(fs, toInt(mapGet(patches, "elsePatch")))
+        emitGetField(fs, dest, objReg, fieldName)
+        patchJump(fs, jumpEnd)
+        return dest
+    }
+
+    // Non-null assertion: expr!!
+    // Throws at runtime if expr is null, otherwise passes value through
+    if (kind == "nonNullAssert") {
+        val operandReg = compileExpr(fs, mapGet(node, "operand"))
+        val dest = allocReg(fs)
+        emitNullCheck(fs, dest, operandReg)
+        return dest
+    }
+
     if (kind == "binary") {
         val op = toString(mapGet(node, "op"))
 
@@ -649,6 +691,25 @@ fun compileExpr(fs: Map, node: Map): Int {
             patchJump(fs, toInt(mapGet(patches, "elsePatch")))
             val rightReg = compileExpr(fs, mapGet(node, "right"))
             emitStore(fs, dest, rightReg)
+            patchJump(fs, jumpEnd)
+            return dest
+        }
+
+        // Elvis operator ?: : if left is null, evaluate right; otherwise use left
+        if (op == "?:") {
+            val dest = allocReg(fs)
+            val leftReg = compileExpr(fs, mapGet(node, "left"))
+            val isNullReg = allocReg(fs)
+            emitIsNull(fs, isNullReg, leftReg)
+            val patches = emitBranch(fs, isNullReg)
+            // Then: isNull was true → evaluate right
+            patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+            val rightReg = compileExpr(fs, mapGet(node, "right"))
+            emitStore(fs, dest, rightReg)
+            val jumpEnd = emitJump(fs)
+            // Else: isNull was false → use left value
+            patchJump(fs, toInt(mapGet(patches, "elsePatch")))
+            emitStore(fs, dest, leftReg)
             patchJump(fs, jumpEnd)
             return dest
         }
