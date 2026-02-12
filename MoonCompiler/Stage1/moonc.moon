@@ -2238,6 +2238,7 @@ fun makeCompiler(): Map {
     mapPut(c, "classNames", mapCreate())   // className -> true (set)
     mapPut(c, "enumNames", mapCreate())   // enumName -> list of entry names
     mapPut(c, "objectNames", mapCreate()) // objectName -> true (singletons)
+    mapPut(c, "interfaceNames", mapCreate()) // ifaceName -> list of method names
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -3816,6 +3817,197 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
         }
     }
 
+    // Data class: auto-generate toString method
+    val isData = mapGet(decl, "isData") == true
+    if (isData) {
+        // Check if user already defined toString
+        if (!listContains(methods, "toString")) {
+            listAppend(methods, "toString")
+            // Build synthetic toString body:
+            // return "ClassName(field1=<val1>, field2=<val2>)"
+            val toStrStmts = listCreate()
+
+            // var result = "ClassName("
+            val initNode = makeNode("valDecl")
+            mapPut(initNode, "name", "__result")
+            val initStr = makeNode("stringLit")
+            mapPut(initStr, "value", stringConcat(className, "("))
+            mapPut(initNode, "init", initStr)
+            listAppend(toStrStmts, initNode)
+
+            // For each field: result = stringConcat(result, "fieldName=") + toString(this.field) + ", "
+            var dfi: Int = 0
+            while (dfi < listSize(fieldNames)) {
+                val fname = toString(listGet(fieldNames, dfi))
+                // Build: __result = stringConcat(__result, "fname=")
+                val concatAssign1 = makeNode("assign")
+                val target1 = makeNode("ident")
+                mapPut(target1, "name", "__result")
+                mapPut(concatAssign1, "target", target1)
+                val concat1 = makeNode("call")
+                val concat1Callee = makeNode("ident")
+                mapPut(concat1Callee, "name", "stringConcat")
+                mapPut(concat1, "callee", concat1Callee)
+                val concat1Args = listCreate()
+                val arg1a = makeNode("ident")
+                mapPut(arg1a, "name", "__result")
+                listAppend(concat1Args, arg1a)
+                val prefix = stringConcat(fname, "=")
+                if (dfi > 0) {
+                    val arg1b = makeNode("stringLit")
+                    mapPut(arg1b, "value", stringConcat(", ", prefix))
+                    listAppend(concat1Args, arg1b)
+                } else {
+                    val arg1b = makeNode("stringLit")
+                    mapPut(arg1b, "value", prefix)
+                    listAppend(concat1Args, arg1b)
+                }
+                mapPut(concat1, "args", concat1Args)
+                mapPut(concatAssign1, "value", concat1)
+                listAppend(toStrStmts, concatAssign1)
+
+                // Build: __result = stringConcat(__result, toString(this.fname))
+                val concatAssign2 = makeNode("assign")
+                val target2 = makeNode("ident")
+                mapPut(target2, "name", "__result")
+                mapPut(concatAssign2, "target", target2)
+                val concat2 = makeNode("call")
+                val concat2Callee = makeNode("ident")
+                mapPut(concat2Callee, "name", "stringConcat")
+                mapPut(concat2, "callee", concat2Callee)
+                val concat2Args = listCreate()
+                val arg2a = makeNode("ident")
+                mapPut(arg2a, "name", "__result")
+                listAppend(concat2Args, arg2a)
+                // toString(this.fname)
+                val toStrCall = makeNode("call")
+                val toStrCallee = makeNode("ident")
+                mapPut(toStrCallee, "name", "toString")
+                mapPut(toStrCall, "callee", toStrCallee)
+                val toStrArgs = listCreate()
+                val fieldAccess = makeNode("ident")
+                mapPut(fieldAccess, "name", fname)
+                listAppend(toStrArgs, fieldAccess)
+                mapPut(toStrCall, "args", toStrArgs)
+                listAppend(concat2Args, toStrCall)
+                mapPut(concat2, "args", concat2Args)
+                mapPut(concatAssign2, "value", concat2)
+                listAppend(toStrStmts, concatAssign2)
+
+                dfi = dfi + 1
+            }
+
+            // Build: __result = stringConcat(__result, ")")
+            val concatClose = makeNode("assign")
+            val targetClose = makeNode("ident")
+            mapPut(targetClose, "name", "__result")
+            mapPut(concatClose, "target", targetClose)
+            val concatCloseCall = makeNode("call")
+            val concatCloseCallee = makeNode("ident")
+            mapPut(concatCloseCallee, "name", "stringConcat")
+            mapPut(concatCloseCall, "callee", concatCloseCallee)
+            val concatCloseArgs = listCreate()
+            val argCloseA = makeNode("ident")
+            mapPut(argCloseA, "name", "__result")
+            listAppend(concatCloseArgs, argCloseA)
+            val argCloseB = makeNode("stringLit")
+            mapPut(argCloseB, "value", ")")
+            listAppend(concatCloseArgs, argCloseB)
+            mapPut(concatCloseCall, "args", concatCloseArgs)
+            mapPut(concatClose, "value", concatCloseCall)
+            listAppend(toStrStmts, concatClose)
+
+            // return __result
+            val retNode = makeNode("return")
+            val retIdent = makeNode("ident")
+            mapPut(retIdent, "name", "__result")
+            mapPut(retNode, "value", retIdent)
+            listAppend(toStrStmts, retNode)
+
+            val toStrBody = makeNode("block")
+            mapPut(toStrBody, "stmts", toStrStmts)
+
+            val methodDecl = mapCreate()
+            mapPut(methodDecl, "kind", "funDecl")
+            mapPut(methodDecl, "name", stringConcat(className, ".toString"))
+            val toStrParams = listCreate()
+            val thisParam2 = mapCreate()
+            mapPut(thisParam2, "kind", "param")
+            mapPut(thisParam2, "name", "this")
+            listAppend(toStrParams, thisParam2)
+            mapPut(methodDecl, "params", toStrParams)
+            mapPut(methodDecl, "body", toStrBody)
+            mapPut(methodDecl, "_className", className)
+            mapPut(methodDecl, "_classFields", fieldNames)
+            mapPut(methodDecl, "_classMethods", methods)
+            compileFunction(compiler, methodDecl)
+        }
+
+        // Auto-generate equals method
+        if (!listContains(methods, "equals")) {
+            listAppend(methods, "equals")
+            // Build: fun equals(other): Bool { return field1==other.field1 && ... }
+            val eqStmts = listCreate()
+
+            // Build comparison expression: this.f1 == other.f1 && this.f2 == other.f2 ...
+            var eqExpr: Map = makeNode("boolLit")
+            mapPut(eqExpr, "value", true)
+
+            var efi: Int = 0
+            while (efi < listSize(fieldNames)) {
+                val fname = toString(listGet(fieldNames, efi))
+                val leftField = makeNode("ident")
+                mapPut(leftField, "name", fname)
+                val rightField = makeNode("member")
+                val otherIdent = makeNode("ident")
+                mapPut(otherIdent, "name", "other")
+                mapPut(rightField, "object", otherIdent)
+                mapPut(rightField, "name", fname)
+                val cmp = makeNode("binary")
+                mapPut(cmp, "op", "==")
+                mapPut(cmp, "left", leftField)
+                mapPut(cmp, "right", rightField)
+
+                if (efi == 0) {
+                    eqExpr = cmp
+                } else {
+                    val andNode = makeNode("binary")
+                    mapPut(andNode, "op", "&&")
+                    mapPut(andNode, "left", eqExpr)
+                    mapPut(andNode, "right", cmp)
+                    eqExpr = andNode
+                }
+                efi = efi + 1
+            }
+
+            val retNode2 = makeNode("return")
+            mapPut(retNode2, "value", eqExpr)
+            listAppend(eqStmts, retNode2)
+
+            val eqBody = makeNode("block")
+            mapPut(eqBody, "stmts", eqStmts)
+
+            val eqDecl = mapCreate()
+            mapPut(eqDecl, "kind", "funDecl")
+            mapPut(eqDecl, "name", stringConcat(className, ".equals"))
+            val eqParams = listCreate()
+            val thisParam3 = mapCreate()
+            mapPut(thisParam3, "kind", "param")
+            mapPut(thisParam3, "name", "this")
+            listAppend(eqParams, thisParam3)
+            val otherParam = mapCreate()
+            mapPut(otherParam, "kind", "param")
+            mapPut(otherParam, "name", "other")
+            listAppend(eqParams, otherParam)
+            mapPut(eqDecl, "params", eqParams)
+            mapPut(eqDecl, "body", eqBody)
+            mapPut(eqDecl, "_className", className)
+            mapPut(eqDecl, "_classFields", fieldNames)
+            mapPut(eqDecl, "_classMethods", methods)
+            compileFunction(compiler, eqDecl)
+        }
+    }
+
     // Build type record
     val typeRec = mapCreate()
     val nameIdx = addTypeName(compiler, className)
@@ -3845,6 +4037,57 @@ fun compileEnumDecl(compiler: Map, decl: Map): Unit {
         }
     }
     mapPut(mapGet(compiler, "enumNames"), enumName, entryNames)
+}
+
+fun compileInterfaceDecl(compiler: Map, decl: Map): Unit {
+    val ifaceName = toString(mapGet(decl, "name"))
+
+    // Register as an interface name
+    val methodNames = listCreate()
+    mapPut(mapGet(compiler, "interfaceNames"), ifaceName, methodNames)
+
+    // Compile default method implementations
+    val body = mapGet(decl, "body")
+    if (body != null) {
+        val members = mapGet(body, "members")
+        if (members != null) {
+            var i: Int = 0
+            while (i < listSize(members)) {
+                val member = listGet(members, i)
+                val mkind = toString(mapGet(member, "kind"))
+                if (mkind == "funDecl") {
+                    val methodName = toString(mapGet(member, "name"))
+                    listAppend(methodNames, methodName)
+                    // Only compile if it has a body (default implementation)
+                    val methodBody = mapGet(member, "body")
+                    if (methodBody != null) {
+                        val fullName = stringConcat(ifaceName, stringConcat(".", methodName))
+                        val methodParams = listCreate()
+                        val thisParam = mapCreate()
+                        mapPut(thisParam, "kind", "param")
+                        mapPut(thisParam, "name", "this")
+                        listAppend(methodParams, thisParam)
+                        val origParams = mapGet(member, "params")
+                        if (origParams != null) {
+                            var pi: Int = 0
+                            while (pi < listSize(origParams)) {
+                                listAppend(methodParams, listGet(origParams, pi))
+                                pi = pi + 1
+                            }
+                        }
+                        val methodDecl = mapCreate()
+                        mapPut(methodDecl, "kind", "funDecl")
+                        mapPut(methodDecl, "name", fullName)
+                        mapPut(methodDecl, "params", methodParams)
+                        mapPut(methodDecl, "body", methodBody)
+                        mapPut(methodDecl, "returnType", mapGet(member, "returnType"))
+                        compileFunction(compiler, methodDecl)
+                    }
+                }
+                i = i + 1
+            }
+        }
+    }
 }
 
 fun compileObjectDecl(compiler: Map, decl: Map): Unit {
@@ -4055,6 +4298,9 @@ fun compileProgram(ast: Map): Map {
         }
         if (kind == "objectDecl") {
             compileObjectDecl(compiler, decl)
+        }
+        if (kind == "interfaceDecl") {
+            compileInterfaceDecl(compiler, decl)
         }
         i = i + 1
     }
