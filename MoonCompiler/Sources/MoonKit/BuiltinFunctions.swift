@@ -62,6 +62,27 @@ public final class BuiltinRegistry {
             return .string(first.description)
         }
 
+        register(name: "toInt") { args in
+            guard let first = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: "nothing", operation: "toInt")
+            }
+            switch first {
+            case .int(let v):
+                return .int(v)
+            case .float(let v):
+                return .int(Int64(v))
+            case .string(let s):
+                if let v = Int64(s) {
+                    return .int(v)
+                }
+                throw VMError.typeMismatch(expected: "parseable Int", actual: "String(\(s))", operation: "toInt")
+            case .bool(let b):
+                return .int(b ? 1 : 0)
+            default:
+                throw VMError.typeMismatch(expected: "Int", actual: first.typeName, operation: "toInt")
+            }
+        }
+
         register(name: "intToString") { args in
             guard case .int(let v) = args.first else {
                 throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "intToString")
@@ -602,12 +623,27 @@ public final class BuiltinRegistry {
     // MARK: Heap-Aware String Builtins
 
     private func registerProcessBuiltins(heap: Heap) {
-        // Override the simple processArgs with a heap-aware version that returns a List
+        // Override the simple processArgs with a heap-aware version that returns a List.
+        // Filters out compiler arguments — returns only the source file and any args after it.
         register(name: "processArgs") { _ in
-            let args = CommandLine.arguments
+            let allArgs = CommandLine.arguments
+            // Find the source file (.moon or .moonb) and return it + everything after
+            var userArgs: [String] = []
+            var foundSource = false
+            for arg in allArgs {
+                if foundSource {
+                    userArgs.append(arg)
+                } else if arg.hasSuffix(".moon") || arg.hasSuffix(".moonb") {
+                    userArgs.append(arg)
+                    foundSource = true
+                }
+            }
+            if userArgs.isEmpty {
+                userArgs = allArgs  // fallback: return all args
+            }
             let listId = heap.allocate(typeName: "List")
             let listObj = try heap.get(listId)
-            listObj.listStorage = args.map { .string($0) }
+            listObj.listStorage = userArgs.map { .string($0) }
             return .objectRef(listId)
         }
     }

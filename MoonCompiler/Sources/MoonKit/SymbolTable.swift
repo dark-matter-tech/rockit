@@ -202,6 +202,7 @@ public final class SymbolTable {
 
             // String conversion
             ("toString",      .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .string)),
+            ("toInt",         .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .int)),
             ("intToString",   .function(parameterTypes: [.int], returnType: .string)),
             ("floatToString", .function(parameterTypes: [.float64], returnType: .string)),
 

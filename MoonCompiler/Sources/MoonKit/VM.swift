@@ -470,6 +470,7 @@ public final class VM {
                     callStack.removeLast()
                     if let retReg = returnReg, !callStack.isEmpty {
                         callStack[callStack.count - 1].registers[Int(retReg)] = returnVal
+                        arc.retain(returnVal)
                     } else {
                         // No caller frame — save for global initializers
                         lastReturnValue = returnVal
@@ -699,6 +700,7 @@ public final class VM {
             let result = try builtin(args)
             if destReg != 0xFFFF {
                 callStack[frameIdx].registers[Int(destReg)] = result
+                arc.retain(result)
             }
             return
         }
@@ -723,8 +725,10 @@ public final class VM {
         )
 
         // Pass arguments: store in first N registers (for LOAD_PARAM to read)
+        // Retain objectRefs so frame release doesn't over-decrement the caller's references.
         for (i, arg) in args.prefix(Int(targetFunc.parameterCount)).enumerated() {
             newFrame.registers[i] = arg
+            arc.retain(arg)
         }
 
         callStack.append(newFrame)
@@ -761,6 +765,7 @@ public final class VM {
             let result = try builtin(args)
             if destReg != 0xFFFF {
                 callStack[frameIdx].registers[Int(destReg)] = result
+                arc.retain(result)
             }
             return
         }
@@ -786,6 +791,7 @@ public final class VM {
 
         for (i, arg) in args.prefix(Int(targetFunc.parameterCount)).enumerated() {
             newFrame.registers[i] = arg
+            arc.retain(arg)
         }
 
         callStack.append(newFrame)
@@ -840,8 +846,10 @@ public final class VM {
 
             // First arg is `this` (the object)
             newFrame.registers[0] = obj
+            arc.retain(obj)
             for (i, arg) in args.prefix(Int(targetFunc.parameterCount)).enumerated() {
                 newFrame.registers[i + 1] = arg
+                arc.retain(arg)
             }
 
             callStack.append(newFrame)
@@ -851,6 +859,7 @@ public final class VM {
             let result = try builtin(allArgs)
             if destReg != 0xFFFF {
                 callStack[frameIdx].registers[Int(destReg)] = result
+                arc.retain(result)
             }
         } else {
             throw VMError.unknownFunction(name: resolvedName)
