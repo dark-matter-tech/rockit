@@ -805,6 +805,16 @@ fun parseFunDecl(p: Map): Map {
 fun parseParam(p: Map): Map {
     skipNewlines(p)
     val node = makeNode("param")
+    // Handle var/val prefix (for constructor params that become fields)
+    if (check(p, "KW_VAR")) {
+        advance(p)
+        mapPut(node, "isVar", true)
+    } else {
+        if (check(p, "KW_VAL")) {
+            advance(p)
+            mapPut(node, "isVal", true)
+        }
+    }
     val name = toString(mapGet(expect(p, "IDENT"), "value"))
     mapPut(node, "name", name)
     if (matchToken(p, "COLON")) {

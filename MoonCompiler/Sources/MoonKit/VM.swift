@@ -360,7 +360,9 @@ public final class VM {
                     let fieldIdx = readUInt16(bytecode, frame: frameIdx)
                     let obj = callStack[frameIdx].registers[Int(objReg)]
                     let fieldName = constantString(fieldIdx)
-                    callStack[frameIdx].registers[Int(dest)] = try getField(obj, fieldName: fieldName)
+                    let fieldResult = try getField(obj, fieldName: fieldName)
+                    callStack[frameIdx].registers[Int(dest)] = fieldResult
+                    arc.retain(fieldResult)
 
                 case .setField:
                     let objReg = readUInt16(bytecode, frame: frameIdx)

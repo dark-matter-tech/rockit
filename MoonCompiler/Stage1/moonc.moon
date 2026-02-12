@@ -1492,6 +1492,16 @@ fun parseFunDecl(p: Map): Map {
 fun parseParam(p: Map): Map {
     skipNewlines(p)
     val node = makeNode("param")
+    // Handle var/val prefix (for constructor params that become fields)
+    if (check(p, "KW_VAR")) {
+        advance(p)
+        mapPut(node, "isVar", true)
+    } else {
+        if (check(p, "KW_VAL")) {
+            advance(p)
+            mapPut(node, "isVal", true)
+        }
+    }
     val name = toString(mapGet(expect(p, "IDENT"), "value"))
     mapPut(node, "name", name)
     if (matchToken(p, "COLON")) {
@@ -2110,10 +2120,19 @@ fun OP_RET(): Int { return 224 }
 fun OP_RET_VOID(): Int { return 225 }
 fun OP_JUMP(): Int { return 226 }
 fun OP_BRANCH(): Int { return 227 }
+fun OP_VCALL(): Int { return 81 }
+fun OP_GET_FIELD(): Int { return 96 }
+fun OP_SET_FIELD(): Int { return 97 }
+fun OP_NEW_OBJECT(): Int { return 112 }
+fun OP_NULL_CHECK(): Int { return 128 }
+fun OP_IS_NULL(): Int { return 129 }
 
 // Constant pool kind tags
 fun CK_STRING(): Int { return 1 }
+fun CK_TYPE_NAME(): Int { return 2 }
+fun CK_FIELD_NAME(): Int { return 3 }
 fun CK_FUNC_NAME(): Int { return 4 }
+fun CK_METHOD_NAME(): Int { return 5 }
 
 // Type tags
 fun TT_UNIT(): Int { return 0 }
@@ -2131,6 +2150,8 @@ fun makeCompiler(): Map {
     mapPut(c, "pool", listCreate())        // constant pool entries: [{kind, value}]
     mapPut(c, "poolMap", mapCreate())       // dedup: "kind:value" -> index
     mapPut(c, "functions", listCreate())    // compiled functions
+    mapPut(c, "types", listCreate())        // class type records
+    mapPut(c, "classNames", mapCreate())   // className -> true (set)
     mapPut(c, "errors", listCreate())
     return c
 }
@@ -2158,6 +2179,18 @@ fun addStringConst(c: Map, s: String): Int {
 
 fun addFuncName(c: Map, name: String): Int {
     return addConst(c, CK_FUNC_NAME(), name)
+}
+
+fun addTypeName(c: Map, name: String): Int {
+    return addConst(c, CK_TYPE_NAME(), name)
+}
+
+fun addFieldName(c: Map, name: String): Int {
+    return addConst(c, CK_FIELD_NAME(), name)
+}
+
+fun addMethodName(c: Map, name: String): Int {
+    return addConst(c, CK_METHOD_NAME(), name)
 }
 
 // ---------------------------------------------------------------------------
@@ -2379,6 +2412,49 @@ fun patchJump(fs: Map, patchOffset: Int): Unit {
     emitU32At(fs, patchOffset, currentOffset(fs))
 }
 
+fun emitNewObject(fs: Map, dest: Int, typeName: String, args: List): Unit {
+    val idx = addTypeName(mapGet(fs, "compiler"), typeName)
+    emitByte(fs, OP_NEW_OBJECT())
+    emitU16(fs, dest)
+    emitU16(fs, idx)
+    emitU16(fs, listSize(args))
+    var i: Int = 0
+    while (i < listSize(args)) {
+        emitU16(fs, toInt(listGet(args, i)))
+        i = i + 1
+    }
+}
+
+fun emitGetField(fs: Map, dest: Int, objReg: Int, fieldName: String): Unit {
+    val idx = addFieldName(mapGet(fs, "compiler"), fieldName)
+    emitByte(fs, OP_GET_FIELD())
+    emitU16(fs, dest)
+    emitU16(fs, objReg)
+    emitU16(fs, idx)
+}
+
+fun emitSetField(fs: Map, objReg: Int, fieldName: String, valueReg: Int): Unit {
+    val idx = addFieldName(mapGet(fs, "compiler"), fieldName)
+    emitByte(fs, OP_SET_FIELD())
+    emitU16(fs, objReg)
+    emitU16(fs, idx)
+    emitU16(fs, valueReg)
+}
+
+fun emitVcall(fs: Map, dest: Int, objReg: Int, methodName: String, args: List): Unit {
+    val idx = addMethodName(mapGet(fs, "compiler"), methodName)
+    emitByte(fs, OP_VCALL())
+    emitU16(fs, dest)
+    emitU16(fs, objReg)
+    emitU16(fs, idx)
+    emitU16(fs, listSize(args))
+    var i: Int = 0
+    while (i < listSize(args)) {
+        emitU16(fs, toInt(listGet(args, i)))
+        i = i + 1
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Expression compilation — returns the register holding the result
 // ---------------------------------------------------------------------------
@@ -2432,9 +2508,30 @@ fun compileExpr(fs: Map, node: Map): Int {
             emitLoad(fs, dest, toInt(reg))
             return dest
         }
+        // Check if in a method and identifier is a class field
+        val methodClass = mapGet(fs, "className")
+        if (methodClass != null) {
+            val classFields = mapGet(fs, "classFields")
+            if (listContains(classFields, name)) {
+                val thisSlot = toInt(mapGet(mapGet(fs, "locals"), "this"))
+                val thisReg = allocReg(fs)
+                emitLoad(fs, thisReg, thisSlot)
+                val dest = allocReg(fs)
+                emitGetField(fs, dest, thisReg, name)
+                return dest
+            }
+        }
         // Unknown identifier — might be a function reference
         val dest = allocReg(fs)
         emitConstString(fs, dest, name)
+        return dest
+    }
+
+    if (kind == "member") {
+        val objReg = compileExpr(fs, mapGet(node, "object"))
+        val fieldName = toString(mapGet(node, "name"))
+        val dest = allocReg(fs)
+        emitGetField(fs, dest, objReg, fieldName)
         return dest
     }
 
@@ -2470,14 +2567,37 @@ fun compileExpr(fs: Map, node: Map): Int {
         val calleeKind = toString(mapGet(callee, "kind"))
         val callArgs = mapGet(node, "args")
 
-        // Simple function call: funcName(args)
+        // Simple function call or constructor: funcName(args)
         if (calleeKind == "ident") {
             val funcName = toString(mapGet(callee, "name"))
+
+            // Check if this is a class constructor
+            val classNames = mapGet(mapGet(fs, "compiler"), "classNames")
+            val isClass = mapGet(classNames, funcName)
+            if (isClass != null) {
+                // Constructor call → NEW_OBJECT
+                val argRegs = listCreate()
+                var i: Int = 0
+                while (i < listSize(callArgs)) {
+                    val argNode = listGet(callArgs, i)
+                    val argKind = toString(mapGet(argNode, "kind"))
+                    if (argKind == "namedArg") {
+                        listAppend(argRegs, compileExpr(fs, mapGet(argNode, "value")))
+                    } else {
+                        listAppend(argRegs, compileExpr(fs, argNode))
+                    }
+                    i = i + 1
+                }
+                val dest = allocReg(fs)
+                emitNewObject(fs, dest, funcName, argRegs)
+                return dest
+            }
+
+            // Regular function call (use this.method() for explicit method calls)
             val argRegs = listCreate()
             var i: Int = 0
             while (i < listSize(callArgs)) {
                 val argNode = listGet(callArgs, i)
-                // Handle named args
                 val argKind = toString(mapGet(argNode, "kind"))
                 if (argKind == "namedArg") {
                     listAppend(argRegs, compileExpr(fs, mapGet(argNode, "value")))
@@ -2491,19 +2611,24 @@ fun compileExpr(fs: Map, node: Map): Int {
             return dest
         }
 
-        // Method call: obj.method(args) — compile as regular call for now
+        // Method call: obj.method(args) → VCALL
         if (calleeKind == "member") {
             val objReg = compileExpr(fs, mapGet(callee, "object"))
             val methodName = toString(mapGet(callee, "name"))
             val argRegs = listCreate()
-            listAppend(argRegs, objReg)
             var i: Int = 0
             while (i < listSize(callArgs)) {
-                listAppend(argRegs, compileExpr(fs, listGet(callArgs, i)))
+                val argNode = listGet(callArgs, i)
+                val argKind = toString(mapGet(argNode, "kind"))
+                if (argKind == "namedArg") {
+                    listAppend(argRegs, compileExpr(fs, mapGet(argNode, "value")))
+                } else {
+                    listAppend(argRegs, compileExpr(fs, argNode))
+                }
                 i = i + 1
             }
             val dest = allocReg(fs)
-            emitCall(fs, dest, methodName, argRegs)
+            emitVcall(fs, dest, objReg, methodName, argRegs)
             return dest
         }
 
@@ -2660,7 +2785,26 @@ fun compileStmt(fs: Map, node: Map): Unit {
             if (slot != null) {
                 val valueReg = compileExpr(fs, mapGet(node, "value"))
                 emitStore(fs, toInt(slot), valueReg)
+            } else {
+                // Check if in method and name is a class field
+                val methodClass = mapGet(fs, "className")
+                if (methodClass != null) {
+                    val classFields = mapGet(fs, "classFields")
+                    if (listContains(classFields, name)) {
+                        val thisSlot = toInt(mapGet(mapGet(fs, "locals"), "this"))
+                        val thisReg = allocReg(fs)
+                        emitLoad(fs, thisReg, thisSlot)
+                        val valueReg = compileExpr(fs, mapGet(node, "value"))
+                        emitSetField(fs, thisReg, name, valueReg)
+                    }
+                }
             }
+        }
+        if (targetKind == "member") {
+            val objReg = compileExpr(fs, mapGet(target, "object"))
+            val fieldName = toString(mapGet(target, "name"))
+            val valueReg = compileExpr(fs, mapGet(node, "value"))
+            emitSetField(fs, objReg, fieldName, valueReg)
         }
         return
     }
@@ -2931,6 +3075,14 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
     val nameIdx = addFuncName(compiler, name)
     val fs = makeFuncState(compiler, name, params)
 
+    // Set class context if this is a method
+    val methodClassName = mapGet(decl, "_className")
+    if (methodClassName != null) {
+        mapPut(fs, "className", toString(methodClassName))
+        mapPut(fs, "classFields", mapGet(decl, "_classFields"))
+        mapPut(fs, "classMethods", mapGet(decl, "_classMethods"))
+    }
+
     // Load params into alloc slots
     var i: Int = 0
     while (i < listSize(params)) {
@@ -3011,6 +3163,139 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
 }
 
 // ---------------------------------------------------------------------------
+// Class compilation
+// ---------------------------------------------------------------------------
+
+fun compileClassDecl(compiler: Map, decl: Map): Unit {
+    val className = toString(mapGet(decl, "name"))
+
+    // Collect fields from constructor params
+    val fields = listCreate()
+    val ctorParams = mapGet(decl, "ctorParams")
+    if (ctorParams != null) {
+        var i: Int = 0
+        while (i < listSize(ctorParams)) {
+            val param = listGet(ctorParams, i)
+            val fieldRec = mapCreate()
+            mapPut(fieldRec, "name", toString(mapGet(param, "name")))
+            val ptype = mapGet(param, "type")
+            if (ptype != null) {
+                mapPut(fieldRec, "typeName", toString(mapGet(ptype, "name")))
+            } else {
+                mapPut(fieldRec, "typeName", "Unit")
+            }
+            listAppend(fields, fieldRec)
+            i = i + 1
+        }
+    }
+
+    // Collect fields from body val/var declarations
+    val body = mapGet(decl, "body")
+    if (body != null) {
+        val members = mapGet(body, "members")
+        if (members != null) {
+            var i: Int = 0
+            while (i < listSize(members)) {
+                val member = listGet(members, i)
+                val mkind = toString(mapGet(member, "kind"))
+                if (mkind == "valDecl" || mkind == "varDecl") {
+                    val fieldRec = mapCreate()
+                    mapPut(fieldRec, "name", toString(mapGet(member, "name")))
+                    val mtype = mapGet(member, "type")
+                    if (mtype != null) {
+                        mapPut(fieldRec, "typeName", toString(mapGet(mtype, "name")))
+                    } else {
+                        mapPut(fieldRec, "typeName", "Unit")
+                    }
+                    listAppend(fields, fieldRec)
+                }
+                i = i + 1
+            }
+        }
+    }
+
+    // Build field name list for method compilation
+    val fieldNames = listCreate()
+    var fi: Int = 0
+    while (fi < listSize(fields)) {
+        listAppend(fieldNames, toString(mapGet(listGet(fields, fi), "name")))
+        fi = fi + 1
+    }
+
+    // Collect method names first (needed for self-calls within methods)
+    val methods = listCreate()
+    if (body != null) {
+        val members = mapGet(body, "members")
+        if (members != null) {
+            var i: Int = 0
+            while (i < listSize(members)) {
+                val member = listGet(members, i)
+                val mkind = toString(mapGet(member, "kind"))
+                if (mkind == "funDecl") {
+                    listAppend(methods, toString(mapGet(member, "name")))
+                }
+                i = i + 1
+            }
+        }
+    }
+
+    // Compile methods
+    if (body != null) {
+        val members = mapGet(body, "members")
+        if (members != null) {
+            var i: Int = 0
+            while (i < listSize(members)) {
+                val member = listGet(members, i)
+                val mkind = toString(mapGet(member, "kind"))
+                if (mkind == "funDecl") {
+                    val methodName = toString(mapGet(member, "name"))
+
+                    // Build method decl with implicit 'this' parameter
+                    val methodParams = listCreate()
+                    val thisParam = mapCreate()
+                    mapPut(thisParam, "kind", "param")
+                    mapPut(thisParam, "name", "this")
+                    listAppend(methodParams, thisParam)
+
+                    val origParams = mapGet(member, "params")
+                    if (origParams != null) {
+                        var pi: Int = 0
+                        while (pi < listSize(origParams)) {
+                            listAppend(methodParams, listGet(origParams, pi))
+                            pi = pi + 1
+                        }
+                    }
+
+                    val methodDecl = mapCreate()
+                    mapPut(methodDecl, "kind", "funDecl")
+                    mapPut(methodDecl, "name", stringConcat(className, stringConcat(".", methodName)))
+                    mapPut(methodDecl, "params", methodParams)
+                    mapPut(methodDecl, "body", mapGet(member, "body"))
+                    mapPut(methodDecl, "returnType", mapGet(member, "returnType"))
+                    mapPut(methodDecl, "_className", className)
+                    mapPut(methodDecl, "_classFields", fieldNames)
+                    mapPut(methodDecl, "_classMethods", methods)
+
+                    compileFunction(compiler, methodDecl)
+                }
+                i = i + 1
+            }
+        }
+    }
+
+    // Build type record
+    val typeRec = mapCreate()
+    val nameIdx = addTypeName(compiler, className)
+    mapPut(typeRec, "nameIdx", nameIdx)
+    mapPut(typeRec, "fields", fields)
+    mapPut(typeRec, "methods", methods)
+    listAppend(mapGet(compiler, "types"), typeRec)
+
+    // Register class name (for constructor detection)
+    mapPut(mapGet(compiler, "classNames"), className, typeRec)
+}
+
+// ---------------------------------------------------------------------------
 // Binary serialization (.moonb format)
 // ---------------------------------------------------------------------------
 
@@ -3049,8 +3334,46 @@ fun serializeModule(compiler: Map): List {
     // Globals: 0
     appendU32(bytes, 0)
 
-    // Types: 0
-    appendU32(bytes, 0)
+    // Types
+    val types = mapGet(compiler, "types")
+    appendU32(bytes, listSize(types))
+    var ti: Int = 0
+    while (ti < listSize(types)) {
+        val typeRec = listGet(types, ti)
+        appendU16(bytes, toInt(mapGet(typeRec, "nameIdx")))
+
+        val typeFields = mapGet(typeRec, "fields")
+        appendU16(bytes, listSize(typeFields))
+
+        val typeMethods = mapGet(typeRec, "methods")
+        appendU16(bytes, listSize(typeMethods))
+
+        // Fields
+        var tfi: Int = 0
+        while (tfi < listSize(typeFields)) {
+            val field = listGet(typeFields, tfi)
+            val fname = toString(mapGet(field, "name"))
+            val fnameIdx = addFieldName(compiler, fname)
+            appendU16(bytes, fnameIdx)
+            val ftypeName = toString(mapGet(field, "typeName"))
+            if (ftypeName == "Int") { listAppend(bytes, TT_INT()) }
+            else { if (ftypeName == "String") { listAppend(bytes, TT_STRING()) }
+            else { if (ftypeName == "Bool") { listAppend(bytes, TT_BOOL()) }
+            else { if (ftypeName == "Float64") { listAppend(bytes, TT_FLOAT64()) }
+            else { listAppend(bytes, TT_UNIT()) } } } }
+            tfi = tfi + 1
+        }
+
+        // Methods
+        var tmi: Int = 0
+        while (tmi < listSize(typeMethods)) {
+            val mname = toString(listGet(typeMethods, tmi))
+            val mnameIdx = addMethodName(compiler, mname)
+            appendU16(bytes, mnameIdx)
+            tmi = tmi + 1
+        }
+        ti = ti + 1
+    }
 
     // Functions
     val funcs = mapGet(compiler, "functions")
@@ -3130,10 +3453,27 @@ fun stringToBytes(s: String): List {
 fun compileProgram(ast: Map): Map {
     val compiler = makeCompiler()
     val decls = mapGet(ast, "decls")
+
+    // Pass 1: Register all class names (for constructor detection)
     var i: Int = 0
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
         val kind = toString(mapGet(decl, "kind"))
+        if (kind == "classDecl") {
+            val cname = toString(mapGet(decl, "name"))
+            mapPut(mapGet(compiler, "classNames"), cname, true)
+        }
+        i = i + 1
+    }
+
+    // Pass 2: Compile classes and functions
+    i = 0
+    while (i < listSize(decls)) {
+        val decl = listGet(decls, i)
+        val kind = toString(mapGet(decl, "kind"))
+        if (kind == "classDecl") {
+            compileClassDecl(compiler, decl)
+        }
         if (kind == "funDecl") {
             compileFunction(compiler, decl)
         }
