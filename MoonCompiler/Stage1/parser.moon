@@ -291,6 +291,11 @@ fun parsePrimary(p: Map): Map {
         return expr
     }
 
+    // Lambda expression: { params -> body } or { body }
+    if (tt == "LBRACE") {
+        return parseLambda(p)
+    }
+
     // If expression
     if (tt == "KW_IF") {
         return parseIfExpr(p)
@@ -464,6 +469,82 @@ fun parseExpression(p: Map, minPrec: Int): Map {
         left = node
     }
     return left
+}
+
+// ---------------------------------------------------------------------------
+// Lambda expression
+// ---------------------------------------------------------------------------
+
+fun parseLambda(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "LBRACE")
+    skipNewlines(p)
+    val node = makeNodeAt("lambda", line, col)
+    val params = listCreate()
+
+    // Try to detect parameter list: { ident [: type] [, ...] -> body }
+    // Save position to backtrack if this isn't a param list
+    val savedPos = toInt(mapGet(p, "pos"))
+
+    // Look ahead: scan for ARROW before any statement-like tokens
+    var hasArrow: Bool = false
+    var scanPos: Int = savedPos
+    val tokens = mapGet(p, "tokens")
+    while (scanPos < listSize(tokens)) {
+        val scanTok = listGet(tokens, scanPos)
+        val scanType = toString(mapGet(scanTok, "type"))
+        if (scanType == "ARROW") {
+            hasArrow = true
+            break
+        }
+        if (scanType == "RBRACE" || scanType == "NEWLINE" || scanType == "SEMICOLON" || scanType == "KW_VAL" || scanType == "KW_VAR" || scanType == "KW_IF" || scanType == "KW_WHILE" || scanType == "KW_RETURN") {
+            break
+        }
+        scanPos = scanPos + 1
+    }
+
+    if (hasArrow) {
+        // Parse parameters
+        skipNewlines(p)
+        if (!check(p, "ARROW")) {
+            listAppend(params, parseLambdaParam(p))
+            while (matchToken(p, "COMMA")) {
+                skipNewlines(p)
+                listAppend(params, parseLambdaParam(p))
+            }
+        }
+        expect(p, "ARROW")
+    }
+
+    mapPut(node, "params", params)
+
+    // Parse body statements
+    val stmts = listCreate()
+    skipNewlines(p)
+    while (!check(p, "RBRACE") && !parserAtEnd(p)) {
+        skipNewlines(p)
+        if (check(p, "RBRACE")) { break }
+        listAppend(stmts, parseStatement(p))
+        skipNewlines(p)
+    }
+    expect(p, "RBRACE")
+
+    val body = makeNode("block")
+    mapPut(body, "stmts", stmts)
+    mapPut(node, "body", body)
+    return node
+}
+
+fun parseLambdaParam(p: Map): Map {
+    skipNewlines(p)
+    val param = makeNode("param")
+    val nameTok = expect(p, "IDENT")
+    mapPut(param, "name", toString(mapGet(nameTok, "value")))
+    if (matchToken(p, "COLON")) {
+        mapPut(param, "type", parseType(p))
+    }
+    return param
 }
 
 // ---------------------------------------------------------------------------

@@ -43,6 +43,7 @@ fun OP_VCALL(): Int { return 81 }
 fun OP_GET_FIELD(): Int { return 96 }
 fun OP_SET_FIELD(): Int { return 97 }
 fun OP_NEW_OBJECT(): Int { return 112 }
+fun OP_CALL_INDIRECT(): Int { return 82 }
 fun OP_NULL_CHECK(): Int { return 128 }
 fun OP_IS_NULL(): Int { return 129 }
 
@@ -72,6 +73,7 @@ fun makeCompiler(): Map {
     mapPut(c, "types", listCreate())        // class type records
     mapPut(c, "classNames", mapCreate())   // className -> true (set)
     mapPut(c, "enumNames", mapCreate())   // enumName -> list of entry names
+    mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
 }
@@ -268,6 +270,18 @@ fun emitCall(fs: Map, dest: Int, funcName: String, args: List): Unit {
     emitByte(fs, OP_CALL())
     emitU16(fs, dest)
     emitU16(fs, idx)
+    emitU16(fs, listSize(args))
+    var i: Int = 0
+    while (i < listSize(args)) {
+        emitU16(fs, toInt(listGet(args, i)))
+        i = i + 1
+    }
+}
+
+fun emitCallIndirect(fs: Map, dest: Int, funcRefReg: Int, args: List): Unit {
+    emitByte(fs, OP_CALL_INDIRECT())
+    emitU16(fs, dest)
+    emitU16(fs, funcRefReg)
     emitU16(fs, listSize(args))
     var i: Int = 0
     while (i < listSize(args)) {
@@ -601,6 +615,41 @@ fun compileExpr(fs: Map, node: Map): Int {
 
     if (kind == "binary") {
         val op = toString(mapGet(node, "op"))
+
+        // Short-circuit && : if left is false, skip right, result = false
+        if (op == "&&") {
+            val dest = allocReg(fs)
+            val leftReg = compileExpr(fs, mapGet(node, "left"))
+            val patches = emitBranch(fs, leftReg)
+            // Then: left was true, evaluate right
+            patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+            val rightReg = compileExpr(fs, mapGet(node, "right"))
+            emitStore(fs, dest, rightReg)
+            val jumpEnd = emitJump(fs)
+            // Else: left was false, result = false
+            patchJump(fs, toInt(mapGet(patches, "elsePatch")))
+            emitConstFalse(fs, dest)
+            patchJump(fs, jumpEnd)
+            return dest
+        }
+
+        // Short-circuit || : if left is true, skip right, result = true
+        if (op == "||") {
+            val dest = allocReg(fs)
+            val leftReg = compileExpr(fs, mapGet(node, "left"))
+            val patches = emitBranch(fs, leftReg)
+            // Then: left was true, result = true
+            patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+            emitConstTrue(fs, dest)
+            val jumpEnd = emitJump(fs)
+            // Else: left was false, evaluate right
+            patchJump(fs, toInt(mapGet(patches, "elsePatch")))
+            val rightReg = compileExpr(fs, mapGet(node, "right"))
+            emitStore(fs, dest, rightReg)
+            patchJump(fs, jumpEnd)
+            return dest
+        }
+
         val leftReg = compileExpr(fs, mapGet(node, "left"))
         val rightReg = compileExpr(fs, mapGet(node, "right"))
         val dest = allocReg(fs)
@@ -657,6 +706,29 @@ fun compileExpr(fs: Map, node: Map): Int {
                 return dest
             }
 
+            // Check if this is a local variable (could hold a lambda reference)
+            val localSlot = mapGet(mapGet(fs, "locals"), funcName)
+            if (localSlot != null) {
+                // Indirect call through variable
+                val funcRefReg = allocReg(fs)
+                emitLoad(fs, funcRefReg, toInt(localSlot))
+                val argRegs = listCreate()
+                var i: Int = 0
+                while (i < listSize(callArgs)) {
+                    val argNode = listGet(callArgs, i)
+                    val argKind = toString(mapGet(argNode, "kind"))
+                    if (argKind == "namedArg") {
+                        listAppend(argRegs, compileExpr(fs, mapGet(argNode, "value")))
+                    } else {
+                        listAppend(argRegs, compileExpr(fs, argNode))
+                    }
+                    i = i + 1
+                }
+                val dest = allocReg(fs)
+                emitCallIndirect(fs, dest, funcRefReg, argRegs)
+                return dest
+            }
+
             // Regular function call (use this.method() for explicit method calls)
             val argRegs = listCreate()
             var i: Int = 0
@@ -709,6 +781,10 @@ fun compileExpr(fs: Map, node: Map): Int {
         return dest
     }
 
+    if (kind == "lambda") {
+        return compileLambda(fs, node)
+    }
+
     if (kind == "if") {
         return compileIfExpr(fs, node)
     }
@@ -720,6 +796,63 @@ fun compileExpr(fs: Map, node: Map): Int {
     // Fallback: emit null
     val dest = allocReg(fs)
     emitConstNull(fs, dest)
+    return dest
+}
+
+// ---------------------------------------------------------------------------
+// Lambda compilation
+// ---------------------------------------------------------------------------
+
+fun compileLambda(fs: Map, node: Map): Int {
+    val compiler = mapGet(fs, "compiler")
+
+    // Generate unique lambda name
+    val counter = toInt(mapGet(compiler, "lambdaCounter"))
+    mapPut(compiler, "lambdaCounter", counter + 1)
+    val lambdaName = stringConcat("__lambda_", toString(counter))
+
+    // Build params list for the lambda function
+    val params = mapGet(node, "params")
+    val lambdaParams = listCreate()
+    if (params != null) {
+        var i: Int = 0
+        while (i < listSize(params)) {
+            listAppend(lambdaParams, listGet(params, i))
+            i = i + 1
+        }
+    }
+
+    // Transform body: if last statement is an expression, wrap it in return
+    val body = mapGet(node, "body")
+    val stmts = mapGet(body, "stmts")
+    if (stmts != null) {
+        val stmtCount = listSize(stmts)
+        if (stmtCount > 0) {
+            val lastStmt = listGet(stmts, stmtCount - 1)
+            val lastKind = toString(mapGet(lastStmt, "kind"))
+            // If last statement is not already a return/break/continue, wrap in return
+            if (lastKind != "return" && lastKind != "break" && lastKind != "continue" && lastKind != "valDecl" && lastKind != "varDecl" && lastKind != "assign" && lastKind != "while" && lastKind != "for" && lastKind != "if") {
+                val retNode = mapCreate()
+                mapPut(retNode, "kind", "return")
+                mapPut(retNode, "value", lastStmt)
+                listSet(stmts, stmtCount - 1, retNode)
+            }
+        }
+    }
+
+    // Create a function declaration for the lambda
+    val decl = mapCreate()
+    mapPut(decl, "kind", "funDecl")
+    mapPut(decl, "name", lambdaName)
+    mapPut(decl, "params", lambdaParams)
+    mapPut(decl, "body", body)
+
+    // Compile the lambda as a top-level function
+    compileFunction(compiler, decl)
+
+    // Return string constant with the lambda function name
+    val dest = allocReg(fs)
+    emitConstString(fs, dest, lambdaName)
     return dest
 }
 
