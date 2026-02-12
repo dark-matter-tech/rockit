@@ -85,6 +85,15 @@ public final class TypeChecker {
     }
 
     private func gatherFunction(_ f: FunctionDecl) {
+        // Temporarily register type parameters so param/return types can resolve
+        if !f.typeParameters.isEmpty {
+            symbolTable.pushScope()
+            for tp in f.typeParameters {
+                let bound: Type? = tp.upperBound.map { resolver.resolve($0) }
+                let tpType = Type.typeParameter(name: tp.name, bound: bound)
+                symbolTable.define(Symbol(name: tp.name, type: tpType, kind: .typeParameter, span: tp.span))
+            }
+        }
         let paramTypes = f.parameters.map { param -> Type in
             if let typeNode = param.type {
                 return resolver.resolve(typeNode)
@@ -96,6 +105,9 @@ public final class TypeChecker {
             returnType = resolver.resolve(retNode)
         } else {
             returnType = .unit
+        }
+        if !f.typeParameters.isEmpty {
+            symbolTable.popScope()
         }
         let funcType = Type.function(parameterTypes: paramTypes, returnType: returnType)
         let symbol = Symbol(name: f.name, type: funcType, kind: .function, span: f.span)

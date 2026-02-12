@@ -752,12 +752,23 @@ public final class VM {
             args.append(callStack[frameIdx].registers[Int(argReg)])
         }
 
-        // Read function name from register (string value)
+        // Read function reference from register (string or closure list)
         let funcRef = callStack[frameIdx].registers[Int(funcRefReg)]
         let funcName: String
         switch funcRef {
         case .string(let name):
             funcName = name
+        case .objectRef(let objId):
+            // Closure: list where [0] = function name, [1..] = captured values
+            if let listStorage = (try? arcHeap.get(objId))?.listStorage, !listStorage.isEmpty,
+               case .string(let name) = listStorage[0] {
+                funcName = name
+                // Prepend captured values before user args
+                let capturedArgs = Array(listStorage.dropFirst())
+                args = capturedArgs + args
+            } else {
+                throw VMError.typeMismatch(expected: "String (function reference)", actual: funcRef.typeName, operation: "CALL_INDIRECT")
+            }
         default:
             throw VMError.typeMismatch(expected: "String (function reference)", actual: funcRef.typeName, operation: "CALL_INDIRECT")
         }

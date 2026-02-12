@@ -28,6 +28,9 @@ public final class MIRLowering {
     /// Extension function names: maps "ReceiverType.method" to true
     private var extensionFunctions: Set<String> = []
 
+    /// Counter for unique lambda names
+    private var lambdaCounter: Int = 0
+
     public init(typeCheckResult: TypeCheckResult) {
         self.result = typeCheckResult
         self.diagnostics = typeCheckResult.diagnostics
@@ -1245,17 +1248,27 @@ public final class MIRLowering {
     // MARK: - Lambda
 
     private func lowerLambda(_ le: LambdaExpr) -> String {
-        // Stage 0: lower as an anonymous function, return a reference to it
-        // Use a separate builder to avoid corrupting the outer function's blocks
         let lambdaBuilder = MIRBuilder()
-        let lambdaName = "__lambda_\(lambdaBuilder.newTemp().dropFirst())"
+        let lambdaName = "__lambda_\(lambdaCounter)"
+        lambdaCounter += 1
 
         let savedLocals = locals
         let savedBuilder = builder
+
+        // Detect captured variables: identifiers in the lambda body that exist in the enclosing scope
+        let paramNames = Set(le.parameters.map { $0.name })
+        var freeVarNames: Set<String> = []
+        for stmt in le.body {
+            collectFreeVars(stmt: stmt, into: &freeVarNames)
+        }
+        let captures = freeVarNames.filter { savedLocals[$0] != nil && !paramNames.contains($0) }.sorted()
+
         locals = [:]
         builder = lambdaBuilder
 
-        let params: [(String, MIRType)] = le.parameters.map { p in
+        // Build parameter list: captured vars first, then user params
+        var allParams: [(String, MIRType)] = captures.map { ("__cap_\($0)", .reference("Any")) }
+        let userParams: [(String, MIRType)] = le.parameters.map { p in
             let type: MIRType = p.type.flatMap { _ in
                 if let sym = result.symbolTable.lookup(p.name) {
                     return MIRType.from(sym.type)
@@ -1264,25 +1277,32 @@ public final class MIRLowering {
             } ?? .unit
             return (p.name, type)
         }
+        allParams.append(contentsOf: userParams)
 
         builder.startBlock(label: "entry")
-        for (name, type) in params {
+        // Set up captured var locals
+        for capName in captures {
+            let slot = builder.emitAlloc(type: .reference("Any"))
+            locals[capName] = slot
+            let paramTemp = builder.newTemp()
+            builder.emit(.load(dest: paramTemp, src: "param.__cap_\(capName)"))
+            builder.emitStore(dest: slot, src: paramTemp)
+        }
+        // Set up user param locals
+        for (name, type) in userParams {
             let slot = builder.emitAlloc(type: type)
             locals[name] = slot
-            // Load parameter value and store into slot (same pattern as lowerFunction)
             let paramTemp = builder.newTemp()
             builder.emit(.load(dest: paramTemp, src: "param.\(name)"))
             builder.emitStore(dest: slot, src: paramTemp)
         }
 
-        // Lower all statements except the last
+        // Lower body
         if le.body.count > 1 {
             for stmt in le.body.dropLast() {
                 lowerStatement(stmt)
             }
         }
-
-        // If the last statement is an expression, return its value
         if !builder.isTerminated, let lastStmt = le.body.last {
             if case .expression(let expr) = lastStmt {
                 let resultTemp = lowerExpression(expr)
@@ -1298,15 +1318,118 @@ public final class MIRLowering {
         }
 
         let blocks = builder.finishBlocks()
-        let mirFunc = MIRFunction(name: lambdaName, parameters: params, returnType: .unit, blocks: blocks)
+        let mirFunc = MIRFunction(name: lambdaName, parameters: allParams, returnType: .unit, blocks: blocks)
         functions.append(mirFunc)
 
-        // Restore outer function's builder and locals
         builder = savedBuilder
         locals = savedLocals
 
-        // Return a reference to the lambda function name
-        return builder.emitConstString(lambdaName)
+        if captures.isEmpty {
+            // No captures: return function name string directly
+            return builder.emitConstString(lambdaName)
+        }
+
+        // Build closure list: [funcName, cap0, cap1, ...]
+        let listTemp = builder.newTemp()
+        builder.emit(.call(dest: listTemp, function: "listCreate", args: []))
+        let fnNameTemp = builder.emitConstString(lambdaName)
+        builder.emit(.call(dest: nil, function: "listAppend", args: [listTemp, fnNameTemp]))
+        for capName in captures {
+            let capVal = builder.emitLoad(src: savedLocals[capName]!)
+            builder.emit(.call(dest: nil, function: "listAppend", args: [listTemp, capVal]))
+        }
+        return listTemp
+    }
+
+    // MARK: - Free Variable Collection
+
+    private func collectFreeVars(stmt: Statement, into names: inout Set<String>) {
+        switch stmt {
+        case .expression(let expr):
+            collectFreeVars(expr: expr, into: &names)
+        case .propertyDecl(let p):
+            if let e = p.initializer { collectFreeVars(expr: e, into: &names) }
+        case .returnStmt(let e, _):
+            if let e = e { collectFreeVars(expr: e, into: &names) }
+        case .throwStmt(let e, _):
+            collectFreeVars(expr: e, into: &names)
+        case .assignment(let a):
+            collectFreeVars(expr: a.value, into: &names)
+            if case .identifier(let n, _) = a.target { names.insert(n) }
+        case .forLoop(let f):
+            collectFreeVars(expr: f.iterable, into: &names)
+            f.body.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
+        case .whileLoop(let w):
+            collectFreeVars(expr: w.condition, into: &names)
+            w.body.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
+        case .doWhileLoop(let d):
+            collectFreeVars(expr: d.condition, into: &names)
+            d.body.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
+        case .tryCatch(let tc):
+            tc.tryBody.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
+            tc.catchBody.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
+            tc.finallyBody?.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
+        case .declaration(let d):
+            if case .function(let f) = d {
+                if case .block(let b) = f.body { b.statements.forEach { collectFreeVars(stmt: $0, into: &names) } }
+            }
+        default: break
+        }
+    }
+
+    private func collectFreeVars(expr: Expression, into names: inout Set<String>) {
+        switch expr {
+        case .identifier(let n, _): names.insert(n)
+        case .binary(let l, _, let r, _):
+            collectFreeVars(expr: l, into: &names)
+            collectFreeVars(expr: r, into: &names)
+        case .unaryPrefix(_, let e, _): collectFreeVars(expr: e, into: &names)
+        case .unaryPostfix(let e, _, _): collectFreeVars(expr: e, into: &names)
+        case .call(let callee, let args, let trailing, _):
+            collectFreeVars(expr: callee, into: &names)
+            args.forEach { collectFreeVars(expr: $0.value, into: &names) }
+            if let t = trailing { t.body.forEach { collectFreeVars(stmt: $0, into: &names) } }
+        case .memberAccess(let obj, _, _): collectFreeVars(expr: obj, into: &names)
+        case .nullSafeMemberAccess(let obj, _, _): collectFreeVars(expr: obj, into: &names)
+        case .subscriptAccess(let obj, let idx, _):
+            collectFreeVars(expr: obj, into: &names)
+            collectFreeVars(expr: idx, into: &names)
+        case .ifExpr(let ie):
+            collectFreeVars(expr: ie.condition, into: &names)
+            ie.thenBranch.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
+            if let el = ie.elseBranch {
+                switch el {
+                case .elseBlock(let b): b.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
+                case .elseIf(let eif): collectFreeVars(expr: .ifExpr(eif), into: &names)
+                }
+            }
+        case .whenExpr(let we):
+            if let subj = we.subject { collectFreeVars(expr: subj, into: &names) }
+            for entry in we.entries {
+                for cond in entry.conditions {
+                    if case .expression(let e) = cond { collectFreeVars(expr: e, into: &names) }
+                }
+                switch entry.body {
+                case .expression(let e): collectFreeVars(expr: e, into: &names)
+                case .block(let b): b.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
+                }
+            }
+        case .interpolatedString(let parts, _):
+            for part in parts {
+                if case .interpolation(let e) = part { collectFreeVars(expr: e, into: &names) }
+            }
+        case .parenthesized(let e, _): collectFreeVars(expr: e, into: &names)
+        case .elvis(let l, let r, _):
+            collectFreeVars(expr: l, into: &names)
+            collectFreeVars(expr: r, into: &names)
+        case .nonNullAssert(let e, _): collectFreeVars(expr: e, into: &names)
+        case .range(let s, let e, _, _):
+            collectFreeVars(expr: s, into: &names)
+            collectFreeVars(expr: e, into: &names)
+        case .lambda(let le):
+            le.body.forEach { collectFreeVars(stmt: $0, into: &names) }
+        default: break
+        }
     }
 
     // MARK: - Null Safety

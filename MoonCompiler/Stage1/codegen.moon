@@ -1078,6 +1078,126 @@ fun compileExpr(fs: Map, node: Map): Int {
 // Lambda compilation
 // ---------------------------------------------------------------------------
 
+// Collect free variable names from an expression AST node
+fun collectFreeVarsExpr(node: Map, names: Map): Unit {
+    if (node == null) { return }
+    val kind = toString(mapGet(node, "kind"))
+    if (kind == "ident") {
+        mapPut(names, toString(mapGet(node, "name")), 1)
+    } else if (kind == "binary") {
+        collectFreeVarsExpr(mapGet(node, "left"), names)
+        collectFreeVarsExpr(mapGet(node, "right"), names)
+    } else if (kind == "unary") {
+        collectFreeVarsExpr(mapGet(node, "operand"), names)
+    } else if (kind == "call") {
+        collectFreeVarsExpr(mapGet(node, "callee"), names)
+        val args = mapGet(node, "args")
+        if (args != null) {
+            var i: Int = 0
+            while (i < listSize(args)) {
+                val arg = listGet(args, i)
+                collectFreeVarsExpr(mapGet(arg, "value"), names)
+                i = i + 1
+            }
+        }
+    } else if (kind == "member") {
+        collectFreeVarsExpr(mapGet(node, "object"), names)
+    } else if (kind == "interpolatedString") {
+        val parts = mapGet(node, "parts")
+        if (parts != null) {
+            var i: Int = 0
+            while (i < listSize(parts)) {
+                val part = listGet(parts, i)
+                if (toString(mapGet(part, "kind")) == "expr") {
+                    collectFreeVarsExpr(mapGet(part, "expr"), names)
+                }
+                i = i + 1
+            }
+        }
+    } else if (kind == "elvis") {
+        collectFreeVarsExpr(mapGet(node, "left"), names)
+        collectFreeVarsExpr(mapGet(node, "right"), names)
+    } else if (kind == "nonNullAssert") {
+        collectFreeVarsExpr(mapGet(node, "expr"), names)
+    } else if (kind == "paren") {
+        collectFreeVarsExpr(mapGet(node, "expr"), names)
+    }
+}
+
+// Collect free variable names from a statement AST node
+fun collectFreeVarsStmt(node: Map, names: Map): Unit {
+    if (node == null) { return }
+    val kind = toString(mapGet(node, "kind"))
+    if (kind == "exprStmt") {
+        collectFreeVarsExpr(mapGet(node, "expr"), names)
+    } else if (kind == "return") {
+        collectFreeVarsExpr(mapGet(node, "value"), names)
+    } else if (kind == "valDecl") {
+        collectFreeVarsExpr(mapGet(node, "init"), names)
+    } else if (kind == "varDecl") {
+        collectFreeVarsExpr(mapGet(node, "init"), names)
+    } else if (kind == "assign") {
+        collectFreeVarsExpr(mapGet(node, "value"), names)
+        val target = mapGet(node, "target")
+        if (target != null) {
+            collectFreeVarsExpr(target, names)
+        }
+    } else if (kind == "while") {
+        collectFreeVarsExpr(mapGet(node, "condition"), names)
+        val body = mapGet(node, "body")
+        if (body != null) {
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) {
+                var i: Int = 0
+                while (i < listSize(stmts)) {
+                    collectFreeVarsStmt(listGet(stmts, i), names)
+                    i = i + 1
+                }
+            }
+        }
+    } else if (kind == "for") {
+        collectFreeVarsExpr(mapGet(node, "iterable"), names)
+        val body = mapGet(node, "body")
+        if (body != null) {
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) {
+                var i: Int = 0
+                while (i < listSize(stmts)) {
+                    collectFreeVarsStmt(listGet(stmts, i), names)
+                    i = i + 1
+                }
+            }
+        }
+    } else if (kind == "if") {
+        collectFreeVarsExpr(mapGet(node, "condition"), names)
+        val thenBody = mapGet(node, "then")
+        if (thenBody != null) {
+            val stmts = mapGet(thenBody, "stmts")
+            if (stmts != null) {
+                var i: Int = 0
+                while (i < listSize(stmts)) {
+                    collectFreeVarsStmt(listGet(stmts, i), names)
+                    i = i + 1
+                }
+            }
+        }
+        val elseBody = mapGet(node, "else")
+        if (elseBody != null) {
+            val eStmts = mapGet(elseBody, "stmts")
+            if (eStmts != null) {
+                var i: Int = 0
+                while (i < listSize(eStmts)) {
+                    collectFreeVarsStmt(listGet(eStmts, i), names)
+                    i = i + 1
+                }
+            }
+        }
+    } else {
+        // Unknown statement kind — might be a bare expression (e.g., binary, call, identifier)
+        collectFreeVarsExpr(node, names)
+    }
+}
+
 fun compileLambda(fs: Map, node: Map): Int {
     val compiler = mapGet(fs, "compiler")
 
@@ -1089,23 +1209,65 @@ fun compileLambda(fs: Map, node: Map): Int {
     // Build params list for the lambda function
     val params = mapGet(node, "params")
     val lambdaParams = listCreate()
+    val paramNames = mapCreate()
     if (params != null) {
         var i: Int = 0
         while (i < listSize(params)) {
-            listAppend(lambdaParams, listGet(params, i))
+            val p = listGet(params, i)
+            listAppend(lambdaParams, p)
+            mapPut(paramNames, toString(mapGet(p, "name")), 1)
             i = i + 1
         }
     }
 
-    // Transform body: if last statement is an expression, wrap it in return
+    // Collect free variables from the lambda body
+    val freeNames = mapCreate()
     val body = mapGet(node, "body")
     val stmts = mapGet(body, "stmts")
+    if (stmts != null) {
+        var i: Int = 0
+        while (i < listSize(stmts)) {
+            collectFreeVarsStmt(listGet(stmts, i), freeNames)
+            i = i + 1
+        }
+    }
+
+    // Determine captures: names in freeNames that are in outer locals but not in lambda params
+    val outerLocals = mapGet(fs, "locals")
+    val captures = listCreate()
+    val captureKeys = mapKeys(freeNames)
+    var ci: Int = 0
+    while (ci < listSize(captureKeys)) {
+        val name = toString(listGet(captureKeys, ci))
+        if (mapGet(paramNames, name) == null) {
+            if (mapGet(outerLocals, name) != null) {
+                listAppend(captures, name)
+            }
+        }
+        ci = ci + 1
+    }
+
+    // Add capture parameters before user params
+    val allParams = listCreate()
+    var cj: Int = 0
+    while (cj < listSize(captures)) {
+        val capParam = mapCreate()
+        mapPut(capParam, "name", toString(listGet(captures, cj)))
+        listAppend(allParams, capParam)
+        cj = cj + 1
+    }
+    var pk: Int = 0
+    while (pk < listSize(lambdaParams)) {
+        listAppend(allParams, listGet(lambdaParams, pk))
+        pk = pk + 1
+    }
+
+    // Transform body: if last statement is an expression, wrap it in return
     if (stmts != null) {
         val stmtCount = listSize(stmts)
         if (stmtCount > 0) {
             val lastStmt = listGet(stmts, stmtCount - 1)
             val lastKind = toString(mapGet(lastStmt, "kind"))
-            // If last statement is not already a return/break/continue, wrap in return
             if (lastKind != "return" && lastKind != "break" && lastKind != "continue" && lastKind != "valDecl" && lastKind != "varDecl" && lastKind != "assign" && lastKind != "while" && lastKind != "for" && lastKind != "if") {
                 val retNode = mapCreate()
                 mapPut(retNode, "kind", "return")
@@ -1119,15 +1281,36 @@ fun compileLambda(fs: Map, node: Map): Int {
     val decl = mapCreate()
     mapPut(decl, "kind", "funDecl")
     mapPut(decl, "name", lambdaName)
-    mapPut(decl, "params", lambdaParams)
+    mapPut(decl, "params", allParams)
     mapPut(decl, "body", body)
 
     // Compile the lambda as a top-level function
     compileFunction(compiler, decl)
 
-    // Return string constant with the lambda function name
     val dest = allocReg(fs)
-    emitConstString(fs, dest, lambdaName)
+    if (listSize(captures) == 0) {
+        // No captures: return function name string
+        emitConstString(fs, dest, lambdaName)
+    } else {
+        // Build closure list: [funcName, cap0, cap1, ...]
+        emitCall(fs, dest, "listCreate", listCreate())
+        val fnReg = allocReg(fs)
+        emitConstString(fs, fnReg, lambdaName)
+        val appendArgs1 = listCreate()
+        listAppend(appendArgs1, dest)
+        listAppend(appendArgs1, fnReg)
+        emitCall(fs, allocReg(fs), "listAppend", appendArgs1)
+        var ck: Int = 0
+        while (ck < listSize(captures)) {
+            val capName = toString(listGet(captures, ck))
+            val capSlot = toInt(mapGet(outerLocals, capName))
+            val appendArgs = listCreate()
+            listAppend(appendArgs, dest)
+            listAppend(appendArgs, capSlot)
+            emitCall(fs, allocReg(fs), "listAppend", appendArgs)
+            ck = ck + 1
+        }
+    }
     return dest
 }
 
