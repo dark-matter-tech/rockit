@@ -956,7 +956,9 @@ public final class VM {
     /// Build a stack trace from the current call stack state.
     public func captureStackTrace(error: VMError) -> StackTrace {
         let frames = callStack.reversed().map { frame in
-            StackTraceFrame(functionName: frame.functionName, bytecodeOffset: frame.pc)
+            let func_ = module.functions[frame.functionIndex]
+            let line = func_.sourceLine(at: frame.pc)
+            return StackTraceFrame(functionName: frame.functionName, bytecodeOffset: frame.pc, sourceLine: line)
         }
         return StackTrace(error: error, frames: frames)
     }

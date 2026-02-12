@@ -140,6 +140,8 @@ fun makeFuncState(compiler: Map, name: String, params: List): Map {
     mapPut(fs, "labelCounter", 0)
     mapPut(fs, "loopStack", listCreate())   // [{breakLabel, continueLabel}]
     mapPut(fs, "localFuncs", mapCreate())  // localName -> mangledName
+    mapPut(fs, "lineTable", listCreate())  // [{offset, line}] pairs
+    mapPut(fs, "lastLine", 0)              // last emitted line number
 
     // Register params as locals
     var i: Int = 0
@@ -172,6 +174,21 @@ fun markLabel(fs: Map, label: String): Unit {
 
 fun currentOffset(fs: Map): Int {
     return listSize(mapGet(fs, "bytecode"))
+}
+
+// Record a source line mapping for the current bytecode offset
+fun trackLine(fs: Map, node: Map): Unit {
+    val line = toInt(mapGet(node, "line"))
+    if (line > 0) {
+        val lastLine = toInt(mapGet(fs, "lastLine"))
+        if (line != lastLine) {
+            val entry = mapCreate()
+            mapPut(entry, "offset", currentOffset(fs))
+            mapPut(entry, "line", line)
+            listAppend(mapGet(fs, "lineTable"), entry)
+            mapPut(fs, "lastLine", line)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -560,6 +577,7 @@ fun compileStringInterp(fs: Map, raw: String): Int {
 // ---------------------------------------------------------------------------
 
 fun compileExpr(fs: Map, node: Map): Int {
+    if (mapGet(node, "line") != null) { trackLine(fs, node) }
     val kind = toString(mapGet(node, "kind"))
 
     if (kind == "intLit") {
@@ -1291,6 +1309,7 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
 // ---------------------------------------------------------------------------
 
 fun compileStmt(fs: Map, node: Map): Unit {
+    if (mapGet(node, "line") != null) { trackLine(fs, node) }
     val kind = toString(mapGet(node, "kind"))
 
     if (kind == "valDecl" || kind == "varDecl") {
@@ -1961,6 +1980,7 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
     mapPut(funcRec, "regCount", toInt(mapGet(fs, "regCount")))
     mapPut(funcRec, "bytecode", bc)
     mapPut(funcRec, "params", effectiveParams)
+    mapPut(funcRec, "lineTable", mapGet(fs, "lineTable"))
 
     // Determine return type tag
     val retType = mapGet(decl, "returnType")
@@ -2554,6 +2574,21 @@ fun serializeModule(compiler: Map): List {
             listAppend(bytes, toInt(listGet(bc, bi)))
             bi = bi + 1
         }
+
+        // Line table
+        val lineTable = mapGet(func, "lineTable")
+        if (lineTable != null) {
+            appendU32(bytes, listSize(lineTable))
+            var li: Int = 0
+            while (li < listSize(lineTable)) {
+                val entry = listGet(lineTable, li)
+                appendU16(bytes, toInt(mapGet(entry, "offset")))
+                appendU16(bytes, toInt(mapGet(entry, "line")))
+                li = li + 1
+            }
+        } else {
+            appendU32(bytes, 0)
+        }
         fi = fi + 1
     }
 
@@ -2682,23 +2717,126 @@ fun compileProgram(ast: Map): Map {
     return compiler
 }
 
+// Get directory of a file path (everything before last '/')
+fun dirName(path: String): String {
+    val len = stringLength(path)
+    var i: Int = len - 1
+    while (i >= 0) {
+        if (charAt(path, i) == "/") {
+            return substring(path, 0, i)
+        }
+        i = i - 1
+    }
+    return "."
+}
+
+// Resolve an import path like "foo.bar" to a file path
+// Searches: 1) relative to source dir, 2) lib path
+fun resolveImport(importPath: String, sourceDir: String, libPath: String): String {
+    // Convert dots to slashes: "foo.bar.baz" -> "foo/bar/baz"
+    var resolved: String = ""
+    val len = stringLength(importPath)
+    var i: Int = 0
+    while (i < len) {
+        val ch = charAt(importPath, i)
+        if (ch == ".") {
+            resolved = stringConcat(resolved, "/")
+        } else {
+            resolved = stringConcat(resolved, ch)
+        }
+        i = i + 1
+    }
+
+    // Try relative to source dir
+    val relPath = stringConcat(sourceDir, stringConcat("/", stringConcat(resolved, ".moon")))
+    if (fileExists(relPath)) {
+        return relPath
+    }
+
+    // Try lib path
+    if (stringLength(libPath) > 0) {
+        val libFilePath = stringConcat(libPath, stringConcat("/", stringConcat(resolved, ".moon")))
+        if (fileExists(libFilePath)) {
+            return libFilePath
+        }
+    }
+
+    return ""
+}
+
+// Resolve imports recursively and merge all declarations
+fun resolveImports(decls: List, sourceDir: String, libPath: String, imported: Map): List {
+    val allDecls = listCreate()
+    var i: Int = 0
+    while (i < listSize(decls)) {
+        val decl = listGet(decls, i)
+        val kind = toString(mapGet(decl, "kind"))
+        if (kind == "import") {
+            val path = toString(mapGet(decl, "path"))
+            // Skip wildcard suffix for resolution
+            var importPath: String = path
+            if (endsWith(importPath, ".*")) {
+                importPath = substring(importPath, 0, stringLength(importPath) - 2)
+            }
+            if (mapGet(imported, importPath) == null) {
+                mapPut(imported, importPath, 1)
+                val filePath = resolveImport(importPath, sourceDir, libPath)
+                if (stringLength(filePath) > 0) {
+                    val importSource = toString(fileRead(filePath))
+                    val importTokens = tokenize(importSource)
+                    val importParser = makeParser(importTokens)
+                    val importAst = parseProgram(importParser)
+                    val importDecls = mapGet(importAst, "decls")
+                    // Recursively resolve imports of the imported file
+                    val importDir = dirName(filePath)
+                    val resolved = resolveImports(importDecls, importDir, libPath, imported)
+                    var j: Int = 0
+                    while (j < listSize(resolved)) {
+                        listAppend(allDecls, listGet(resolved, j))
+                        j = j + 1
+                    }
+                }
+            }
+        } else {
+            listAppend(allDecls, decl)
+        }
+        i = i + 1
+    }
+    return allDecls
+}
+
 fun main(): Unit {
     val args = processArgs()
     if (listSize(args) < 2) {
-        println("Usage: moonc <source.moon> [output.moonb]")
-        println("       moonc run <source.moon>")
+        println("Usage: moonc compile <source.moon> [output.moonb]")
+        println("       moonc compile <source.moon> [output.moonb] --lib-path <path>")
         return
     }
 
     val command = toString(listGet(args, 0))
     var sourceFile: String = toString(listGet(args, 1))
     var outputFile: String = ""
+    var libPath: String = ""
+
+    // Parse remaining args
+    var ai: Int = 2
+    while (ai < listSize(args)) {
+        val arg = toString(listGet(args, ai))
+        if (arg == "--lib-path") {
+            if (ai + 1 < listSize(args)) {
+                ai = ai + 1
+                libPath = toString(listGet(args, ai))
+            }
+        } else {
+            if (stringLength(outputFile) == 0) {
+                outputFile = arg
+            }
+        }
+        ai = ai + 1
+    }
 
     // Determine output file
-    if (listSize(args) > 2) {
-        outputFile = toString(listGet(args, 2))
-    } else {
-        // Replace .moon with .moonb
+    if (stringLength(outputFile) == 0) {
         val len = stringLength(sourceFile)
         if (endsWith(sourceFile, ".moon")) {
             outputFile = stringConcat(substring(sourceFile, 0, len - 5), ".moonb")
@@ -2728,6 +2866,13 @@ fun main(): Unit {
         }
         return
     }
+
+    // Resolve imports
+    val sourceDir = dirName(sourceFile)
+    val imported = mapCreate()
+    val rawDecls = mapGet(ast, "decls")
+    val resolvedDecls = resolveImports(rawDecls, sourceDir, libPath, imported)
+    mapPut(ast, "decls", resolvedDecls)
 
     // Compile
     val compiler = compileProgram(ast)

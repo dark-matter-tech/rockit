@@ -183,6 +183,8 @@ public struct BytecodeFunction {
     public let returnTypeTag: BytecodeTypeTag
     public let bytecode: [UInt8]
     public let parameterInfo: [(nameIndex: UInt16, typeTag: BytecodeTypeTag)]
+    /// Maps bytecode offsets to source line numbers for stack traces.
+    public let lineTable: [(offset: UInt16, line: UInt16)]
 
     public init(
         nameIndex: UInt16,
@@ -190,7 +192,8 @@ public struct BytecodeFunction {
         registerCount: UInt16,
         returnTypeTag: BytecodeTypeTag,
         bytecode: [UInt8],
-        parameterInfo: [(nameIndex: UInt16, typeTag: BytecodeTypeTag)]
+        parameterInfo: [(nameIndex: UInt16, typeTag: BytecodeTypeTag)],
+        lineTable: [(offset: UInt16, line: UInt16)] = []
     ) {
         self.nameIndex = nameIndex
         self.parameterCount = parameterCount
@@ -198,6 +201,20 @@ public struct BytecodeFunction {
         self.returnTypeTag = returnTypeTag
         self.bytecode = bytecode
         self.parameterInfo = parameterInfo
+        self.lineTable = lineTable
+    }
+
+    /// Look up the source line for a given bytecode offset.
+    public func sourceLine(at offset: Int) -> Int? {
+        var bestLine: UInt16? = nil
+        for entry in lineTable {
+            if entry.offset <= offset {
+                bestLine = entry.line
+            } else {
+                break
+            }
+        }
+        return bestLine.map { Int($0) }
     }
 }
 

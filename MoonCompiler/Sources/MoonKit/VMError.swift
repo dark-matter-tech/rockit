@@ -103,14 +103,19 @@ public enum VMError: Error, CustomStringConvertible {
 public struct StackTraceFrame: CustomStringConvertible {
     public let functionName: String
     public let bytecodeOffset: Int
+    public let sourceLine: Int?
 
-    public init(functionName: String, bytecodeOffset: Int) {
+    public init(functionName: String, bytecodeOffset: Int, sourceLine: Int? = nil) {
         self.functionName = functionName
         self.bytecodeOffset = bytecodeOffset
+        self.sourceLine = sourceLine
     }
 
     public var description: String {
-        "  at \(functionName) [offset 0x\(String(format: "%04X", bytecodeOffset))]"
+        if let line = sourceLine {
+            return "  at \(functionName) (line \(line)) [offset 0x\(String(format: "%04X", bytecodeOffset))]"
+        }
+        return "  at \(functionName) [offset 0x\(String(format: "%04X", bytecodeOffset))]"
     }
 }
 

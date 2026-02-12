@@ -22,6 +22,7 @@ func printUsage() {
         lower <file.moon>     Lower to MIR and dump
         build <file.moon>     Compile to bytecode (.moonb)
         run <file>            Execute a .moon or .moonb file
+        repl                  Start interactive REPL
         version               Print version
 
     OPTIONS:
@@ -340,6 +341,148 @@ func runCommand(file: String, trace: Bool, gcStats: Bool) {
     }
 }
 
+// MARK: - REPL
+
+func replCommand() {
+    print("Moon REPL v\(version)")
+    print("Type expressions or statements. Type :quit to exit.\n")
+
+    // Accumulate top-level declarations (fun, class, etc.)
+    var topDecls = ""
+    // Accumulate statements that go inside main (val/var decls, etc.)
+    var mainBody = ""
+
+    while true {
+        print("moon> ", terminator: "")
+        guard let line = readLine() else { break }
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { continue }
+        if trimmed == ":quit" || trimmed == ":q" { break }
+        if trimmed == ":reset" { topDecls = ""; mainBody = ""; print("State cleared."); continue }
+
+        // Check if this is a top-level declaration (fun, class, etc.)
+        let isTopDecl = trimmed.hasPrefix("fun ") || trimmed.hasPrefix("class ") ||
+                        trimmed.hasPrefix("data ") || trimmed.hasPrefix("sealed ") ||
+                        trimmed.hasPrefix("enum ") || trimmed.hasPrefix("interface ") ||
+                        trimmed.hasPrefix("object ")
+
+        // Multi-line support: if line has unmatched braces, keep reading
+        var fullInput = line
+        var braceCount = 0
+        for ch in fullInput { if ch == "{" { braceCount += 1 } else if ch == "}" { braceCount -= 1 } }
+        while braceCount > 0 {
+            print("  ... ", terminator: "")
+            guard let continuation = readLine() else { break }
+            fullInput += "\n" + continuation
+            for ch in continuation { if ch == "{" { braceCount += 1 } else if ch == "}" { braceCount -= 1 } }
+        }
+
+        let isValVar = trimmed.hasPrefix("val ") || trimmed.hasPrefix("var ")
+
+        // Determine if this looks like a statement keyword (not an expression)
+        let isStatement = trimmed.hasPrefix("println(") || trimmed.hasPrefix("print(") ||
+                          trimmed.hasPrefix("if ") || trimmed.hasPrefix("if(") ||
+                          trimmed.hasPrefix("while ") || trimmed.hasPrefix("while(") ||
+                          trimmed.hasPrefix("for ") || trimmed.hasPrefix("for(") ||
+                          trimmed.hasPrefix("return ") || trimmed.hasPrefix("return\n") ||
+                          trimmed == "return"
+
+        if isTopDecl {
+            // Add declaration to top-level preamble
+            topDecls += fullInput + "\n\n"
+            let source = topDecls + "fun main(): Unit {\n\(mainBody)}\n"
+            let diagnostics = DiagnosticEngine()
+            let lexer = Lexer(source: source, fileName: "<repl>", diagnostics: diagnostics)
+            let tokens = lexer.tokenize()
+            let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+            let ast = parser.parse()
+            let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+            _ = checker.check()
+            if diagnostics.hasErrors {
+                diagnostics.dump()
+                // Undo the addition
+                topDecls = String(topDecls.dropLast(fullInput.count + 2))
+            } else {
+                print("OK")
+            }
+            continue
+        }
+
+        if isValVar {
+            // Accumulate val/var in main body
+            let newBody = mainBody + "  " + fullInput + "\n"
+            let source = topDecls + "fun main(): Unit {\n\(newBody)}\n"
+            let diagnostics = DiagnosticEngine()
+            let lexer = Lexer(source: source, fileName: "<repl>", diagnostics: diagnostics)
+            let tokens = lexer.tokenize()
+            let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+            let ast = parser.parse()
+            let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+            _ = checker.check()
+            if diagnostics.hasErrors {
+                diagnostics.dump()
+            } else {
+                mainBody = newBody
+            }
+            continue
+        }
+
+        // For non-statement expressions, try auto-printing first
+        if !isStatement {
+            let exprSource = topDecls + "fun main(): Unit {\n\(mainBody)  println(toString(\(fullInput)))\n}\n"
+            let exprDiag = DiagnosticEngine()
+            let exprLexer = Lexer(source: exprSource, fileName: "<repl>", diagnostics: exprDiag)
+            let exprTokens = exprLexer.tokenize()
+            let exprParser = Parser(tokens: exprTokens, diagnostics: exprDiag)
+            let exprAST = exprParser.parse()
+            let exprChecker = TypeChecker(ast: exprAST, diagnostics: exprDiag)
+            let exprResult = exprChecker.check()
+
+            if !exprDiag.hasErrors {
+                let lowering = MIRLowering(typeCheckResult: exprResult)
+                let mir = lowering.lower()
+                let optimizer = MIROptimizer()
+                let optimized = optimizer.optimize(mir)
+                let codeGen = CodeGen()
+                let module = codeGen.generate(optimized)
+                let vm = VM(module: module, config: RuntimeConfig())
+                do { try vm.run() } catch {
+                    let st = vm.captureStackTrace(error: error as! VMError)
+                    print(st)
+                }
+                continue
+            }
+        }
+
+        // Fall back to statement compilation
+        let source = topDecls + "fun main(): Unit {\n\(mainBody)  \(fullInput)\n}\n"
+        let diagnostics = DiagnosticEngine()
+        let lexer = Lexer(source: source, fileName: "<repl>", diagnostics: diagnostics)
+        let tokens = lexer.tokenize()
+        let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+        let ast = parser.parse()
+        let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+        let typeResult = checker.check()
+
+        if diagnostics.hasErrors {
+            diagnostics.dump()
+            continue
+        }
+
+        let lowering = MIRLowering(typeCheckResult: typeResult)
+        let mir = lowering.lower()
+        let optimizer = MIROptimizer()
+        let optimized = optimizer.optimize(mir)
+        let codeGen = CodeGen()
+        let module = codeGen.generate(optimized)
+        let vm = VM(module: module, config: RuntimeConfig())
+        do { try vm.run() } catch {
+            let st = vm.captureStackTrace(error: error as! VMError)
+            print(st)
+        }
+    }
+}
+
 // MARK: - Main
 
 let args = CommandLine.arguments
@@ -399,6 +542,9 @@ case "run":
     let trace = args.contains("--trace")
     let gcStats = args.contains("--gc-stats")
     runCommand(file: args[2], trace: trace, gcStats: gcStats)
+
+case "repl":
+    replCommand()
 
 case "version":
     print("moonc \(version)")

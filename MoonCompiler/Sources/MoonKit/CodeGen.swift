@@ -155,7 +155,8 @@ public final class CodeGen {
             registerCount: registerCount,
             returnTypeTag: typeTag(for: function.returnType),
             bytecode: emitter.bytes,
-            parameterInfo: paramInfo
+            parameterInfo: paramInfo,
+            lineTable: []  // Stage 0 MIR doesn't carry source locations
         )
     }
 
@@ -656,6 +657,12 @@ public final class CodeGen {
             emitter.emitUInt32(UInt32(f.bytecode.count))
             for b in f.bytecode {
                 emitter.emitByte(b)
+            }
+            // Line table
+            emitter.emitUInt32(UInt32(f.lineTable.count))
+            for (offset, line) in f.lineTable {
+                emitter.emitUInt16(offset)
+                emitter.emitUInt16(line)
             }
         }
 

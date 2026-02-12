@@ -115,13 +115,25 @@ public final class BytecodeLoader {
             let codeLen = reader.readUInt32()
             let bytecode = reader.readBytes(Int(codeLen))
 
+            // Line table (offset → source line)
+            var lineTable: [(offset: UInt16, line: UInt16)] = []
+            if reader.remaining >= 4 {
+                let lineCount = reader.readUInt32()
+                for _ in 0..<lineCount {
+                    let bOffset = reader.readUInt16()
+                    let bLine = reader.readUInt16()
+                    lineTable.append((bOffset, bLine))
+                }
+            }
+
             functions.append(BytecodeFunction(
                 nameIndex: nameIndex,
                 parameterCount: paramCount,
                 registerCount: regCount,
                 returnTypeTag: retTag,
                 bytecode: bytecode,
-                parameterInfo: paramInfo
+                parameterInfo: paramInfo,
+                lineTable: lineTable
             ))
         }
 
