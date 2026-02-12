@@ -21,7 +21,10 @@ func printUsage() {
         check <file.rok>      Type-check and report diagnostics
         lower <file.rok>      Lower to MIR and dump
         build <file.rok>      Compile to bytecode (.rokb)
+        build-native <file>   Compile to native executable via LLVM
+        emit-llvm <file>      Emit LLVM IR (.ll) for inspection
         run <file>            Execute a .rok or .rokb file
+        run-native <file>     Compile to native and execute
         repl                  Start interactive REPL
         init [name]           Create a new Rockit project
         test [file]           Run tests
@@ -623,6 +626,157 @@ func testCommand(file: String?) {
     if failed > 0 { exit(1) }
 }
 
+// MARK: - Build Native
+
+func buildNativeCommand(file: String, dumpLLVM: Bool) {
+    guard FileManager.default.fileExists(atPath: file) else {
+        print("error: file not found: \(file)")
+        exit(1)
+    }
+
+    guard let source = try? String(contentsOfFile: file, encoding: .utf8) else {
+        print("error: could not read file: \(file)")
+        exit(1)
+    }
+
+    let outputPath: String
+    if file.hasSuffix(".rok") {
+        outputPath = String(file.dropLast(4))
+    } else {
+        outputPath = file + ".native"
+    }
+
+    // Find Runtime/ directory relative to the executable or working directory
+    let runtimeDir = findRuntimeDir()
+
+    do {
+        let result = try LLVMCodeGen.compileToNative(
+            source: source,
+            fileName: file,
+            outputPath: outputPath,
+            runtimeDir: runtimeDir,
+            emitLLVM: false
+        )
+        print("\(file) \u{2192} \(result)")
+        if dumpLLVM {
+            if let llSource = try? String(contentsOfFile: outputPath + ".ll", encoding: .utf8) {
+                print("\n--- LLVM IR ---")
+                print(llSource)
+                print("--- End LLVM IR ---")
+            }
+        }
+        print("OK")
+    } catch {
+        print("error: \(error)")
+        exit(1)
+    }
+}
+
+func emitLLVMCommand(file: String) {
+    guard FileManager.default.fileExists(atPath: file) else {
+        print("error: file not found: \(file)")
+        exit(1)
+    }
+
+    guard let source = try? String(contentsOfFile: file, encoding: .utf8) else {
+        print("error: could not read file: \(file)")
+        exit(1)
+    }
+
+    let diagnostics = DiagnosticEngine()
+    let lexer = Lexer(source: source, fileName: file, diagnostics: diagnostics)
+    let tokens = lexer.tokenize()
+    let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+    let ast = parser.parse()
+    let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+    let typeResult = checker.check()
+
+    if diagnostics.hasErrors {
+        diagnostics.dump()
+        print("\n\(diagnostics.errorCount) error(s)")
+        exit(1)
+    }
+
+    let lowering = MIRLowering(typeCheckResult: typeResult)
+    let unoptimized = lowering.lower()
+    let optimizer = MIROptimizer()
+    let optimized = optimizer.optimize(unoptimized)
+
+    let codeGen = LLVMCodeGen()
+    let llvmIR = codeGen.emit(module: optimized)
+    print(llvmIR)
+}
+
+func runNativeCommand(file: String) {
+    guard FileManager.default.fileExists(atPath: file) else {
+        print("error: file not found: \(file)")
+        exit(1)
+    }
+
+    guard let source = try? String(contentsOfFile: file, encoding: .utf8) else {
+        print("error: could not read file: \(file)")
+        exit(1)
+    }
+
+    let outputPath = NSTemporaryDirectory() + "rockit_native_\(ProcessInfo.processInfo.processIdentifier)"
+    let runtimeDir = findRuntimeDir()
+
+    do {
+        let binary = try LLVMCodeGen.compileToNative(
+            source: source,
+            fileName: file,
+            outputPath: outputPath,
+            runtimeDir: runtimeDir,
+            emitLLVM: false
+        )
+
+        // Execute the native binary
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = Array(CommandLine.arguments.dropFirst(3))  // Forward remaining args
+        try process.run()
+        process.waitUntilExit()
+
+        // Clean up
+        try? FileManager.default.removeItem(atPath: binary)
+        try? FileManager.default.removeItem(atPath: binary + ".ll")
+
+        exit(process.terminationStatus)
+    } catch {
+        print("error: \(error)")
+        exit(1)
+    }
+}
+
+/// Find the Runtime/ directory containing C runtime source files.
+func findRuntimeDir() -> String {
+    let fm = FileManager.default
+
+    // Try relative to current working directory
+    let cwd = fm.currentDirectoryPath
+    let cwdRuntime = cwd + "/Runtime"
+    if fm.fileExists(atPath: cwdRuntime + "/rockit_runtime.c") {
+        return cwdRuntime
+    }
+
+    // Try relative to the executable
+    let execPath = CommandLine.arguments[0]
+    let execDir = (execPath as NSString).deletingLastPathComponent
+    let execRuntime = execDir + "/../Runtime"
+    if fm.fileExists(atPath: execRuntime + "/rockit_runtime.c") {
+        return execRuntime
+    }
+
+    // Try the project source tree (common during development)
+    let devRuntime = execDir + "/../../Runtime"
+    if fm.fileExists(atPath: devRuntime + "/rockit_runtime.c") {
+        return devRuntime
+    }
+
+    // Fallback: assume cwd
+    return cwdRuntime
+}
+
 // MARK: - Main
 
 let args = CommandLine.arguments
@@ -673,6 +827,28 @@ case "build":
     }
     let dumpBytecode = args.contains("--dump-bytecode")
     buildCommand(file: args[2], dumpBytecode: dumpBytecode)
+
+case "build-native":
+    guard args.count >= 3 else {
+        print("error: build-native requires a file argument")
+        exit(1)
+    }
+    let dumpLLVM = args.contains("--dump-llvm")
+    buildNativeCommand(file: args[2], dumpLLVM: dumpLLVM)
+
+case "emit-llvm":
+    guard args.count >= 3 else {
+        print("error: emit-llvm requires a file argument")
+        exit(1)
+    }
+    emitLLVMCommand(file: args[2])
+
+case "run-native":
+    guard args.count >= 3 else {
+        print("error: run-native requires a file argument")
+        exit(1)
+    }
+    runNativeCommand(file: args[2])
 
 case "run":
     guard args.count >= 3 else {

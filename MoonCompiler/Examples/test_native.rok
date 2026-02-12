@@ -1,0 +1,8 @@
+// test_native.rok — Minimal test for native codegen
+
+fun main(): Unit {
+    val a: Int = 40
+    val b: Int = 2
+    val result: Int = a + b
+    println(result)
+}
