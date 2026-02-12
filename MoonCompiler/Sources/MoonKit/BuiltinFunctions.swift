@@ -279,6 +279,31 @@ public final class BuiltinRegistry {
             }
         }
 
+        // Process
+        register(name: "processArgs") { _ in
+            // Returns args as a null-separated string for now.
+            // Will return a List once heap-aware version is wired up.
+            let args = CommandLine.arguments
+            return .string(args.joined(separator: "\0"))
+        }
+
+        register(name: "processExit") { args in
+            guard case .int(let code) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "processExit")
+            }
+            exit(Int32(code))
+        }
+
+        register(name: "getEnv") { args in
+            guard case .string(let name) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "getEnv")
+            }
+            if let value = ProcessInfo.processInfo.environment[name] {
+                return .string(value)
+            }
+            return .null
+        }
+
         // Math
         register(name: "abs") { args in
             switch args.first {
@@ -329,6 +354,7 @@ public final class BuiltinRegistry {
         registerListBuiltins(heap: heap, arc: arc)
         registerHashMapBuiltins(heap: heap, arc: arc)
         registerHeapAwareStringBuiltins(heap: heap)
+        registerProcessBuiltins(heap: heap)
     }
 
     // MARK: List Builtins
@@ -574,6 +600,17 @@ public final class BuiltinRegistry {
     }
 
     // MARK: Heap-Aware String Builtins
+
+    private func registerProcessBuiltins(heap: Heap) {
+        // Override the simple processArgs with a heap-aware version that returns a List
+        register(name: "processArgs") { _ in
+            let args = CommandLine.arguments
+            let listId = heap.allocate(typeName: "List")
+            let listObj = try heap.get(listId)
+            listObj.listStorage = args.map { .string($0) }
+            return .objectRef(listId)
+        }
+    }
 
     private func registerHeapAwareStringBuiltins(heap: Heap) {
         register(name: "stringSplit") { args in

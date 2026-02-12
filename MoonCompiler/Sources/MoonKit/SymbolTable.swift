@@ -195,9 +195,30 @@ public final class SymbolTable {
 
         // Built-in functions
         let builtinFunctions: [(String, Type)] = [
-            ("println", .function(parameterTypes: [.string], returnType: .unit)),
-            ("print",   .function(parameterTypes: [.string], returnType: .unit)),
+            // Output / Input
+            ("println",  .function(parameterTypes: [.string], returnType: .unit)),
+            ("print",    .function(parameterTypes: [.string], returnType: .unit)),
             ("readLine", .function(parameterTypes: [], returnType: .nullable(.string))),
+
+            // String conversion
+            ("toString",      .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .string)),
+            ("intToString",   .function(parameterTypes: [.int], returnType: .string)),
+            ("floatToString", .function(parameterTypes: [.float64], returnType: .string)),
+
+            // Existing string ops (registered in runtime but missing from type checker)
+            ("stringLength",    .function(parameterTypes: [.string], returnType: .int)),
+            ("stringSubstring", .function(parameterTypes: [.string, .int, .int], returnType: .string)),
+
+            // Math
+            ("abs", .function(parameterTypes: [.int], returnType: .int)),
+            ("min", .function(parameterTypes: [.int, .int], returnType: .int)),
+            ("max", .function(parameterTypes: [.int, .int], returnType: .int)),
+
+            // Diagnostics
+            ("panic",  .function(parameterTypes: [], returnType: .nothing)),
+            ("typeOf", .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .string)),
+
+            // Collection constructors
             ("listOf",  .function(parameterTypes: [], returnType: .classType(name: "List", typeArguments: []))),
             ("mapOf",   .function(parameterTypes: [], returnType: .classType(name: "Map", typeArguments: []))),
             ("setOf",   .function(parameterTypes: [], returnType: .classType(name: "Set", typeArguments: []))),
@@ -285,6 +306,18 @@ public final class SymbolTable {
         ]
 
         for (name, type) in stringBuiltins {
+            globalScope.define(Symbol(name: name, type: type, kind: .function))
+        }
+
+        // Process builtins
+        let processBuiltins: [(String, Type)] = [
+            ("processArgs", .function(parameterTypes: [],
+                                      returnType: .classType(name: "List", typeArguments: []))),
+            ("processExit", .function(parameterTypes: [.int], returnType: .nothing)),
+            ("getEnv",      .function(parameterTypes: [.string], returnType: .nullable(.string))),
+        ]
+
+        for (name, type) in processBuiltins {
             globalScope.define(Symbol(name: name, type: type, kind: .function))
         }
 

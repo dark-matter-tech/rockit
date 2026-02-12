@@ -477,13 +477,25 @@ public final class VM {
 
     /// Release all objectRef values in a frame's registers when it's being popped.
     /// Optionally skip one register (the return value being transferred to caller).
+    /// Deduplicates objectRefs so each unique object is released only once,
+    /// since register copies (store/load) don't retain.
     private func releaseFrame(_ frameIdx: Int, exceptRegister: Int?) {
         let registers = callStack[frameIdx].registers
+        // Collect the objectID being returned so we never release it
+        var excludedObjects = Set<Int>()
+        if let er = exceptRegister, case .objectRef(let id) = registers[er] {
+            excludedObjects.insert(id.index)
+        }
+        var releasedObjects = Set<Int>()
         for (i, value) in registers.enumerated() {
             if i == exceptRegister { continue }
-            arc.release(value)  // No-op for non-objectRef values
+            if case .objectRef(let id) = value {
+                if excludedObjects.contains(id.index) { continue }
+                if releasedObjects.contains(id.index) { continue }
+                releasedObjects.insert(id.index)
+            }
+            arc.release(value)
         }
-        // Trigger cycle detection if suspect buffer is large enough
         arc.collectCyclesIfNeeded()
     }
 
