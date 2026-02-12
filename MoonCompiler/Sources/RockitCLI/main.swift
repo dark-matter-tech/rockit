@@ -774,6 +774,12 @@ func findRuntimeDir() -> String {
         return devRuntime
     }
 
+    // Try installed location (/usr/local/lib/rockit/runtime/)
+    let installedRuntime = execDir + "/../lib/rockit/runtime"
+    if fm.fileExists(atPath: installedRuntime + "/rockit_runtime.c") {
+        return installedRuntime
+    }
+
     // Fallback: assume cwd
     return cwdRuntime
 }
