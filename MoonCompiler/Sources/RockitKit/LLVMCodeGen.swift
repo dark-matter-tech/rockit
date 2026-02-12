@@ -39,6 +39,8 @@ public final class LLVMCodeGen {
     private var typeNameCounter: Int = 0
     /// Map from catch block label → exception dest temp name.
     private var catchBlocks: [String: String] = [:]
+    /// Track all external call signatures: funcName → (returnType, [paramTypes])
+    private var calledExternals: [String: (ret: String, params: [String])] = [:]
 
     public init() {}
 
@@ -112,12 +114,34 @@ public final class LLVMCodeGen {
             lines.append("")
         }
 
-        // Emit external declarations
+        // Emit functions first (to discover all external calls)
+        var functionBodies: [String] = []
+        for function in module.functions {
+            functionBodies.append(emitFunction(function))
+            functionBodies.append("")
+        }
+
+        // Emit known external declarations (skip any that are defined in the module)
         collectExternals(module: module)
+        let definedFunctions = Set(module.functions.map { $0.name })
+        var declaredNames: Set<String> = []
         for decl in externalDecls.sorted() {
+            if let atRange = decl.range(of: "@"),
+               let parenRange = decl.range(of: "(", range: atRange.upperBound..<decl.endIndex) {
+                let funcName = String(decl[atRange.upperBound..<parenRange.lowerBound])
+                if definedFunctions.contains(funcName) { continue }
+                declaredNames.insert(funcName)
+            }
             lines.append(decl)
         }
-        if !externalDecls.isEmpty {
+
+        // Auto-declare any called functions that aren't defined or declared yet
+        // Scan emitted function bodies for `call ... @funcName(` patterns
+        let bodyText = functionBodies.joined(separator: "\n")
+        autoDeclareMissingExternals(bodyText: bodyText, definedFunctions: definedFunctions,
+                                     declaredNames: &declaredNames, lines: &lines)
+
+        if !externalDecls.isEmpty || !declaredNames.isEmpty {
             lines.append("")
         }
 
@@ -125,11 +149,8 @@ public final class LLVMCodeGen {
         lines.append("attributes #0 = { returns_twice }")
         lines.append("")
 
-        // Emit functions
-        for function in module.functions {
-            lines.append(emitFunction(function))
-            lines.append("")
-        }
+        // Append function bodies
+        lines.append(contentsOf: functionBodies)
 
         return lines.joined(separator: "\n")
     }
@@ -252,6 +273,94 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare void @rockit_exc_throw(i64)")
         externalDecls.insert("declare i64 @rockit_exc_get()")
         externalDecls.insert("declare i32 @_setjmp(ptr) #0")
+
+        // Builtin wrappers (used by Stage 1 and user programs)
+        // String operations
+        externalDecls.insert("declare ptr @charAt(ptr, i64)")
+        externalDecls.insert("declare i64 @charCodeAt(ptr, i64)")
+        externalDecls.insert("declare i1 @startsWith(ptr, ptr)")
+        externalDecls.insert("declare i1 @endsWith(ptr, ptr)")
+        externalDecls.insert("declare ptr @stringConcat(ptr, ptr)")
+        externalDecls.insert("declare i64 @stringIndexOf(ptr, ptr)")
+        externalDecls.insert("declare i64 @stringLength(ptr)")
+        externalDecls.insert("declare ptr @stringTrim(ptr)")
+        externalDecls.insert("declare ptr @substring(ptr, i64, i64)")
+        externalDecls.insert("declare i64 @toInt(i64)")
+        // Character checks
+        externalDecls.insert("declare i1 @isDigit(ptr)")
+        externalDecls.insert("declare i1 @isLetter(ptr)")
+        externalDecls.insert("declare i1 @isLetterOrDigit(ptr)")
+        // Type checks
+        externalDecls.insert("declare i1 @isMap(i64)")
+        // List operations (i64 wrapper API)
+        externalDecls.insert("declare i64 @listCreate()")
+        externalDecls.insert("declare void @listAppend(i64, i64)")
+        externalDecls.insert("declare i64 @listGet(i64, i64)")
+        externalDecls.insert("declare void @listSet(i64, i64, i64)")
+        externalDecls.insert("declare i64 @listSize(i64)")
+        externalDecls.insert("declare i1 @listContains(i64, i64)")
+        externalDecls.insert("declare void @listRemoveAt(i64, i64)")
+        // Map operations (string-keyed wrapper API)
+        externalDecls.insert("declare i64 @mapCreate()")
+        externalDecls.insert("declare i64 @mapPut(i64, ptr, i64)")
+        externalDecls.insert("declare i64 @mapGet(i64, ptr)")
+        externalDecls.insert("declare i64 @mapKeys(i64)")
+        // I/O operations
+        externalDecls.insert("declare ptr @readLine()")
+        externalDecls.insert("declare i1 @fileExists(ptr)")
+        externalDecls.insert("declare ptr @fileRead(ptr)")
+        externalDecls.insert("declare i64 @fileWriteBytes(ptr, i64)")
+        // Process
+        externalDecls.insert("declare i64 @processArgs()")
+        // Meta
+        externalDecls.insert("declare i64 @evalRockit(ptr)")
+        // Polymorphic toString (handles both raw ints and string pointers)
+        externalDecls.insert("declare ptr @toString(i64)")
+        // String comparison (content-based, not pointer-based)
+        externalDecls.insert("declare i1 @rockit_string_eq(i64, i64)")
+        externalDecls.insert("declare i1 @rockit_string_neq(i64, i64)")
+        // Process args initialization
+        externalDecls.insert("declare void @rockit_set_args(i32, ptr)")
+    }
+
+    /// Scan emitted IR for `call` instructions and auto-declare any functions
+    /// that are not defined in the module and not already declared.
+    private func autoDeclareMissingExternals(bodyText: String, definedFunctions: Set<String>,
+                                              declaredNames: inout Set<String>, lines: inout [String]) {
+        // Regex-like scan for: call <retType> @funcName(<args>)
+        // We look for patterns: "call <type> @<name>(" and "call void @<name>("
+        let scanner = bodyText as NSString
+        let pattern = try! NSRegularExpression(pattern: #"call\s+(\w+)\s+@(\w+)\(([^)]*)\)"#)
+        let matches = pattern.matches(in: bodyText, range: NSRange(location: 0, length: scanner.length))
+
+        for match in matches {
+            let retType = scanner.substring(with: match.range(at: 1))
+            let funcName = scanner.substring(with: match.range(at: 2))
+            let argsStr = scanner.substring(with: match.range(at: 3))
+
+            // Skip if already defined or declared
+            if definedFunctions.contains(funcName) { continue }
+            if declaredNames.contains(funcName) { continue }
+
+            // Parse parameter types from the call arguments
+            var paramTypes: [String] = []
+            if !argsStr.isEmpty {
+                let args = argsStr.components(separatedBy: ",")
+                for arg in args {
+                    let trimmed = arg.trimmingCharacters(in: .whitespaces)
+                    // Format is "type value" — extract the type
+                    if let spaceIdx = trimmed.firstIndex(of: " ") {
+                        let type = String(trimmed[trimmed.startIndex..<spaceIdx])
+                        paramTypes.append(type)
+                    }
+                }
+            }
+
+            let params = paramTypes.joined(separator: ", ")
+            let decl = "declare \(retType) @\(funcName)(\(params))"
+            lines.append(decl)
+            declaredNames.insert(funcName)
+        }
     }
 
     // MARK: - Function Emission
@@ -271,7 +380,7 @@ public final class LLVMCodeGen {
         let className: String? = isMethod ? String(function.name.split(separator: ".").first!) : nil
         currentClassName = className
 
-        // For the "main" function, use C ABI: i32 @main()
+        // For the "main" function, use C ABI: i32 @main(i32 %argc, ptr %argv)
         let isMain = function.name == "main"
         isMainFunction = isMain
 
@@ -310,7 +419,12 @@ public final class LLVMCodeGen {
             paramMap[name] = paramLLVM
             paramList.append("\(lt) \(paramLLVM)")
         }
-        let params = paramList.joined(separator: ", ")
+        let params: String
+        if isMain {
+            params = "i32 %argc, ptr %argv"
+        } else {
+            params = paramList.joined(separator: ", ")
+        }
 
         lines.append("define \(retType) @\(funcName)(\(params)) {")
 
@@ -353,6 +467,10 @@ public final class LLVMCodeGen {
                 registerMap[temp] = allocaName
                 registerTypes[temp] = lt
                 lines.append("  \(allocaName) = alloca \(lt)")
+            }
+            // Initialize process args (main only)
+            if isMain {
+                lines.append("  call void @rockit_set_args(i32 %argc, ptr %argv)")
             }
             // Jump to first MIR block
             lines.append("  br label %\(firstBlockLabel)")
@@ -604,10 +722,9 @@ public final class LLVMCodeGen {
                     tempTypes[d] = "ptr"
                 case .alloc(let d, let type):
                     let lt = llvmType(type)
-                    // Don't assign void — we'll infer from stores in pass 2
-                    if lt != "void" {
-                        tempTypes[d] = lt
-                    }
+                    // For void (Unit) allocas, default to i64 so they always get allocated.
+                    // The actual type may be refined by pass 2 store/load propagation.
+                    tempTypes[d] = lt != "void" ? lt : "i64"
                 case .load(let d, let src):
                     // Inherit type from source
                     if src.hasPrefix("global."), function.name.contains(".") {
@@ -1070,6 +1187,48 @@ public final class LLVMCodeGen {
         _ intCmp: String, _ floatCmp: String,
         dest: String, lhs: String, rhs: String, type: MIRType
     ) -> [String] {
+        // For string equality/inequality, use content-based comparison
+        let isStringType: Bool
+        if case .string = type {
+            isStringType = true
+        } else {
+            // Also detect string operands by their register type (for Stage 1 where MIR types are .unit)
+            let lhsType = typeOf(lhs)
+            let rhsType = typeOf(rhs)
+            isStringType = (lhsType == "ptr" || rhsType == "ptr") && (intCmp.contains("eq") || intCmp.contains("ne"))
+        }
+
+        if isStringType && (intCmp.contains("eq") || intCmp.contains("ne")) {
+            let tmp1 = nextSSA()
+            let tmp2 = nextSSA()
+            let tmp3 = nextSSA()
+            let isEq = intCmp == "icmp eq"
+            let funcName = isEq ? "@rockit_string_eq" : "@rockit_string_neq"
+            // Load as i64 (string pointers stored as i64 in Stage 1)
+            let lhsType = typeOf(lhs)
+            let rhsType = typeOf(rhs)
+            let lhsLoad = lhsType == "ptr" ? "ptrtoint ptr" : "i64"
+            let rhsLoad = rhsType == "ptr" ? "ptrtoint ptr" : "i64"
+            var lines: [String] = []
+            if lhsType == "ptr" {
+                let ptmp = nextSSA()
+                lines.append("\(ptmp) = load ptr, ptr \(addrOf(lhs))")
+                lines.append("\(tmp1) = ptrtoint ptr \(ptmp) to i64")
+            } else {
+                lines.append("\(tmp1) = load i64, ptr \(addrOf(lhs))")
+            }
+            if rhsType == "ptr" {
+                let ptmp = nextSSA()
+                lines.append("\(ptmp) = load ptr, ptr \(addrOf(rhs))")
+                lines.append("\(tmp2) = ptrtoint ptr \(ptmp) to i64")
+            } else {
+                lines.append("\(tmp2) = load i64, ptr \(addrOf(rhs))")
+            }
+            lines.append("\(tmp3) = call i1 \(funcName)(i64 \(tmp1), i64 \(tmp2))")
+            lines.append(storeToTemp(dest, value: tmp3, type: "i1"))
+            return lines
+        }
+
         let lt = llvmArithType(type)
         let tmp1 = nextSSA()
         let tmp2 = nextSSA()
@@ -1232,9 +1391,11 @@ public final class LLVMCodeGen {
 
         switch argType {
         case "i64":
+            // In Stage 1 code, i64 may actually be a string pointer stored as integer.
+            // Use the runtime's toString which handles both cases.
             return [
                 "\(tmp) = load i64, ptr \(addrOf(arg))",
-                "\(resultTmp) = call ptr @rockit_int_to_string(i64 \(tmp))",
+                "\(resultTmp) = call ptr @toString(i64 \(tmp))",
                 storeToTemp(dest, value: resultTmp, type: "ptr")
             ]
         case "double":

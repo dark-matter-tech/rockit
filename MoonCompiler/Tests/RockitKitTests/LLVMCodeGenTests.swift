@@ -37,7 +37,7 @@ final class LLVMCodeGenTests: XCTestCase {
 
     func testMainFunctionReturnsI32() {
         let ir = emitLLVM("fun main(): Unit { }")
-        XCTAssertTrue(ir.contains("define i32 @main()"), "main should return i32 for C ABI")
+        XCTAssertTrue(ir.contains("define i32 @main(i32 %argc, ptr %argv)"), "main should return i32 with argc/argv")
         XCTAssertTrue(ir.contains("ret i32 0"), "main should return 0")
     }
 
@@ -47,7 +47,7 @@ final class LLVMCodeGenTests: XCTestCase {
         fun main(): Unit { helper() }
         """)
         XCTAssertTrue(ir.contains("define void @helper()"), "helper should return void")
-        XCTAssertTrue(ir.contains("define i32 @main()"), "main should return i32")
+        XCTAssertTrue(ir.contains("define i32 @main(i32 %argc, ptr %argv)"), "main should return i32")
     }
 
     // MARK: - Integer Arithmetic
