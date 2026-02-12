@@ -37,6 +37,8 @@ public final class LLVMCodeGen {
     private var typeNamePool: [String: String] = [:]
     /// Counter for type name constants.
     private var typeNameCounter: Int = 0
+    /// Map from catch block label → exception dest temp name.
+    private var catchBlocks: [String: String] = [:]
 
     public init() {}
 
@@ -118,6 +120,10 @@ public final class LLVMCodeGen {
         if !externalDecls.isEmpty {
             lines.append("")
         }
+
+        // Emit attributes (for setjmp returns_twice)
+        lines.append("attributes #0 = { returns_twice }")
+        lines.append("")
 
         // Emit functions
         for function in module.functions {
@@ -240,6 +246,12 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i1 @rockit_map_contains_key(ptr, i64)")
         externalDecls.insert("declare i64 @rockit_map_size(ptr)")
         externalDecls.insert("declare i1 @rockit_map_is_empty(ptr)")
+        // Exception handling
+        externalDecls.insert("declare ptr @rockit_exc_push()")
+        externalDecls.insert("declare void @rockit_exc_pop()")
+        externalDecls.insert("declare void @rockit_exc_throw(i64)")
+        externalDecls.insert("declare i64 @rockit_exc_get()")
+        externalDecls.insert("declare i32 @_setjmp(ptr) #0")
     }
 
     // MARK: - Function Emission
@@ -346,9 +358,36 @@ public final class LLVMCodeGen {
             lines.append("  br label %\(firstBlockLabel)")
         }
 
+        // Pre-scan for try/catch blocks to record exception destinations
+        catchBlocks = [:]
+        for block in function.blocks {
+            for inst in block.instructions {
+                if case .tryBegin(let catchLabel, let excDest) = inst {
+                    catchBlocks[catchLabel] = excDest
+                }
+            }
+        }
+
         // Emit basic blocks
         for block in function.blocks {
             lines.append("\(llvmLabel(block.label)):")
+
+            // If this is a catch block, inject exception value retrieval
+            // Note: rockit_exc_throw already popped the frame, so no pop here
+            if let excDest = catchBlocks[block.label] {
+                let excRaw = nextSSA()
+                lines.append("  \(excRaw) = call i64 @rockit_exc_get()")
+                // Convert i64 to the exception dest's type
+                let excType = typeOf(excDest)
+                if excType == "ptr" {
+                    let castTmp = nextSSA()
+                    lines.append("  \(castTmp) = inttoptr i64 \(excRaw) to ptr")
+                    lines.append("  " + storeToTemp(excDest, value: castTmp, type: "ptr"))
+                } else {
+                    lines.append("  " + storeToTemp(excDest, value: excRaw, type: "i64"))
+                }
+            }
+
             for inst in block.instructions {
                 let emitted = emitInstruction(inst)
                 for line in emitted {
@@ -923,10 +962,23 @@ public final class LLVMCodeGen {
         case .stringConcat(let dest, let parts):
             return emitStringConcat(dest: dest, parts: parts)
 
-        case .tryBegin:
-            return ["; TODO: tryBegin (Phase 1G)"]
+        case .tryBegin(let catchLabel, _):
+            // Push exception frame, call _setjmp, branch on result
+            let bufTmp = nextSSA()
+            let jmpRet = nextSSA()
+            let caught = nextSSA()
+            let tryBodyLabel = "try.body.\(ssaCounter)"
+            ssaCounter += 1
+            return [
+                "\(bufTmp) = call ptr @rockit_exc_push()",
+                "\(jmpRet) = call i32 @_setjmp(ptr \(bufTmp)) #0",
+                "\(caught) = icmp ne i32 \(jmpRet), 0",
+                "br i1 \(caught), label %\(llvmLabel(catchLabel)), label %\(tryBodyLabel)",
+                "",
+                "\(tryBodyLabel):"
+            ]
         case .tryEnd:
-            return ["; TODO: tryEnd (Phase 1G)"]
+            return ["call void @rockit_exc_pop()"]
         }
     }
 
@@ -967,12 +1019,26 @@ public final class LLVMCodeGen {
                 "br i1 \(tmp), label %\(llvmLabel(thenLabel)), label %\(llvmLabel(elseLabel))"
             ]
 
-        case .throwValue:
-            // TODO: Phase 1G — for now, just trap
-            return [
-                "call void @rockit_panic(ptr @.str.throw)",
-                "unreachable"
+        case .throwValue(let val):
+            // Convert the thrown value to i64 and call rockit_exc_throw
+            let valType = typeOf(val)
+            let valTmp = nextSSA()
+            var lines: [String] = [
+                "\(valTmp) = load \(valType), ptr \(addrOf(val))"
             ]
+            if valType == "ptr" {
+                let castTmp = nextSSA()
+                lines.append("\(castTmp) = ptrtoint ptr \(valTmp) to i64")
+                lines.append("call void @rockit_exc_throw(i64 \(castTmp))")
+            } else if valType == "i1" {
+                let extTmp = nextSSA()
+                lines.append("\(extTmp) = zext i1 \(valTmp) to i64")
+                lines.append("call void @rockit_exc_throw(i64 \(extTmp))")
+            } else {
+                lines.append("call void @rockit_exc_throw(i64 \(valTmp))")
+            }
+            lines.append("unreachable")
+            return lines
 
         case .unreachable:
             return ["unreachable"]

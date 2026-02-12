@@ -111,6 +111,17 @@ RockitString* rockit_int_to_string(int64_t value);
 RockitString* rockit_float_to_string(double value);
 RockitString* rockit_bool_to_string(int8_t value);
 
+// ── Exception Handling (setjmp/longjmp) ─────────────────────────────────────
+
+#include <setjmp.h>
+
+#define ROCKIT_MAX_EXC_DEPTH 64
+
+void* rockit_exc_push(void);       // Push frame, return jmp_buf pointer
+void  rockit_exc_pop(void);        // Pop the current exception frame
+void  rockit_exc_throw(int64_t value);  // Store value + longjmp
+int64_t rockit_exc_get(void);      // Get the thrown exception value
+
 // ── Process ─────────────────────────────────────────────────────────────────
 
 void rockit_panic(const char* message);

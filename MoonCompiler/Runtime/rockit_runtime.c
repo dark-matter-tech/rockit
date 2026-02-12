@@ -309,6 +309,39 @@ RockitString* rockit_bool_to_string(int8_t value) {
     return rockit_string_new(value ? "true" : "false");
 }
 
+// ── Exception Handling ──────────────────────────────────────────────────────
+
+static jmp_buf rockit_exc_bufs[ROCKIT_MAX_EXC_DEPTH];
+static int64_t rockit_exc_values[ROCKIT_MAX_EXC_DEPTH];
+static int32_t rockit_exc_depth = 0;
+
+void* rockit_exc_push(void) {
+    if (rockit_exc_depth >= ROCKIT_MAX_EXC_DEPTH) {
+        rockit_panic("try nesting too deep");
+    }
+    return (void*)&rockit_exc_bufs[rockit_exc_depth++];
+}
+
+void rockit_exc_pop(void) {
+    if (rockit_exc_depth > 0) rockit_exc_depth--;
+}
+
+void rockit_exc_throw(int64_t value) {
+    if (rockit_exc_depth <= 0) {
+        // Uncaught exception — panic with a message
+        fprintf(stderr, "PANIC: uncaught exception\n");
+        exit(1);
+    }
+    int32_t idx = --rockit_exc_depth;
+    rockit_exc_values[idx] = value;
+    longjmp(rockit_exc_bufs[idx], 1);
+}
+
+int64_t rockit_exc_get(void) {
+    // After throw, depth was decremented, so the value is at current depth
+    return rockit_exc_values[rockit_exc_depth];
+}
+
 // ── Process ─────────────────────────────────────────────────────────────────
 
 void rockit_panic(const char* message) {

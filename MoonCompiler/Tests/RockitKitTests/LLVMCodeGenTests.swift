@@ -380,4 +380,50 @@ final class LLVMCodeGenTests: XCTestCase {
         XCTAssertTrue(ir.contains("inttoptr i64"), "Should convert i64 back to ptr for retrieval")
         XCTAssertTrue(ir.contains("rockit_println_string"), "Should print as string")
     }
+
+    // MARK: - Exception Handling (Phase 1G)
+
+    func testTryCatch() {
+        let ir = emitLLVM("""
+        fun main(): Unit {
+            try {
+                throw "error"
+            } catch (e: String) {
+                println(e)
+            }
+        }
+        """)
+        XCTAssertTrue(ir.contains("rockit_exc_push"), "Should push exception frame")
+        XCTAssertTrue(ir.contains("_setjmp"), "Should call _setjmp")
+        XCTAssertTrue(ir.contains("rockit_exc_throw"), "Should call throw")
+        XCTAssertTrue(ir.contains("rockit_exc_get"), "Should get exception value in catch")
+    }
+
+    func testTryEndPops() {
+        let ir = emitLLVM("""
+        fun main(): Unit {
+            try {
+                println(42)
+            } catch (e: String) {
+                println(e)
+            }
+            println("done")
+        }
+        """)
+        XCTAssertTrue(ir.contains("rockit_exc_pop"), "Should pop frame on normal path")
+    }
+
+    // MARK: - Collections (Phase 1F)
+
+    func testListOf() {
+        let ir = emitLLVM("""
+        fun main(): Unit {
+            val nums = listOf(1, 2, 3)
+            println(nums.size())
+        }
+        """)
+        XCTAssertTrue(ir.contains("rockit_list_create"), "Should create list")
+        XCTAssertTrue(ir.contains("rockit_list_append"), "Should append elements")
+        XCTAssertTrue(ir.contains("rockit_list_size"), "Should call size")
+    }
 }
