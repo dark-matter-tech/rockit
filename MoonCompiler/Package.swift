@@ -10,7 +10,7 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "command", targets: ["RockitCLI"]),
+        .executable(name: "rockit", targets: ["RockitCLI"]),
         .library(name: "RockitKit", targets: ["RockitKit"]),
     ],
     targets: [

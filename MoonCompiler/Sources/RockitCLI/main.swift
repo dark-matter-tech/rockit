@@ -9,25 +9,25 @@ let version = "0.1.0-alpha"
 
 func printUsage() {
     print("""
-    command \(version) — Rockit Language Compiler
+    rockit \(version) — Rockit Language Compiler
     Dark Matter Tech
 
     USAGE:
-        command <subcommand> [options] <file>
+        rockit <subcommand> [options] <file>
 
     COMMANDS:
+        run <file>            Execute a .rok or .rokb file
+        build <file.rok>      Compile to bytecode (.rokb)
+        build-native <file>   Compile to native executable via LLVM
+        run-native <file>     Compile to native and execute
+        emit-llvm <file>      Emit LLVM IR (.ll) for inspection
+        launch                Start interactive REPL
+        init [name]           Create a new Rockit project
+        test [file]           Run tests
         lex <file.rok>        Tokenize and dump tokens
         parse <file.rok>      Parse and dump AST
         check <file.rok>      Type-check and report diagnostics
         lower <file.rok>      Lower to MIR and dump
-        build <file.rok>      Compile to bytecode (.rokb)
-        build-native <file>   Compile to native executable via LLVM
-        emit-llvm <file>      Emit LLVM IR (.ll) for inspection
-        run <file>            Execute a .rok or .rokb file
-        run-native <file>     Compile to native and execute
-        repl                  Start interactive REPL
-        init [name]           Create a new Rockit project
-        test [file]           Run tests
         version               Print version
 
     OPTIONS:
@@ -37,6 +37,7 @@ func printUsage() {
         --dump-mir            Show optimized MIR (with lower)
         --dump-mir-unoptimized Show MIR before optimization
         --dump-bytecode       Show disassembled bytecode (with build)
+        --dump-llvm           Show LLVM IR (with build-native)
         --trace               Show instruction-level execution trace (with run)
         --gc-stats            Show ARC/memory statistics (with run)
         --no-color            Disable colored output
@@ -540,7 +541,7 @@ func initCommand(name: String) {
         print("  \(name)/tests/test_main.rok")
         print("\nGet started:")
         print("  cd \(name)")
-        print("  command run src/main.rok")
+        print("  rockit run src/main.rok")
     } catch {
         print("error: could not create project: \(error)")
         exit(1)
@@ -859,7 +860,7 @@ case "run":
     let gcStats = args.contains("--gc-stats")
     runCommand(file: args[2], trace: trace, gcStats: gcStats)
 
-case "repl":
+case "launch", "repl":
     replCommand()
 
 case "init":
@@ -871,7 +872,7 @@ case "test":
     testCommand(file: file)
 
 case "version":
-    print("command \(version)")
+    print("rockit \(version)")
 
 case "--help", "-h":
     printUsage()
