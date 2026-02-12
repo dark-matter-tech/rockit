@@ -2152,6 +2152,7 @@ fun makeCompiler(): Map {
     mapPut(c, "functions", listCreate())    // compiled functions
     mapPut(c, "types", listCreate())        // class type records
     mapPut(c, "classNames", mapCreate())   // className -> true (set)
+    mapPut(c, "enumNames", mapCreate())   // enumName -> list of entry names
     mapPut(c, "errors", listCreate())
     return c
 }
@@ -2456,6 +2457,132 @@ fun emitVcall(fs: Map, dest: Int, objReg: Int, methodName: String, args: List): 
 }
 
 // ---------------------------------------------------------------------------
+// String interpolation helper
+// ---------------------------------------------------------------------------
+
+fun isIdentCodePoint(code: Int): Bool {
+    // a-z, A-Z, 0-9, _
+    if (code >= 97 && code <= 122) { return true }
+    if (code >= 65 && code <= 90) { return true }
+    if (code >= 48 && code <= 57) { return true }
+    if (code == 95) { return true }
+    return false
+}
+
+fun compileStringInterp(fs: Map, raw: String): Int {
+    val parts = listCreate()  // [{type:"lit"/"expr", value:"..."}]
+    val len = stringLength(raw)
+    var i: Int = 0
+    var current: String = ""
+
+    while (i < len) {
+        val ch = charAt(raw, i)
+        if (ch == "$" && i + 1 < len) {
+            val next = charAt(raw, i + 1)
+            if (next == "{") {
+                // Save literal part
+                if (stringLength(current) > 0) {
+                    val p = mapCreate()
+                    mapPut(p, "type", "lit")
+                    mapPut(p, "value", current)
+                    listAppend(parts, p)
+                    current = ""
+                }
+                // Extract expression text
+                i = i + 2
+                var expr: String = ""
+                var depth: Int = 1
+                while (i < len && depth > 0) {
+                    val ec = charAt(raw, i)
+                    if (ec == "{") { depth = depth + 1 }
+                    if (ec == "}") { depth = depth - 1 }
+                    if (depth > 0) {
+                        expr = stringConcat(expr, ec)
+                    }
+                    i = i + 1
+                }
+                val p = mapCreate()
+                mapPut(p, "type", "expr")
+                mapPut(p, "value", expr)
+                listAppend(parts, p)
+            } else {
+                // $identifier
+                if (stringLength(current) > 0) {
+                    val p = mapCreate()
+                    mapPut(p, "type", "lit")
+                    mapPut(p, "value", current)
+                    listAppend(parts, p)
+                    current = ""
+                }
+                i = i + 1
+                var ident: String = ""
+                while (i < len && isIdentCodePoint(charCodeAt(raw, i))) {
+                    ident = stringConcat(ident, charAt(raw, i))
+                    i = i + 1
+                }
+                val p = mapCreate()
+                mapPut(p, "type", "expr")
+                mapPut(p, "value", ident)
+                listAppend(parts, p)
+            }
+        } else {
+            current = stringConcat(current, ch)
+            i = i + 1
+        }
+    }
+    if (stringLength(current) > 0) {
+        val p = mapCreate()
+        mapPut(p, "type", "lit")
+        mapPut(p, "value", current)
+        listAppend(parts, p)
+    }
+
+    // Generate code: concatenate all parts
+    var resultReg: Int = -1
+    var pi: Int = 0
+    while (pi < listSize(parts)) {
+        val part = listGet(parts, pi)
+        val ptype = toString(mapGet(part, "type"))
+        val pvalue = toString(mapGet(part, "value"))
+        var partReg: Int = 0
+
+        if (ptype == "lit") {
+            partReg = allocReg(fs)
+            emitConstString(fs, partReg, pvalue)
+        } else {
+            // Expression: tokenize, parse, and compile
+            val exprTokens = tokenize(pvalue)
+            val exprParser = makeParser(exprTokens)
+            val exprNode = parseExpression(exprParser, 0)
+            val valueReg = compileExpr(fs, exprNode)
+            // toString the value
+            val toStrArgs = listCreate()
+            listAppend(toStrArgs, valueReg)
+            partReg = allocReg(fs)
+            emitCall(fs, partReg, "toString", toStrArgs)
+        }
+
+        if (resultReg == -1) {
+            resultReg = partReg
+        } else {
+            val concatArgs = listCreate()
+            listAppend(concatArgs, resultReg)
+            listAppend(concatArgs, partReg)
+            val newResult = allocReg(fs)
+            emitCall(fs, newResult, "stringConcat", concatArgs)
+            resultReg = newResult
+        }
+        pi = pi + 1
+    }
+
+    if (resultReg == -1) {
+        resultReg = allocReg(fs)
+        emitConstString(fs, resultReg, "")
+    }
+    return resultReg
+}
+
+// ---------------------------------------------------------------------------
 // Expression compilation — returns the register holding the result
 // ---------------------------------------------------------------------------
 
@@ -2477,8 +2604,13 @@ fun compileExpr(fs: Map, node: Map): Int {
     }
 
     if (kind == "stringLit") {
+        val rawStr = toString(mapGet(node, "value"))
+        // Check for string interpolation
+        if (stringIndexOf(rawStr, "$") >= 0) {
+            return compileStringInterp(fs, rawStr)
+        }
         val dest = allocReg(fs)
-        emitConstString(fs, dest, toString(mapGet(node, "value")))
+        emitConstString(fs, dest, rawStr)
         return dest
     }
 
@@ -2528,8 +2660,21 @@ fun compileExpr(fs: Map, node: Map): Int {
     }
 
     if (kind == "member") {
-        val objReg = compileExpr(fs, mapGet(node, "object"))
+        val obj = mapGet(node, "object")
         val fieldName = toString(mapGet(node, "name"))
+        // Check if this is an enum member access: EnumName.ENTRY
+        val objKind = toString(mapGet(obj, "kind"))
+        if (objKind == "ident") {
+            val objName = toString(mapGet(obj, "name"))
+            val enumEntries = mapGet(mapGet(mapGet(fs, "compiler"), "enumNames"), objName)
+            if (enumEntries != null) {
+                // Enum access → emit constant string "EnumName.ENTRY"
+                val dest = allocReg(fs)
+                emitConstString(fs, dest, stringConcat(objName, stringConcat(".", fieldName)))
+                return dest
+            }
+        }
+        val objReg = compileExpr(fs, obj)
         val dest = allocReg(fs)
         emitGetField(fs, dest, objReg, fieldName)
         return dest
@@ -3296,6 +3441,25 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
 }
 
 // ---------------------------------------------------------------------------
+// Enum compilation (simplified: entries are string constants)
+// ---------------------------------------------------------------------------
+
+fun compileEnumDecl(compiler: Map, decl: Map): Unit {
+    val enumName = toString(mapGet(decl, "name"))
+    val entries = mapGet(decl, "entries")
+    val entryNames = listCreate()
+    if (entries != null) {
+        var i: Int = 0
+        while (i < listSize(entries)) {
+            val entry = listGet(entries, i)
+            listAppend(entryNames, toString(mapGet(entry, "name")))
+            i = i + 1
+        }
+    }
+    mapPut(mapGet(compiler, "enumNames"), enumName, entryNames)
+}
+
+// ---------------------------------------------------------------------------
 // Binary serialization (.moonb format)
 // ---------------------------------------------------------------------------
 
@@ -3454,7 +3618,7 @@ fun compileProgram(ast: Map): Map {
     val compiler = makeCompiler()
     val decls = mapGet(ast, "decls")
 
-    // Pass 1: Register all class names (for constructor detection)
+    // Pass 1: Register all class and enum names
     var i: Int = 0
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
@@ -3462,6 +3626,9 @@ fun compileProgram(ast: Map): Map {
         if (kind == "classDecl") {
             val cname = toString(mapGet(decl, "name"))
             mapPut(mapGet(compiler, "classNames"), cname, true)
+        }
+        if (kind == "enumDecl") {
+            compileEnumDecl(compiler, decl)
         }
         i = i + 1
     }
