@@ -17,6 +17,9 @@ public final class MIRLowering {
     /// The current class name (for method name mangling)
     private var currentClassName: String?
 
+    /// Stack of (continueLabel, breakLabel) for loop break/continue support
+    private var loopStack: [(continueLabel: String, breakLabel: String)] = []
+
     /// Accumulated module components
     private var functions: [MIRFunction] = []
     private var globals: [MIRGlobal] = []
@@ -406,9 +409,15 @@ public final class MIRLowering {
             let _ = lowerExpression(expr)
             builder.terminate(.unreachable)
 
-        case .breakStmt, .continueStmt:
-            // Stage 0: break/continue not fully modeled in MIR
-            break
+        case .breakStmt:
+            if let loop = loopStack.last {
+                builder.terminate(.jump(loop.breakLabel))
+            }
+
+        case .continueStmt:
+            if let loop = loopStack.last {
+                builder.terminate(.jump(loop.continueLabel))
+            }
 
         case .declaration(let decl):
             lowerDeclaration(decl)
@@ -487,6 +496,8 @@ public final class MIRLowering {
         let bodyLabel = builder.newBlockLabel("while.body")
         let exitLabel = builder.newBlockLabel("while.exit")
 
+        loopStack.append((continueLabel: headerLabel, breakLabel: exitLabel))
+
         builder.terminate(.jump(headerLabel))
 
         // Header: evaluate condition
@@ -501,6 +512,8 @@ public final class MIRLowering {
             builder.terminate(.jump(headerLabel))
         }
 
+        loopStack.removeLast()
+
         // Exit
         builder.startBlock(label: exitLabel)
     }
@@ -511,6 +524,8 @@ public final class MIRLowering {
         let bodyLabel = builder.newBlockLabel("dowhile.body")
         let condLabel = builder.newBlockLabel("dowhile.cond")
         let exitLabel = builder.newBlockLabel("dowhile.exit")
+
+        loopStack.append((continueLabel: condLabel, breakLabel: exitLabel))
 
         builder.terminate(.jump(bodyLabel))
 
@@ -525,6 +540,8 @@ public final class MIRLowering {
         builder.startBlock(label: condLabel)
         let cond = lowerExpression(d.condition)
         builder.terminate(.branch(condition: cond, thenLabel: bodyLabel, elseLabel: exitLabel))
+
+        loopStack.removeLast()
 
         // Exit
         builder.startBlock(label: exitLabel)
@@ -543,6 +560,8 @@ public final class MIRLowering {
         let headerLabel = builder.newBlockLabel("for.header")
         let bodyLabel = builder.newBlockLabel("for.body")
         let exitLabel = builder.newBlockLabel("for.exit")
+
+        loopStack.append((continueLabel: headerLabel, breakLabel: exitLabel))
 
         let iterable = lowerExpression(f.iterable)
         let iterator = builder.newTemp()
@@ -568,6 +587,8 @@ public final class MIRLowering {
             builder.terminate(.jump(headerLabel))
         }
 
+        loopStack.removeLast()
+
         builder.startBlock(label: exitLabel)
     }
 
@@ -576,7 +597,11 @@ public final class MIRLowering {
     private func lowerForLoopRange(variable: String, start: Expression, end: Expression, inclusive: Bool, body: Block) {
         let headerLabel = builder.newBlockLabel("for.header")
         let bodyLabel = builder.newBlockLabel("for.body")
+        let incrLabel = builder.newBlockLabel("for.incr")
         let exitLabel = builder.newBlockLabel("for.exit")
+
+        // continue jumps to increment (not header) so counter advances
+        loopStack.append((continueLabel: incrLabel, breakLabel: exitLabel))
 
         // Lower start and end expressions
         let startTemp = lowerExpression(start)
@@ -600,19 +625,23 @@ public final class MIRLowering {
         }
         builder.terminate(.branch(condition: cond, thenLabel: bodyLabel, elseLabel: exitLabel))
 
-        // Body: execute body, increment loop var, jump back
+        // Body
         builder.startBlock(label: bodyLabel)
         lowerBlock(body)
-
         if !builder.isTerminated {
-            // Increment: load current, add 1, store back
-            let cur = builder.emitLoad(src: loopVarSlot)
-            let one = builder.emitConstInt(1)
-            let next = builder.newTemp()
-            builder.emit(.add(dest: next, lhs: cur, rhs: one, type: .int))
-            builder.emitStore(dest: loopVarSlot, src: next)
-            builder.terminate(.jump(headerLabel))
+            builder.terminate(.jump(incrLabel))
         }
+
+        // Increment: load current, add 1, store back, jump to header
+        builder.startBlock(label: incrLabel)
+        let cur = builder.emitLoad(src: loopVarSlot)
+        let one = builder.emitConstInt(1)
+        let next = builder.newTemp()
+        builder.emit(.add(dest: next, lhs: cur, rhs: one, type: .int))
+        builder.emitStore(dest: loopVarSlot, src: next)
+        builder.terminate(.jump(headerLabel))
+
+        loopStack.removeLast()
 
         // Exit
         builder.startBlock(label: exitLabel)
