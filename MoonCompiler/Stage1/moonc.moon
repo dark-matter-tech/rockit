@@ -2208,6 +2208,8 @@ fun OP_NEW_OBJECT(): Int { return 112 }
 fun OP_CALL_INDIRECT(): Int { return 82 }
 fun OP_NULL_CHECK(): Int { return 128 }
 fun OP_IS_NULL(): Int { return 129 }
+fun OP_TYPE_CHECK(): Int { return 144 }
+fun OP_TYPE_CAST(): Int { return 145 }
 
 // Constant pool kind tags
 fun CK_STRING(): Int { return 1 }
@@ -2235,6 +2237,7 @@ fun makeCompiler(): Map {
     mapPut(c, "types", listCreate())        // class type records
     mapPut(c, "classNames", mapCreate())   // className -> true (set)
     mapPut(c, "enumNames", mapCreate())   // enumName -> list of entry names
+    mapPut(c, "objectNames", mapCreate()) // objectName -> true (singletons)
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -2563,6 +2566,22 @@ fun emitIsNull(fs: Map, dest: Int, src: Int): Unit {
     emitU16(fs, src)
 }
 
+fun emitTypeCheck(fs: Map, dest: Int, src: Int, typeName: String): Unit {
+    val idx = addTypeName(mapGet(fs, "compiler"), typeName)
+    emitByte(fs, OP_TYPE_CHECK())
+    emitU16(fs, dest)
+    emitU16(fs, src)
+    emitU16(fs, idx)
+}
+
+fun emitTypeCast(fs: Map, dest: Int, src: Int, typeName: String): Unit {
+    val idx = addTypeName(mapGet(fs, "compiler"), typeName)
+    emitByte(fs, OP_TYPE_CAST())
+    emitU16(fs, dest)
+    emitU16(fs, src)
+    emitU16(fs, idx)
+}
+
 // ---------------------------------------------------------------------------
 // String interpolation helper
 // ---------------------------------------------------------------------------
@@ -2820,6 +2839,58 @@ fun compileExpr(fs: Map, node: Map): Int {
         return dest
     }
 
+    // Subscript access: obj[index] → listGet(obj, index)
+    if (kind == "subscript") {
+        val objReg = compileExpr(fs, mapGet(node, "object"))
+        val idxReg = compileExpr(fs, mapGet(node, "index"))
+        val args = listCreate()
+        listAppend(args, objReg)
+        listAppend(args, idxReg)
+        val dest = allocReg(fs)
+        emitCall(fs, dest, "listGet", args)
+        return dest
+    }
+
+    // Type check: expr is Type → boolean
+    if (kind == "typeCheck") {
+        val operandReg = compileExpr(fs, mapGet(node, "operand"))
+        val typeNode = mapGet(node, "type")
+        val typeName = toString(mapGet(typeNode, "name"))
+        val dest = allocReg(fs)
+        emitTypeCheck(fs, dest, operandReg, typeName)
+        return dest
+    }
+
+    // Type cast: expr as Type → throws if wrong type
+    // Safe cast: expr as? Type → null if wrong type
+    if (kind == "typeCast") {
+        val operandReg = compileExpr(fs, mapGet(node, "operand"))
+        val typeNode = mapGet(node, "type")
+        val typeName = toString(mapGet(typeNode, "name"))
+        val isSafe = mapGet(node, "safe") == true
+        if (isSafe) {
+            // as? — TYPE_CHECK then branch: cast or null
+            val dest = allocReg(fs)
+            val checkReg = allocReg(fs)
+            emitTypeCheck(fs, checkReg, operandReg, typeName)
+            val patches = emitBranch(fs, checkReg)
+            // Then: type matched → cast
+            patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+            emitTypeCast(fs, dest, operandReg, typeName)
+            val jumpEnd = emitJump(fs)
+            // Else: type didn't match → null
+            patchJump(fs, toInt(mapGet(patches, "elsePatch")))
+            emitConstNull(fs, dest)
+            patchJump(fs, jumpEnd)
+            return dest
+        } else {
+            // as — direct cast, throws on failure
+            val dest = allocReg(fs)
+            emitTypeCast(fs, dest, operandReg, typeName)
+            return dest
+        }
+    }
+
     if (kind == "binary") {
         val op = toString(mapGet(node, "op"))
 
@@ -2973,10 +3044,37 @@ fun compileExpr(fs: Map, node: Map): Int {
             return dest
         }
 
-        // Method call: obj.method(args) → VCALL
+        // Method call: obj.method(args) → VCALL or static CALL for objects
         if (calleeKind == "member") {
-            val objReg = compileExpr(fs, mapGet(callee, "object"))
+            val memberObj = mapGet(callee, "object")
             val methodName = toString(mapGet(callee, "name"))
+            // Check if this is an object (singleton) method call: ObjectName.method()
+            val memberObjKind = toString(mapGet(memberObj, "kind"))
+            if (memberObjKind == "ident") {
+                val memberObjName = toString(mapGet(memberObj, "name"))
+                val isObject = mapGet(mapGet(mapGet(fs, "compiler"), "objectNames"), memberObjName)
+                if (isObject != null) {
+                    // Static call to ObjectName.method
+                    val fullName = stringConcat(memberObjName, stringConcat(".", methodName))
+                    val argRegs = listCreate()
+                    var i: Int = 0
+                    while (i < listSize(callArgs)) {
+                        val argNode = listGet(callArgs, i)
+                        val argKind = toString(mapGet(argNode, "kind"))
+                        if (argKind == "namedArg") {
+                            listAppend(argRegs, compileExpr(fs, mapGet(argNode, "value")))
+                        } else {
+                            listAppend(argRegs, compileExpr(fs, argNode))
+                        }
+                        i = i + 1
+                    }
+                    val dest = allocReg(fs)
+                    emitCall(fs, dest, fullName, argRegs)
+                    return dest
+                }
+            }
+            val objReg = compileExpr(fs, memberObj)
+
             val argRegs = listCreate()
             var i: Int = 0
             while (i < listSize(callArgs)) {
@@ -3228,6 +3326,18 @@ fun compileStmt(fs: Map, node: Map): Unit {
             val fieldName = toString(mapGet(target, "name"))
             val valueReg = compileExpr(fs, mapGet(node, "value"))
             emitSetField(fs, objReg, fieldName, valueReg)
+        }
+        if (targetKind == "subscript") {
+            // a[i] = value → listSet(a, i, value)
+            val objReg = compileExpr(fs, mapGet(target, "object"))
+            val idxReg = compileExpr(fs, mapGet(target, "index"))
+            val valueReg = compileExpr(fs, mapGet(node, "value"))
+            val args = listCreate()
+            listAppend(args, objReg)
+            listAppend(args, idxReg)
+            listAppend(args, valueReg)
+            val dest = allocReg(fs)
+            emitCall(fs, dest, "listSet", args)
         }
         return
     }
@@ -3737,6 +3847,41 @@ fun compileEnumDecl(compiler: Map, decl: Map): Unit {
     mapPut(mapGet(compiler, "enumNames"), enumName, entryNames)
 }
 
+fun compileObjectDecl(compiler: Map, decl: Map): Unit {
+    val objName = toString(mapGet(decl, "name"))
+
+    // Register as an object name for singleton method dispatch
+    mapPut(mapGet(compiler, "objectNames"), objName, true)
+
+    // Compile methods in the object body
+    val methods = listCreate()
+    val body = mapGet(decl, "body")
+    if (body != null) {
+        val members = mapGet(body, "members")
+        var i: Int = 0
+        while (i < listSize(members)) {
+            val member = listGet(members, i)
+            val memberKind = toString(mapGet(member, "kind"))
+            if (memberKind == "funDecl") {
+                val methodName = toString(mapGet(member, "name"))
+                val fullName = stringConcat(objName, stringConcat(".", methodName))
+                listAppend(methods, fullName)
+                mapPut(member, "name", fullName)
+                compileFunction(compiler, member)
+            }
+            i = i + 1
+        }
+    }
+
+    // Register type declaration for serialization
+    val nameIdx = addTypeName(compiler, objName)
+    val typeRec = mapCreate()
+    mapPut(typeRec, "nameIdx", nameIdx)
+    mapPut(typeRec, "fields", listCreate())
+    mapPut(typeRec, "methods", methods)
+    listAppend(mapGet(compiler, "types"), typeRec)
+}
+
 // ---------------------------------------------------------------------------
 // Binary serialization (.moonb format)
 // ---------------------------------------------------------------------------
@@ -3896,7 +4041,7 @@ fun compileProgram(ast: Map): Map {
     val compiler = makeCompiler()
     val decls = mapGet(ast, "decls")
 
-    // Pass 1: Register all class and enum names
+    // Pass 1: Register all class, enum, and object names
     var i: Int = 0
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
@@ -3907,6 +4052,9 @@ fun compileProgram(ast: Map): Map {
         }
         if (kind == "enumDecl") {
             compileEnumDecl(compiler, decl)
+        }
+        if (kind == "objectDecl") {
+            compileObjectDecl(compiler, decl)
         }
         i = i + 1
     }
