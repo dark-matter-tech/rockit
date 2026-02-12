@@ -2611,7 +2611,10 @@ fun compileStringInterp(fs: Map, raw: String): Int {
                 }
                 i = i + 1
                 var ident: String = ""
-                while (i < len && isIdentCodePoint(charCodeAt(raw, i))) {
+                while (i < len) {
+                    if (!isIdentCodePoint(charCodeAt(raw, i))) {
+                        break
+                    }
                     ident = stringConcat(ident, charAt(raw, i))
                     i = i + 1
                 }
