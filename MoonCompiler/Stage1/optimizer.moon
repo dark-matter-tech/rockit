@@ -110,6 +110,50 @@ fun foldStmt(stmt: Map): Map {
             val stmts = mapGet(body, "stmts")
             if (stmts != null) { foldStmtList(stmts) }
         }
+    } else if (kind == "throw") {
+        val value = mapGet(stmt, "value")
+        if (value != null) {
+            mapPut(stmt, "value", foldExpr(value))
+        }
+    } else if (kind == "forDestructure") {
+        val iterable = mapGet(stmt, "iterable")
+        if (iterable != null) {
+            mapPut(stmt, "iterable", foldExpr(iterable))
+        }
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            if (isMap(body)) {
+                val stmts = mapGet(body, "stmts")
+                if (stmts != null) { foldStmtList(stmts) }
+            }
+        }
+    } else if (kind == "break" || kind == "continue") {
+        // No-op
+    } else if (kind == "tryCatch") {
+        val tryBody = mapGet(stmt, "tryBody")
+        if (tryBody != null) {
+            if (isMap(tryBody)) {
+                val stmts = mapGet(tryBody, "stmts")
+                if (stmts != null) { foldStmtList(stmts) }
+            }
+        }
+        val catchBody = mapGet(stmt, "catchBody")
+        if (catchBody != null) {
+            if (isMap(catchBody)) {
+                val stmts = mapGet(catchBody, "stmts")
+                if (stmts != null) { foldStmtList(stmts) }
+            }
+        }
+    } else if (kind == "when") {
+        val subject = mapGet(stmt, "subject")
+        if (subject != null) {
+            mapPut(stmt, "subject", foldExpr(subject))
+        }
+    } else if (kind == "funDecl") {
+        foldDeclConstants(stmt)
+    } else if (kind == "block") {
+        val stmts = mapGet(stmt, "stmts")
+        if (stmts != null) { foldStmtList(stmts) }
     } else {
         // Might be a bare expression
         return foldExpr(stmt)
@@ -128,12 +172,14 @@ fun foldExpr(expr: Map): Map {
         mapPut(expr, "left", left)
         mapPut(expr, "right", right)
 
+        if (!isMap(left)) { return expr }
+        if (!isMap(right)) { return expr }
         val op = toString(mapGet(expr, "op"))
         val lk = toString(mapGet(left, "kind"))
         val rk = toString(mapGet(right, "kind"))
 
         // Integer constant folding
-        if (lk == "intLiteral" && rk == "intLiteral") {
+        if (lk == "intLit" && rk == "intLit") {
             val lv = toInt(mapGet(left, "value"))
             val rv = toInt(mapGet(right, "value"))
             if (op == "+") { return makeIntLit(lv + rv, expr) }
@@ -150,7 +196,7 @@ fun foldExpr(expr: Map): Map {
         }
 
         // Boolean constant folding
-        if (lk == "boolLiteral" && rk == "boolLiteral") {
+        if (lk == "boolLit" && rk == "boolLit") {
             val lv = mapGet(left, "value") == true
             val rv = mapGet(right, "value") == true
             if (op == "&&") { return makeBoolLit(lv && rv, expr) }
@@ -160,7 +206,7 @@ fun foldExpr(expr: Map): Map {
         }
 
         // String constant folding
-        if (lk == "stringLiteral" && rk == "stringLiteral" && op == "+") {
+        if (lk == "stringLit" && rk == "stringLit" && op == "+") {
             val lv = toString(mapGet(left, "value"))
             val rv = toString(mapGet(right, "value"))
             return makeStringLit(stringConcat(lv, rv), expr)
@@ -172,14 +218,15 @@ fun foldExpr(expr: Map): Map {
     if (kind == "unary") {
         val operand = foldExpr(mapGet(expr, "operand"))
         mapPut(expr, "operand", operand)
+        if (!isMap(operand)) { return expr }
         val op = toString(mapGet(expr, "op"))
         val ok = toString(mapGet(operand, "kind"))
 
-        if (ok == "intLiteral" && op == "-") {
+        if (ok == "intLit" && op == "-") {
             val v = toInt(mapGet(operand, "value"))
             return makeIntLit(0 - v, expr)
         }
-        if (ok == "boolLiteral" && op == "!") {
+        if (ok == "boolLit" && op == "!") {
             val v = mapGet(operand, "value") == true
             return makeBoolLit(!v, expr)
         }
@@ -206,8 +253,9 @@ fun foldExpr(expr: Map): Map {
         val inner = foldExpr(mapGet(expr, "expr"))
         mapPut(expr, "expr", inner)
         // If inner is a literal, just return it directly
+        if (!isMap(inner)) { return expr }
         val ik = toString(mapGet(inner, "kind"))
-        if (ik == "intLiteral" || ik == "floatLiteral" || ik == "stringLiteral" || ik == "boolLiteral") {
+        if (ik == "intLit" || ik == "floatLit" || ik == "stringLit" || ik == "boolLit") {
             return inner
         }
         return expr
@@ -218,7 +266,7 @@ fun foldExpr(expr: Map): Map {
 
 fun makeIntLit(value: Int, original: Map): Map {
     val node = mapCreate()
-    mapPut(node, "kind", "intLiteral")
+    mapPut(node, "kind", "intLit")
     mapPut(node, "value", value)
     mapPut(node, "line", mapGet(original, "line"))
     mapPut(node, "col", mapGet(original, "col"))
@@ -227,7 +275,7 @@ fun makeIntLit(value: Int, original: Map): Map {
 
 fun makeBoolLit(value: Bool, original: Map): Map {
     val node = mapCreate()
-    mapPut(node, "kind", "boolLiteral")
+    mapPut(node, "kind", "boolLit")
     mapPut(node, "value", value)
     mapPut(node, "line", mapGet(original, "line"))
     mapPut(node, "col", mapGet(original, "col"))
@@ -236,7 +284,7 @@ fun makeBoolLit(value: Bool, original: Map): Map {
 
 fun makeStringLit(value: String, original: Map): Map {
     val node = mapCreate()
-    mapPut(node, "kind", "stringLiteral")
+    mapPut(node, "kind", "stringLit")
     mapPut(node, "value", value)
     mapPut(node, "line", mapGet(original, "line"))
     mapPut(node, "col", mapGet(original, "col"))

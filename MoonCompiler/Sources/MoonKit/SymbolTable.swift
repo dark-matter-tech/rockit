@@ -343,6 +343,7 @@ public final class SymbolTable {
             ("isMap",   .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .bool)),
             ("isList",  .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .bool)),
             ("typeOf",  .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .string)),
+            ("evalMoon", .function(parameterTypes: [.string], returnType: .string)),
         ]
 
         for (name, type) in typeCheckBuiltins {

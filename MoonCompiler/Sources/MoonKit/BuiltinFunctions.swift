@@ -403,6 +403,7 @@ public final class BuiltinRegistry {
         registerProcessBuiltins(heap: heap)
         registerFileIOBuiltins(heap: heap)
         registerTypeCheckBuiltins(heap: heap)
+        registerCompilerBuiltins()
     }
 
     // MARK: Type Check Builtins
@@ -439,6 +440,67 @@ public final class BuiltinRegistry {
             case .functionRef:
                 return .string("Function")
             }
+        }
+    }
+
+    // MARK: Compiler Builtins
+
+    private func registerCompilerBuiltins() {
+        register(name: "evalMoon") { args in
+            guard case .string(let source) = args.first else {
+                throw VMError.typeMismatch(
+                    expected: "String",
+                    actual: args.first?.typeName ?? "nothing",
+                    operation: "evalMoon"
+                )
+            }
+
+            var output = ""
+
+            // Full pipeline: Lex → Parse → TypeCheck → MIR → Optimize → CodeGen
+            let diagnostics = DiagnosticEngine()
+            let lexer = Lexer(source: source, fileName: "<repl>", diagnostics: diagnostics)
+            let tokens = lexer.tokenize()
+            let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+            let ast = parser.parse()
+
+            if diagnostics.hasErrors {
+                let msgs = diagnostics.diagnostics
+                    .filter { $0.severity == .error }
+                    .map { $0.description }
+                return .string("ERROR: " + msgs.joined(separator: "\n"))
+            }
+
+            let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+            let typeResult = checker.check()
+
+            // Continue even with type errors (warnings)
+            let lowering = MIRLowering(typeCheckResult: typeResult)
+            let mir = lowering.lower()
+            let optimizer = MIROptimizer()
+            let optimized = optimizer.optimize(mir)
+            let codeGen = CodeGen()
+            let module = codeGen.generate(optimized)
+
+            // Create VM with output-capturing println/print
+            let captureBuiltins = BuiltinRegistry()
+            captureBuiltins.register(name: "println") { innerArgs in
+                output += innerArgs.map { $0.description }.joined(separator: " ") + "\n"
+                return .unit
+            }
+            captureBuiltins.register(name: "print") { innerArgs in
+                output += innerArgs.map { $0.description }.joined(separator: " ")
+                return .unit
+            }
+            let vm = VM(module: module, builtins: captureBuiltins)
+
+            do {
+                try vm.run()
+            } catch {
+                return .string("RUNTIME ERROR: \(error)")
+            }
+
+            return .string(output)
         }
     }
 

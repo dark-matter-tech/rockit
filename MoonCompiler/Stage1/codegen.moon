@@ -2988,15 +2988,146 @@ fun resolveImports(decls: List, sourceDir: String, libPath: String, imported: Ma
     return allDecls
 }
 
+// ---------------------------------------------------------------------------
+// REPL
+// ---------------------------------------------------------------------------
+
+fun replMain(): Unit {
+    println("Moon REPL (Stage 1) v0.1")
+    println("Type :quit to exit, :reset to clear state")
+    var topDecls: String = ""
+    var mainBody: String = ""
+
+    while (true) {
+        print("moon> ")
+        val line = readLine()
+        if (line == null) { return }
+        val trimmed = stringTrim(toString(line))
+        if (stringLength(trimmed) == 0) { continue }
+        if (trimmed == ":quit") { return }
+        if (trimmed == ":q") { return }
+        if (trimmed == ":reset") {
+            topDecls = ""
+            mainBody = ""
+            println("State cleared.")
+            continue
+        }
+
+        // Multi-line support: count braces
+        var fullInput: String = toString(line)
+        var braceCount: Int = 0
+        var ci: Int = 0
+        while (ci < stringLength(fullInput)) {
+            val ch = charAt(fullInput, ci)
+            if (ch == "{") { braceCount = braceCount + 1 }
+            if (ch == "}") { braceCount = braceCount - 1 }
+            ci = ci + 1
+        }
+        while (braceCount > 0) {
+            print("  ... ")
+            val cont = readLine()
+            if (cont == null) { return }
+            fullInput = stringConcat(fullInput, stringConcat("\n", toString(cont)))
+            var ci2: Int = 0
+            val contStr = toString(cont)
+            while (ci2 < stringLength(contStr)) {
+                val ch = charAt(contStr, ci2)
+                if (ch == "{") { braceCount = braceCount + 1 }
+                if (ch == "}") { braceCount = braceCount - 1 }
+                ci2 = ci2 + 1
+            }
+        }
+
+        // Detect if it's a top-level declaration
+        val isTopDecl = startsWith(trimmed, "fun ") || startsWith(trimmed, "class ") ||
+                        startsWith(trimmed, "data ") || startsWith(trimmed, "sealed ") ||
+                        startsWith(trimmed, "enum ") || startsWith(trimmed, "interface ") ||
+                        startsWith(trimmed, "object ")
+
+        val isValVar = startsWith(trimmed, "val ") || startsWith(trimmed, "var ")
+
+        val isStmt = startsWith(trimmed, "println") || startsWith(trimmed, "print(") ||
+                     startsWith(trimmed, "if ") || startsWith(trimmed, "if(") ||
+                     startsWith(trimmed, "while ") || startsWith(trimmed, "while(") ||
+                     startsWith(trimmed, "for ") || startsWith(trimmed, "for(") ||
+                     startsWith(trimmed, "return ")
+
+        if (isTopDecl) {
+            val newTopDecls = stringConcat(topDecls, stringConcat(fullInput, "\n\n"))
+            val source = stringConcat(newTopDecls, stringConcat("fun main(): Unit {\n", stringConcat(mainBody, "}\n")))
+            val result = evalMoon(source)
+            if (startsWith(result, "ERROR:")) {
+                println(result)
+            } else {
+                topDecls = newTopDecls
+                println("OK")
+            }
+        } else if (isValVar) {
+            val newBody = stringConcat(mainBody, stringConcat("    ", stringConcat(fullInput, "\n")))
+            val source = stringConcat(topDecls, stringConcat("fun main(): Unit {\n", stringConcat(newBody, "}\n")))
+            val result = evalMoon(source)
+            if (startsWith(result, "ERROR:")) {
+                println(result)
+            } else {
+                mainBody = newBody
+            }
+        } else if (isStmt) {
+            val stmtBody = stringConcat(mainBody, stringConcat("    ", stringConcat(fullInput, "\n")))
+            val source = stringConcat(topDecls, stringConcat("fun main(): Unit {\n", stringConcat(stmtBody, "}\n")))
+            val result = evalMoon(source)
+            if (startsWith(result, "ERROR:")) {
+                println(result)
+            } else {
+                print(result)
+                mainBody = stmtBody
+            }
+        } else {
+            // Try as expression (auto-print)
+            val exprBody = stringConcat(mainBody, stringConcat("    println(toString(", stringConcat(fullInput, "))\n")))
+            val exprSource = stringConcat(topDecls, stringConcat("fun main(): Unit {\n", stringConcat(exprBody, "}\n")))
+            val exprResult = evalMoon(exprSource)
+            if (!startsWith(exprResult, "ERROR:")) {
+                print(exprResult)
+            } else {
+                // Fall back to statement
+                val stmtBody = stringConcat(mainBody, stringConcat("    ", stringConcat(fullInput, "\n")))
+                val stmtSource = stringConcat(topDecls, stringConcat("fun main(): Unit {\n", stringConcat(stmtBody, "}\n")))
+                val stmtResult = evalMoon(stmtSource)
+                if (startsWith(stmtResult, "ERROR:")) {
+                    println(stmtResult)
+                } else {
+                    print(stmtResult)
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Main entry point
+// ---------------------------------------------------------------------------
+
 fun main(): Unit {
     val args = processArgs()
-    if (listSize(args) < 2) {
-        println("Usage: moonc compile <source.moon> [output.moonb]")
-        println("       moonc compile <source.moon> [output.moonb] --lib-path <path>")
+    if (listSize(args) < 1) {
+        println("Usage: moonc compile <source.moon> [output.moonb] [--no-check] [--lib-path <path>]")
+        println("       moonc repl")
         return
     }
 
     val command = toString(listGet(args, 0))
+
+    // REPL mode
+    if (command == "repl") {
+        replMain()
+        return
+    }
+
+    if (listSize(args) < 2) {
+        println("Usage: moonc compile <source.moon> [output.moonb] [--no-check] [--lib-path <path>]")
+        println("       moonc repl")
+        return
+    }
     var sourceFile: String = toString(listGet(args, 1))
     var outputFile: String = ""
     var libPath: String = ""
@@ -3041,7 +3172,7 @@ fun main(): Unit {
     // Check for parse errors
     val errors = mapGet(parser, "errors")
     if (listSize(errors) > 0) {
-        println(stringConcat(toString(listSize(errors)), " parse error(s):"))
+        println(stringConcat(sourceFile, stringConcat(": ", stringConcat(toString(listSize(errors)), " parse error(s):"))))
         var i: Int = 0
         while (i < listSize(errors)) {
             println(stringConcat("  ", toString(listGet(errors, i))))
@@ -3057,15 +3188,15 @@ fun main(): Unit {
     val resolvedDecls = resolveImports(rawDecls, sourceDir, libPath, imported)
     mapPut(ast, "decls", resolvedDecls)
 
-    // Type check (opt-in with --check)
-    var doCheck: Bool = false
+    // Type check (default on, --no-check to disable)
+    var doCheck: Bool = true
     var ac: Int = 2
     while (ac < listSize(args)) {
-        if (toString(listGet(args, ac)) == "--check") { doCheck = true }
+        if (toString(listGet(args, ac)) == "--no-check") { doCheck = false }
         ac = ac + 1
     }
     if (doCheck) {
-        val tc = typeCheck(ast)
+        val tc = typeCheckWithFile(ast, sourceFile)
         val tcErrors = mapGet(tc, "errors")
         if (listSize(tcErrors) > 0) {
             var ei: Int = 0
@@ -3077,13 +3208,21 @@ fun main(): Unit {
         }
     }
 
-    // Optimize AST
-    foldConstants(ast)
+    // Optimize (opt-in with --optimize)
+    var doOptimize: Bool = false
+    var oi: Int = 2
+    while (oi < listSize(args)) {
+        if (toString(listGet(args, oi)) == "--optimize") { doOptimize = true }
+        oi = oi + 1
+    }
+    if (doOptimize) {
+        foldConstants(ast)
+    }
 
     // Compile
     val compiler = compileProgram(ast)
 
-    // Dead function elimination
+    // Dead function elimination (always on — safe and reduces output size)
     eliminateDeadFunctions(compiler)
 
     // Serialize

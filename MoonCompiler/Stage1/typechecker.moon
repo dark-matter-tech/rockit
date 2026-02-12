@@ -18,6 +18,7 @@ fun makeTypeChecker(ast: Map): Map {
     mapPut(tc, "errors", listCreate())
     // Warnings: list of warning message strings
     mapPut(tc, "warnings", listCreate())
+    mapPut(tc, "sourceFile", "")
     return tc
 }
 
@@ -51,16 +52,42 @@ fun tcLookup(tc: Map, name: String): String {
 }
 
 fun tcError(tc: Map, msg: String, node: Map): Unit {
+    if (node == null) {
+        listAppend(mapGet(tc, "errors"), stringConcat("error: ", msg))
+        return
+    }
+    if (!isMap(node)) {
+        listAppend(mapGet(tc, "errors"), stringConcat("error: ", msg))
+        return
+    }
+    val file = toString(mapGet(tc, "sourceFile"))
     val line = toInt(mapGet(node, "line"))
     val col = toInt(mapGet(node, "col"))
-    val full = stringConcat(toString(line), stringConcat(":", stringConcat(toString(col), stringConcat(": error: ", msg))))
+    var prefix: String = ""
+    if (stringLength(file) > 0) {
+        prefix = stringConcat(file, ":")
+    }
+    val full = stringConcat(prefix, stringConcat(toString(line), stringConcat(":", stringConcat(toString(col), stringConcat(": error: ", msg)))))
     listAppend(mapGet(tc, "errors"), full)
 }
 
 fun tcWarn(tc: Map, msg: String, node: Map): Unit {
+    if (node == null) {
+        listAppend(mapGet(tc, "warnings"), stringConcat("warning: ", msg))
+        return
+    }
+    if (!isMap(node)) {
+        listAppend(mapGet(tc, "warnings"), stringConcat("warning: ", msg))
+        return
+    }
+    val file = toString(mapGet(tc, "sourceFile"))
     val line = toInt(mapGet(node, "line"))
     val col = toInt(mapGet(node, "col"))
-    val full = stringConcat(toString(line), stringConcat(":", stringConcat(toString(col), stringConcat(": warning: ", msg))))
+    var prefix: String = ""
+    if (stringLength(file) > 0) {
+        prefix = stringConcat(file, ":")
+    }
+    val full = stringConcat(prefix, stringConcat(toString(line), stringConcat(":", stringConcat(toString(col), stringConcat(": warning: ", msg)))))
     listAppend(mapGet(tc, "warnings"), full)
 }
 
@@ -152,6 +179,9 @@ fun registerBuiltins(tc: Map): Unit {
     // Misc
     registerFn(fns, "panic", 1, "Unit")
     registerFn(fns, "typeOf", 1, "String")
+    registerFn(fns, "isMap", 1, "Bool")
+    registerFn(fns, "isList", 1, "Bool")
+    registerFn(fns, "evalMoon", 1, "String")
 }
 
 fun registerFn(fns: Map, name: String, arity: Int, ret: String): Unit {
@@ -179,6 +209,7 @@ fun tcGatherDecls(tc: Map): Unit {
 
 fun tcGatherDecl(tc: Map, decl: Map): Unit {
     if (decl == null) { return }
+    if (!isMap(decl)) { return }
     val kind = toString(mapGet(decl, "kind"))
 
     if (kind == "funDecl") {
@@ -259,6 +290,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
 
 fun resolveTypeName(typeNode: Map): String {
     if (typeNode == null) { return "Any" }
+    if (!isMap(typeNode)) { return toString(typeNode) }
     val kind = toString(mapGet(typeNode, "kind"))
     if (kind == "simpleType") {
         val name = toString(mapGet(typeNode, "name"))
@@ -290,6 +322,7 @@ fun tcCheckBodies(tc: Map): Unit {
 
 fun tcCheckDecl(tc: Map, decl: Map): Unit {
     if (decl == null) { return }
+    if (!isMap(decl)) { return }
     val kind = toString(mapGet(decl, "kind"))
 
     if (kind == "funDecl") {
@@ -324,6 +357,10 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
             var i: Int = 0
             while (i < listSize(members)) {
                 val member = listGet(members, i)
+                if (!isMap(member)) {
+                    i = i + 1
+                    continue
+                }
                 if (toString(mapGet(member, "kind")) == "funDecl") {
                     tcPushScope(tc)
                     val name = toString(mapGet(decl, "name"))
@@ -336,7 +373,9 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
                             val p = listGet(params, j)
                             val pname = toString(mapGet(p, "name"))
                             val ptype = mapGet(p, "type")
-                            tcDefine(tc, pname, if (ptype != null) { resolveTypeName(ptype) } else { "Any" })
+                            var ptName: String = "Any"
+                            if (ptype != null) { ptName = resolveTypeName(ptype) }
+                            tcDefine(tc, pname, ptName)
                             j = j + 1
                         }
                     }
@@ -479,7 +518,7 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
     } else if (kind == "throw") {
         val value = mapGet(stmt, "value")
         if (value != null) { tcInferExpr(tc, value) }
-    } else if (kind == "try") {
+    } else if (kind == "tryCatch") {
         val tryBody = mapGet(stmt, "tryBody")
         if (tryBody != null) {
             tcPushScope(tc)
@@ -511,6 +550,62 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
                 i = i + 1
             }
         }
+    } else if (kind == "break" || kind == "continue") {
+        // No-op
+    } else if (kind == "forDestructure") {
+        tcPushScope(tc)
+        val vars = mapGet(stmt, "variables")
+        val iterable = mapGet(stmt, "iterable")
+        if (iterable != null) { tcInferExpr(tc, iterable) }
+        if (vars != null) {
+            var vi: Int = 0
+            while (vi < listSize(vars)) {
+                tcDefine(tc, toString(listGet(vars, vi)), "Any")
+                vi = vi + 1
+            }
+        }
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            if (isMap(body)) {
+                val stmts = mapGet(body, "stmts")
+                if (stmts != null) { tcCheckStmts(tc, stmts) }
+            }
+        }
+        tcPopScope(tc)
+    } else if (kind == "when") {
+        val subject = mapGet(stmt, "subject")
+        if (subject != null) { tcInferExpr(tc, subject) }
+        val entries = mapGet(stmt, "entries")
+        if (entries != null) {
+            var wi: Int = 0
+            while (wi < listSize(entries)) {
+                val entry = listGet(entries, wi)
+                if (isMap(entry)) {
+                    val conditions = mapGet(entry, "conditions")
+                    if (conditions != null) {
+                        var ci: Int = 0
+                        while (ci < listSize(conditions)) {
+                            val cond = listGet(conditions, ci)
+                            if (isMap(cond)) { tcInferExpr(tc, cond) }
+                            ci = ci + 1
+                        }
+                    }
+                    val body = mapGet(entry, "body")
+                    if (body != null) {
+                        if (isMap(body)) {
+                            val bStmts = mapGet(body, "stmts")
+                            if (bStmts != null) { tcCheckStmts(tc, bStmts) }
+                        }
+                    }
+                }
+                wi = wi + 1
+            }
+        }
+    } else if (kind == "block") {
+        tcPushScope(tc)
+        val stmts = mapGet(stmt, "stmts")
+        if (stmts != null) { tcCheckStmts(tc, stmts) }
+        tcPopScope(tc)
     } else {
         // Bare expression statement
         tcInferExpr(tc, stmt)
@@ -526,11 +621,11 @@ fun tcInferExpr(tc: Map, expr: Map): String {
     if (!isMap(expr)) { return "Any" }
     val kind = toString(mapGet(expr, "kind"))
 
-    if (kind == "intLiteral") { return "Int" }
-    if (kind == "floatLiteral") { return "Float" }
-    if (kind == "stringLiteral") { return "String" }
-    if (kind == "boolLiteral") { return "Bool" }
-    if (kind == "nullLiteral") { return "Null" }
+    if (kind == "intLit") { return "Int" }
+    if (kind == "floatLit") { return "Float" }
+    if (kind == "stringLit") { return "String" }
+    if (kind == "boolLit") { return "Bool" }
+    if (kind == "nullLit") { return "Null" }
     if (kind == "interpolatedString") { return "String" }
 
     if (kind == "ident") {
@@ -757,6 +852,20 @@ fun tcInferExpr(tc: Map, expr: Map): String {
         return "Any"
     }
 
+    if (kind == "nullSafeMember") {
+        val obj = mapGet(expr, "object")
+        if (obj != null) { tcInferExpr(tc, obj) }
+        return "Any"
+    }
+
+    if (kind == "namedArg") {
+        val value = mapGet(expr, "value")
+        if (value != null) { return tcInferExpr(tc, value) }
+        return "Any"
+    }
+
+    if (kind == "error") { return "Any" }
+
     // Default: bare expression in statement position
     return "Any"
 }
@@ -789,6 +898,15 @@ fun tcTypesCompatible(expected: String, actual: String): Bool {
 
 fun typeCheck(ast: Map): Map {
     val tc = makeTypeChecker(ast)
+    registerBuiltins(tc)
+    tcGatherDecls(tc)
+    tcCheckBodies(tc)
+    return tc
+}
+
+fun typeCheckWithFile(ast: Map, sourceFile: String): Map {
+    val tc = makeTypeChecker(ast)
+    mapPut(tc, "sourceFile", sourceFile)
     registerBuiltins(tc)
     tcGatherDecls(tc)
     tcCheckBodies(tc)
