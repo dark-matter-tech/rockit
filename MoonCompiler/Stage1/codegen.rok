@@ -3422,6 +3422,8 @@ fun main(): Unit {
         // Invoke clang
         val clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
         val exitCode = systemExec(clangCmd)
+        // Clean up temp .ll file
+        systemExec(stringConcat("rm -f ", llFile))
         if (exitCode != 0) {
             println(stringConcat("error: clang failed (exit ", stringConcat(toString(exitCode), ")")))
         } else {

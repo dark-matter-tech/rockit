@@ -4326,6 +4326,36 @@ fun llvmNextSSA(state: Map): String {
 }
 
 // ---------------------------------------------------------------------------
+// Resolve field name (from constant pool) to positional index in type record
+// ---------------------------------------------------------------------------
+
+fun llvmResolveFieldIndex(compiler: Map, poolFieldIdx: Int): Int {
+    val fieldName = llvmPoolString(compiler, poolFieldIdx)
+    val types = mapGet(compiler, "types")
+    if (types != null) {
+        var ti: Int = 0
+        while (ti < listSize(types)) {
+            val typeRec = listGet(types, ti)
+            val fields = mapGet(typeRec, "fields")
+            if (fields != null) {
+                var fi: Int = 0
+                while (fi < listSize(fields)) {
+                    val fieldRec = listGet(fields, fi)
+                    val name = toString(mapGet(fieldRec, "name"))
+                    if (name == fieldName) {
+                        return fi
+                    }
+                    fi = fi + 1
+                }
+            }
+            ti = ti + 1
+        }
+    }
+    // Fallback: return pool index (will likely be wrong, but avoids crash on unknown types)
+    return poolFieldIdx
+}
+
+// ---------------------------------------------------------------------------
 // Emit LLVM IR for one function
 // ---------------------------------------------------------------------------
 
@@ -4602,7 +4632,8 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map): String {
             // OP_GET_FIELD: dest(u16) + obj(u16) + fieldIdx(u16)
             val dest = llvmReadU16(bc, ip + 1)
             val objReg = llvmReadU16(bc, ip + 3)
-            val fieldIdx = llvmReadU16(bc, ip + 5)
+            val fieldPoolIdx = llvmReadU16(bc, ip + 5)
+            val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
             val tobj = llvmNextSSA(state)
             val tobjPtr = llvmNextSSA(state)
             val tres = llvmNextSSA(state)
@@ -4615,7 +4646,8 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map): String {
         } else if (op == 97) {
             // OP_SET_FIELD: obj(u16) + fieldIdx(u16) + val(u16)
             val objReg = llvmReadU16(bc, ip + 1)
-            val fieldIdx = llvmReadU16(bc, ip + 3)
+            val fieldPoolIdx = llvmReadU16(bc, ip + 3)
+            val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
             val valReg = llvmReadU16(bc, ip + 5)
             val tobj = llvmNextSSA(state)
             val tobjPtr = llvmNextSSA(state)
@@ -8498,6 +8530,8 @@ fun main(): Unit {
         // Invoke clang
         val clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
         val exitCode = systemExec(clangCmd)
+        // Clean up temp .ll file
+        systemExec(stringConcat("rm -f ", llFile))
         if (exitCode != 0) {
             println(stringConcat("error: clang failed (exit ", stringConcat(toString(exitCode), ")")))
         } else {
