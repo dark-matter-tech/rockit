@@ -3251,7 +3251,7 @@ fun replMain(): Unit {
 fun main(): Unit {
     val args = processArgs()
     if (listSize(args) < 1) {
-        println("Usage: command compile <source.rok> [-o output.rokb] [--no-check] [--optimize] [--lib-path <path>]")
+        println("Usage: command compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]")
         println("       command repl")
         return
     }
@@ -3265,7 +3265,7 @@ fun main(): Unit {
     }
 
     if (listSize(args) < 2) {
-        println("Usage: command compile <source.rok> [-o output.rokb] [--no-check] [--optimize] [--lib-path <path>]")
+        println("Usage: command compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]")
         println("       command repl")
         return
     }
@@ -3277,6 +3277,7 @@ fun main(): Unit {
     var ai: Int = 2
     var noCheck: Bool = false
     var doOptimize: Bool = false
+    var emitLlvm: Bool = false
     while (ai < listSize(args)) {
         val arg = toString(listGet(args, ai))
         if (arg == "--lib-path") {
@@ -3293,6 +3294,8 @@ fun main(): Unit {
             noCheck = true
         } else if (arg == "--optimize") {
             doOptimize = true
+        } else if (arg == "--emit-llvm") {
+            emitLlvm = true
         } else {
             if (stringLength(outputFile) == 0) {
                 outputFile = arg
@@ -3304,10 +3307,11 @@ fun main(): Unit {
     // Determine output file
     if (stringLength(outputFile) == 0) {
         val len = stringLength(sourceFile)
+        val ext = if (emitLlvm) { ".ll" } else { ".rokb" }
         if (endsWith(sourceFile, ".rok")) {
-            outputFile = stringConcat(substring(sourceFile, 0, len - 4), ".rokb")
+            outputFile = stringConcat(substring(sourceFile, 0, len - 4), ext)
         } else {
-            outputFile = stringConcat(sourceFile, ".rokb")
+            outputFile = stringConcat(sourceFile, ext)
         }
     }
 
@@ -3365,14 +3369,19 @@ fun main(): Unit {
     // Dead function elimination (always on — safe and reduces output size)
     eliminateDeadFunctions(compiler)
 
-    // Serialize
-    val moduleBytes = serializeModule(compiler)
-
-    // Write
-    fileWriteBytes(outputFile, moduleBytes)
-
     val funcCount = listSize(mapGet(compiler, "functions"))
-    val byteCount = listSize(moduleBytes)
-    println(stringConcat(sourceFile, stringConcat(" -> ", outputFile)))
-    println(stringConcat("  ", stringConcat(toString(funcCount), stringConcat(" function(s), ", stringConcat(toString(byteCount), " bytes")))))
+
+    if (emitLlvm) {
+        // Emit LLVM IR
+        emitLLVM(compiler, outputFile)
+        println(stringConcat(sourceFile, stringConcat(" -> ", outputFile)))
+        println(stringConcat("  ", stringConcat(toString(funcCount), " function(s), LLVM IR")))
+    } else {
+        // Serialize to bytecode
+        val moduleBytes = serializeModule(compiler)
+        fileWriteBytes(outputFile, moduleBytes)
+        val byteCount = listSize(moduleBytes)
+        println(stringConcat(sourceFile, stringConcat(" -> ", outputFile)))
+        println(stringConcat("  ", stringConcat(toString(funcCount), stringConcat(" function(s), ", stringConcat(toString(byteCount), " bytes")))))
+    }
 }

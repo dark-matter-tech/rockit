@@ -33,6 +33,10 @@ echo "" >> "$OUTPUT"
 strip_main "${STAGE1_DIR}/optimizer.rok" >> "$OUTPUT"
 echo "" >> "$OUTPUT"
 
+# LLVM IR generator (without main)
+strip_main "${STAGE1_DIR}/llvmgen.rok" >> "$OUTPUT"
+echo "" >> "$OUTPUT"
+
 # Code generator (with main)
 cat "${STAGE1_DIR}/codegen.rok" >> "$OUTPUT"
 
