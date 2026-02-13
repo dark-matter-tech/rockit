@@ -1,7 +1,0 @@
-// Test string interpolation only
-
-fun main(): Unit {
-    val name: String = "Rockit"
-    val greeting: String = "Hello, $name!"
-    println(greeting)
-}
