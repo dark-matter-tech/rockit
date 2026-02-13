@@ -239,9 +239,16 @@ fun foldExpr(expr: Map): Map {
             var i: Int = 0
             while (i < listSize(args)) {
                 val arg = listGet(args, i)
-                val argValue = mapGet(arg, "value")
-                if (argValue != null) {
-                    mapPut(arg, "value", foldExpr(argValue))
+                if (isMap(arg)) {
+                    val argKind = toString(mapGet(arg, "kind"))
+                    if (argKind == "namedArg") {
+                        val argValue = mapGet(arg, "value")
+                        if (argValue != null) {
+                            mapPut(arg, "value", foldExpr(argValue))
+                        }
+                    } else {
+                        listSet(args, i, foldExpr(arg))
+                    }
                 }
                 i = i + 1
             }
@@ -346,8 +353,8 @@ fun eliminateDeadFunctions(compiler: Map): Unit {
                 // OP_CALL = 0x50 (80), OP_CALL_INDIRECT = 0x52 (82)
                 // OP_CONST_STRING = 0x13 (19)
                 // All string constant references could be function names
-                if (byte == 19) {
-                    // CONST_STRING: dest(2), constIdx(2)
+                if (byte == 5) {
+                    // OP_CONST_STRING (5): dest(2), constIdx(2)
                     if (bi + 4 < listSize(bytecode)) {
                         val cidxHi = toInt(listGet(bytecode, bi + 3))
                         val cidxLo = toInt(listGet(bytecode, bi + 4))

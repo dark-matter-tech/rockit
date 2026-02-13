@@ -3251,7 +3251,7 @@ fun replMain(): Unit {
 fun main(): Unit {
     val args = processArgs()
     if (listSize(args) < 1) {
-        println("Usage: command compile <source.rok> [output.rokb] [--no-check] [--lib-path <path>]")
+        println("Usage: command compile <source.rok> [-o output.rokb] [--no-check] [--optimize] [--lib-path <path>]")
         println("       command repl")
         return
     }
@@ -3265,7 +3265,7 @@ fun main(): Unit {
     }
 
     if (listSize(args) < 2) {
-        println("Usage: command compile <source.rok> [output.rokb] [--no-check] [--lib-path <path>]")
+        println("Usage: command compile <source.rok> [-o output.rokb] [--no-check] [--optimize] [--lib-path <path>]")
         println("       command repl")
         return
     }
@@ -3275,6 +3275,8 @@ fun main(): Unit {
 
     // Parse remaining args
     var ai: Int = 2
+    var noCheck: Bool = false
+    var doOptimize: Bool = false
     while (ai < listSize(args)) {
         val arg = toString(listGet(args, ai))
         if (arg == "--lib-path") {
@@ -3282,6 +3284,15 @@ fun main(): Unit {
                 ai = ai + 1
                 libPath = toString(listGet(args, ai))
             }
+        } else if (arg == "-o") {
+            if (ai + 1 < listSize(args)) {
+                ai = ai + 1
+                outputFile = toString(listGet(args, ai))
+            }
+        } else if (arg == "--no-check") {
+            noCheck = true
+        } else if (arg == "--optimize") {
+            doOptimize = true
         } else {
             if (stringLength(outputFile) == 0) {
                 outputFile = arg
@@ -3330,13 +3341,7 @@ fun main(): Unit {
     mapPut(ast, "decls", resolvedDecls)
 
     // Type check (default on, --no-check to disable)
-    var doCheck: Bool = true
-    var ac: Int = 2
-    while (ac < listSize(args)) {
-        if (toString(listGet(args, ac)) == "--no-check") { doCheck = false }
-        ac = ac + 1
-    }
-    if (doCheck) {
+    if (!noCheck) {
         val tc = typeCheckWithFile(ast, sourceFile)
         val tcErrors = mapGet(tc, "errors")
         if (listSize(tcErrors) > 0) {
@@ -3350,12 +3355,6 @@ fun main(): Unit {
     }
 
     // Optimize (opt-in with --optimize)
-    var doOptimize: Bool = false
-    var oi: Int = 2
-    while (oi < listSize(args)) {
-        if (toString(listGet(args, oi)) == "--optimize") { doOptimize = true }
-        oi = oi + 1
-    }
     if (doOptimize) {
         foldConstants(ast)
     }

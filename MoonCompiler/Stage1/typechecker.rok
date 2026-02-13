@@ -1166,14 +1166,6 @@ fun tcTypesCompatible(expected: String, actual: String): Bool {
 // Main entry point
 // ---------------------------------------------------------------------------
 
-fun typeCheck(ast: Map): Map {
-    val tc = makeTypeChecker(ast)
-    registerBuiltins(tc)
-    tcGatherDecls(tc)
-    tcCheckBodies(tc)
-    return tc
-}
-
 fun typeCheckWithFile(ast: Map, sourceFile: String): Map {
     val tc = makeTypeChecker(ast)
     mapPut(tc, "sourceFile", sourceFile)
