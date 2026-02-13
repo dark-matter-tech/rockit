@@ -3252,6 +3252,7 @@ fun main(): Unit {
     val args = processArgs()
     if (listSize(args) < 1) {
         println("Usage: command compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]")
+        println("       command build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
         println("       command repl")
         return
     }
@@ -3266,18 +3267,21 @@ fun main(): Unit {
 
     if (listSize(args) < 2) {
         println("Usage: command compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]")
+        println("       command build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
         println("       command repl")
         return
     }
     var sourceFile: String = toString(listGet(args, 1))
     var outputFile: String = ""
     var libPath: String = ""
+    var runtimePath: String = ""
 
     // Parse remaining args
     var ai: Int = 2
     var noCheck: Bool = false
     var doOptimize: Bool = false
     var emitLlvm: Bool = false
+    val isBuildNative: Bool = command == "build-native"
     while (ai < listSize(args)) {
         val arg = toString(listGet(args, ai))
         if (arg == "--lib-path") {
@@ -3289,6 +3293,11 @@ fun main(): Unit {
             if (ai + 1 < listSize(args)) {
                 ai = ai + 1
                 outputFile = toString(listGet(args, ai))
+            }
+        } else if (arg == "--runtime-path") {
+            if (ai + 1 < listSize(args)) {
+                ai = ai + 1
+                runtimePath = toString(listGet(args, ai))
             }
         } else if (arg == "--no-check") {
             noCheck = true
@@ -3304,14 +3313,28 @@ fun main(): Unit {
         ai = ai + 1
     }
 
+    // For build-native, always emit LLVM IR internally
+    if (isBuildNative) {
+        emitLlvm = true
+    }
+
     // Determine output file
     if (stringLength(outputFile) == 0) {
         val len = stringLength(sourceFile)
-        val ext = if (emitLlvm) { ".ll" } else { ".rokb" }
-        if (endsWith(sourceFile, ".rok")) {
-            outputFile = stringConcat(substring(sourceFile, 0, len - 4), ext)
+        if (isBuildNative) {
+            // Native binary — strip .rok extension, no new extension
+            if (endsWith(sourceFile, ".rok")) {
+                outputFile = substring(sourceFile, 0, len - 4)
+            } else {
+                outputFile = stringConcat(sourceFile, ".out")
+            }
         } else {
-            outputFile = stringConcat(sourceFile, ext)
+            val ext = if (emitLlvm) { ".ll" } else { ".rokb" }
+            if (endsWith(sourceFile, ".rok")) {
+                outputFile = stringConcat(substring(sourceFile, 0, len - 4), ext)
+            } else {
+                outputFile = stringConcat(sourceFile, ext)
+            }
         }
     }
 
@@ -3371,7 +3394,40 @@ fun main(): Unit {
 
     val funcCount = listSize(mapGet(compiler, "functions"))
 
-    if (emitLlvm) {
+    if (isBuildNative) {
+        // build-native: .rok → LLVM IR → clang → native binary
+        val llFile = stringConcat(outputFile, ".ll")
+        emitLLVM(compiler, llFile)
+        println(stringConcat(sourceFile, stringConcat(" -> ", stringConcat(outputFile, " (native)"))))
+        println(stringConcat("  ", stringConcat(toString(funcCount), " function(s)")))
+
+        // Find runtime path
+        if (stringLength(runtimePath) == 0) {
+            // Try relative to source: ../Runtime/rockit_runtime.c
+            val candidate = stringConcat(sourceDir, "/../Runtime/rockit_runtime.c")
+            if (fileExists(candidate)) {
+                runtimePath = candidate
+            } else {
+                // Try Runtime/rockit_runtime.c from current dir
+                val candidate2 = "Runtime/rockit_runtime.c"
+                if (fileExists(candidate2)) {
+                    runtimePath = candidate2
+                } else {
+                    println("error: cannot find rockit_runtime.c — use --runtime-path")
+                    return
+                }
+            }
+        }
+
+        // Invoke clang
+        val clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
+        val exitCode = systemExec(clangCmd)
+        if (exitCode != 0) {
+            println(stringConcat("error: clang failed (exit ", stringConcat(toString(exitCode), ")")))
+        } else {
+            println("OK")
+        }
+    } else if (emitLlvm) {
         // Emit LLVM IR
         emitLLVM(compiler, outputFile)
         println(stringConcat(sourceFile, stringConcat(" -> ", outputFile)))

@@ -316,6 +316,7 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i64 @processArgs()")
         // Meta
         externalDecls.insert("declare i64 @evalRockit(ptr)")
+        externalDecls.insert("declare i64 @systemExec(ptr)")
         // Polymorphic toString (handles both raw ints and string pointers)
         externalDecls.insert("declare ptr @toString(i64)")
         // String comparison (content-based, not pointer-based)

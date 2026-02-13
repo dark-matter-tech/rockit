@@ -344,6 +344,7 @@ public final class SymbolTable {
             ("isList",  .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .bool)),
             ("typeOf",  .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .string)),
             ("evalRockit", .function(parameterTypes: [.string], returnType: .string)),
+            ("systemExec", .function(parameterTypes: [.string], returnType: .int)),
         ]
 
         for (name, type) in typeCheckBuiltins {

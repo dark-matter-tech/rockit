@@ -423,284 +423,301 @@ target triple = "arm64-apple-macosx26.0.0"
 @.str.476 = private unnamed_addr constant [12 x i8] c"i64|ptr,i64\00"
 @.str.477 = private unnamed_addr constant [16 x i8] c"ptr|ptr,i64,i64\00"
 @.str.478 = private unnamed_addr constant [12 x i8] c"i64|ptr,ptr\00"
-@.str.479 = private unnamed_addr constant [11 x i8] c"i1|ptr,ptr\00"
+@.str.479 = private unnamed_addr constant [11 x i8] c"i8|ptr,ptr\00"
 @.str.48 = private unnamed_addr constant [6 x i8] c"theme\00"
 @.str.480 = private unnamed_addr constant [8 x i8] c"ptr|ptr\00"
-@.str.481 = private unnamed_addr constant [7 x i8] c"i1|ptr\00"
+@.str.481 = private unnamed_addr constant [7 x i8] c"i8|ptr\00"
 @.str.482 = private unnamed_addr constant [5 x i8] c"ptr|\00"
 @.str.483 = private unnamed_addr constant [14 x i8] c"stringToBytes\00"
-@.str.484 = private unnamed_addr constant [7 x i8] c"i1|i64\00"
-@.str.485 = private unnamed_addr constant [11 x i8] c"i1|i64,i64\00"
-@.str.486 = private unnamed_addr constant [17 x i8] c"isIdentCodePoint\00"
-@.str.487 = private unnamed_addr constant [9 x i8] c"void|i64\00"
-@.str.488 = private unnamed_addr constant [18 x i8] c"rockit_string_new\00"
-@.str.489 = private unnamed_addr constant [19 x i8] c"rockit_println_any\00"
+@.str.484 = private unnamed_addr constant [11 x i8] c"systemExec\00"
+@.str.485 = private unnamed_addr constant [7 x i8] c"i8|i64\00"
+@.str.486 = private unnamed_addr constant [11 x i8] c"i8|i64,i64\00"
+@.str.487 = private unnamed_addr constant [17 x i8] c"isIdentCodePoint\00"
+@.str.488 = private unnamed_addr constant [9 x i8] c"void|i64\00"
+@.str.489 = private unnamed_addr constant [18 x i8] c"rockit_string_new\00"
 @.str.49 = private unnamed_addr constant [9 x i8] c"KW_THEME\00"
-@.str.490 = private unnamed_addr constant [17 x i8] c"rockit_print_any\00"
-@.str.491 = private unnamed_addr constant [16 x i8] c"rockit_set_args\00"
-@.str.492 = private unnamed_addr constant [13 x i8] c"void|i32,ptr\00"
-@.str.493 = private unnamed_addr constant [17 x i8] c"rockit_string_eq\00"
-@.str.494 = private unnamed_addr constant [18 x i8] c"rockit_string_neq\00"
-@.str.495 = private unnamed_addr constant [13 x i8] c"rockit_panic\00"
-@.str.496 = private unnamed_addr constant [9 x i8] c"void|ptr\00"
-@.str.497 = private unnamed_addr constant [16 x i8] c"rockit_exc_push\00"
-@.str.498 = private unnamed_addr constant [15 x i8] c"rockit_exc_pop\00"
-@.str.499 = private unnamed_addr constant [6 x i8] c"void|\00"
+@.str.490 = private unnamed_addr constant [19 x i8] c"rockit_println_any\00"
+@.str.491 = private unnamed_addr constant [17 x i8] c"rockit_print_any\00"
+@.str.492 = private unnamed_addr constant [16 x i8] c"rockit_set_args\00"
+@.str.493 = private unnamed_addr constant [13 x i8] c"void|i32,ptr\00"
+@.str.494 = private unnamed_addr constant [17 x i8] c"rockit_string_eq\00"
+@.str.495 = private unnamed_addr constant [18 x i8] c"rockit_string_neq\00"
+@.str.496 = private unnamed_addr constant [13 x i8] c"rockit_panic\00"
+@.str.497 = private unnamed_addr constant [9 x i8] c"void|ptr\00"
+@.str.498 = private unnamed_addr constant [16 x i8] c"rockit_exc_push\00"
+@.str.499 = private unnamed_addr constant [15 x i8] c"rockit_exc_pop\00"
 @.str.5 = private unnamed_addr constant [7 x i8] c"KW_FUN\00"
 @.str.50 = private unnamed_addr constant [6 x i8] c"style\00"
-@.str.500 = private unnamed_addr constant [17 x i8] c"rockit_exc_throw\00"
-@.str.501 = private unnamed_addr constant [15 x i8] c"rockit_exc_get\00"
-@.str.502 = private unnamed_addr constant [20 x i8] c"rockit_object_alloc\00"
-@.str.503 = private unnamed_addr constant [12 x i8] c"ptr|ptr,i32\00"
-@.str.504 = private unnamed_addr constant [24 x i8] c"rockit_object_get_field\00"
-@.str.505 = private unnamed_addr constant [12 x i8] c"i64|ptr,i32\00"
-@.str.506 = private unnamed_addr constant [24 x i8] c"rockit_object_set_field\00"
-@.str.507 = private unnamed_addr constant [17 x i8] c"void|ptr,i32,i64\00"
-@.str.508 = private unnamed_addr constant [4 x i8] c"\5C0A\00"
-@.str.509 = private unnamed_addr constant [4 x i8] c"\5C0D\00"
+@.str.500 = private unnamed_addr constant [6 x i8] c"void|\00"
+@.str.501 = private unnamed_addr constant [17 x i8] c"rockit_exc_throw\00"
+@.str.502 = private unnamed_addr constant [15 x i8] c"rockit_exc_get\00"
+@.str.503 = private unnamed_addr constant [20 x i8] c"rockit_object_alloc\00"
+@.str.504 = private unnamed_addr constant [12 x i8] c"ptr|ptr,i32\00"
+@.str.505 = private unnamed_addr constant [24 x i8] c"rockit_object_get_field\00"
+@.str.506 = private unnamed_addr constant [12 x i8] c"i64|ptr,i32\00"
+@.str.507 = private unnamed_addr constant [24 x i8] c"rockit_object_set_field\00"
+@.str.508 = private unnamed_addr constant [17 x i8] c"void|ptr,i32,i64\00"
+@.str.509 = private unnamed_addr constant [4 x i8] c"\5C0A\00"
 @.str.51 = private unnamed_addr constant [9 x i8] c"KW_STYLE\00"
-@.str.510 = private unnamed_addr constant [4 x i8] c"\5C09\00"
-@.str.511 = private unnamed_addr constant [4 x i8] c"\5C00\00"
-@.str.512 = private unnamed_addr constant [4 x i8] c"\5C22\00"
-@.str.513 = private unnamed_addr constant [4 x i8] c"\5C5C\00"
-@.str.514 = private unnamed_addr constant [2 x i8] c"2\00"
-@.str.515 = private unnamed_addr constant [2 x i8] c"3\00"
-@.str.516 = private unnamed_addr constant [2 x i8] c"4\00"
-@.str.517 = private unnamed_addr constant [2 x i8] c"5\00"
-@.str.518 = private unnamed_addr constant [2 x i8] c"6\00"
-@.str.519 = private unnamed_addr constant [2 x i8] c"7\00"
+@.str.510 = private unnamed_addr constant [4 x i8] c"\5C0D\00"
+@.str.511 = private unnamed_addr constant [4 x i8] c"\5C09\00"
+@.str.512 = private unnamed_addr constant [4 x i8] c"\5C00\00"
+@.str.513 = private unnamed_addr constant [4 x i8] c"\5C22\00"
+@.str.514 = private unnamed_addr constant [4 x i8] c"\5C5C\00"
+@.str.515 = private unnamed_addr constant [2 x i8] c"2\00"
+@.str.516 = private unnamed_addr constant [2 x i8] c"3\00"
+@.str.517 = private unnamed_addr constant [2 x i8] c"4\00"
+@.str.518 = private unnamed_addr constant [2 x i8] c"5\00"
+@.str.519 = private unnamed_addr constant [2 x i8] c"6\00"
 @.str.52 = private unnamed_addr constant [8 x i8] c"suspend\00"
-@.str.520 = private unnamed_addr constant [2 x i8] c"8\00"
-@.str.521 = private unnamed_addr constant [2 x i8] c"9\00"
-@.str.522 = private unnamed_addr constant [6 x i8] c"entry\00"
-@.str.523 = private unnamed_addr constant [3 x i8] c"L_\00"
-@.str.524 = private unnamed_addr constant [4 x i8] c"ssa\00"
-@.str.525 = private unnamed_addr constant [3 x i8] c"%_\00"
-@.str.526 = private unnamed_addr constant [11 x i8] c"paramCount\00"
-@.str.527 = private unnamed_addr constant [9 x i8] c"regCount\00"
-@.str.528 = private unnamed_addr constant [12 x i8] c"usedExterns\00"
-@.str.529 = private unnamed_addr constant [41 x i8] c"define i32 @main(i32 %argc, ptr %argv) {\00"
+@.str.520 = private unnamed_addr constant [2 x i8] c"7\00"
+@.str.521 = private unnamed_addr constant [2 x i8] c"8\00"
+@.str.522 = private unnamed_addr constant [2 x i8] c"9\00"
+@.str.523 = private unnamed_addr constant [6 x i8] c"entry\00"
+@.str.524 = private unnamed_addr constant [3 x i8] c"L_\00"
+@.str.525 = private unnamed_addr constant [4 x i8] c"ssa\00"
+@.str.526 = private unnamed_addr constant [3 x i8] c"%_\00"
+@.str.527 = private unnamed_addr constant [11 x i8] c"paramCount\00"
+@.str.528 = private unnamed_addr constant [9 x i8] c"regCount\00"
+@.str.529 = private unnamed_addr constant [12 x i8] c"usedExterns\00"
 @.str.53 = private unnamed_addr constant [11 x i8] c"KW_SUSPEND\00"
-@.str.530 = private unnamed_addr constant [13 x i8] c"define i64 @\00"
-@.str.531 = private unnamed_addr constant [3 x i8] c", \00"
-@.str.532 = private unnamed_addr constant [7 x i8] c"i64 %p\00"
-@.str.533 = private unnamed_addr constant [4 x i8] c") {\00"
-@.str.534 = private unnamed_addr constant [10 x i8] c"prologue:\00"
-@.str.535 = private unnamed_addr constant [5 x i8] c"  %t\00"
-@.str.536 = private unnamed_addr constant [14 x i8] c" = alloca i64\00"
-@.str.537 = private unnamed_addr constant [9 x i8] c"  %param\00"
-@.str.538 = private unnamed_addr constant [26 x i8] c"  store i64 0, ptr %param\00"
-@.str.539 = private unnamed_addr constant [15 x i8] c"  store i64 %p\00"
+@.str.530 = private unnamed_addr constant [41 x i8] c"define i32 @main(i32 %argc, ptr %argv) {\00"
+@.str.531 = private unnamed_addr constant [13 x i8] c"define i64 @\00"
+@.str.532 = private unnamed_addr constant [3 x i8] c", \00"
+@.str.533 = private unnamed_addr constant [7 x i8] c"i64 %p\00"
+@.str.534 = private unnamed_addr constant [4 x i8] c") {\00"
+@.str.535 = private unnamed_addr constant [10 x i8] c"prologue:\00"
+@.str.536 = private unnamed_addr constant [5 x i8] c"  %t\00"
+@.str.537 = private unnamed_addr constant [14 x i8] c" = alloca i64\00"
+@.str.538 = private unnamed_addr constant [9 x i8] c"  %param\00"
+@.str.539 = private unnamed_addr constant [26 x i8] c"  store i64 0, ptr %param\00"
 @.str.54 = private unnamed_addr constant [6 x i8] c"async\00"
-@.str.540 = private unnamed_addr constant [13 x i8] c", ptr %param\00"
-@.str.541 = private unnamed_addr constant [51 x i8] c"  call void @rockit_set_args(i32 %argc, ptr %argv)\00"
-@.str.542 = private unnamed_addr constant [18 x i8] c"  br label %entry\00"
-@.str.543 = private unnamed_addr constant [13 x i8] c"  br label %\00"
-@.str.544 = private unnamed_addr constant [13 x i8] c"  store i64 \00"
-@.str.545 = private unnamed_addr constant [9 x i8] c", ptr %t\00"
-@.str.546 = private unnamed_addr constant [22 x i8] c"  store i64 1, ptr %t\00"
-@.str.547 = private unnamed_addr constant [22 x i8] c"  store i64 0, ptr %t\00"
-@.str.548 = private unnamed_addr constant [7 x i8] c"@.str.\00"
-@.str.549 = private unnamed_addr constant [3 x i8] c"  \00"
+@.str.540 = private unnamed_addr constant [15 x i8] c"  store i64 %p\00"
+@.str.541 = private unnamed_addr constant [13 x i8] c", ptr %param\00"
+@.str.542 = private unnamed_addr constant [51 x i8] c"  call void @rockit_set_args(i32 %argc, ptr %argv)\00"
+@.str.543 = private unnamed_addr constant [18 x i8] c"  br label %entry\00"
+@.str.544 = private unnamed_addr constant [13 x i8] c"  br label %\00"
+@.str.545 = private unnamed_addr constant [13 x i8] c"  store i64 \00"
+@.str.546 = private unnamed_addr constant [9 x i8] c", ptr %t\00"
+@.str.547 = private unnamed_addr constant [22 x i8] c"  store i64 1, ptr %t\00"
+@.str.548 = private unnamed_addr constant [22 x i8] c"  store i64 0, ptr %t\00"
+@.str.549 = private unnamed_addr constant [7 x i8] c"@.str.\00"
 @.str.55 = private unnamed_addr constant [9 x i8] c"KW_ASYNC\00"
-@.str.550 = private unnamed_addr constant [36 x i8] c" = call ptr @rockit_string_new(ptr \00"
-@.str.551 = private unnamed_addr constant [17 x i8] c" = ptrtoint ptr \00"
-@.str.552 = private unnamed_addr constant [8 x i8] c" to i64\00"
-@.str.553 = private unnamed_addr constant [31 x i8] c"  store i64 3405691582, ptr %t\00"
-@.str.554 = private unnamed_addr constant [20 x i8] c" = load i64, ptr %t\00"
-@.str.555 = private unnamed_addr constant [24 x i8] c" = load i64, ptr %param\00"
-@.str.556 = private unnamed_addr constant [4 x i8] c"add\00"
-@.str.557 = private unnamed_addr constant [4 x i8] c"sub\00"
-@.str.558 = private unnamed_addr constant [4 x i8] c"mul\00"
-@.str.559 = private unnamed_addr constant [5 x i8] c"sdiv\00"
+@.str.550 = private unnamed_addr constant [3 x i8] c"  \00"
+@.str.551 = private unnamed_addr constant [36 x i8] c" = call ptr @rockit_string_new(ptr \00"
+@.str.552 = private unnamed_addr constant [17 x i8] c" = ptrtoint ptr \00"
+@.str.553 = private unnamed_addr constant [8 x i8] c" to i64\00"
+@.str.554 = private unnamed_addr constant [31 x i8] c"  store i64 3405691582, ptr %t\00"
+@.str.555 = private unnamed_addr constant [20 x i8] c" = load i64, ptr %t\00"
+@.str.556 = private unnamed_addr constant [24 x i8] c" = load i64, ptr %param\00"
+@.str.557 = private unnamed_addr constant [4 x i8] c"add\00"
+@.str.558 = private unnamed_addr constant [4 x i8] c"sub\00"
+@.str.559 = private unnamed_addr constant [4 x i8] c"mul\00"
 @.str.56 = private unnamed_addr constant [6 x i8] c"await\00"
-@.str.560 = private unnamed_addr constant [5 x i8] c"srem\00"
-@.str.561 = private unnamed_addr constant [4 x i8] c" = \00"
-@.str.562 = private unnamed_addr constant [6 x i8] c" i64 \00"
-@.str.563 = private unnamed_addr constant [15 x i8] c" = sub i64 0, \00"
-@.str.564 = private unnamed_addr constant [34 x i8] c" = call i1 @rockit_string_eq(i64 \00"
-@.str.565 = private unnamed_addr constant [7 x i8] c", i64 \00"
-@.str.566 = private unnamed_addr constant [35 x i8] c" = call i1 @rockit_string_neq(i64 \00"
-@.str.567 = private unnamed_addr constant [12 x i8] c" = zext i1 \00"
-@.str.568 = private unnamed_addr constant [4 x i8] c"slt\00"
-@.str.569 = private unnamed_addr constant [4 x i8] c"sle\00"
+@.str.560 = private unnamed_addr constant [5 x i8] c"sdiv\00"
+@.str.561 = private unnamed_addr constant [5 x i8] c"srem\00"
+@.str.562 = private unnamed_addr constant [4 x i8] c" = \00"
+@.str.563 = private unnamed_addr constant [6 x i8] c" i64 \00"
+@.str.564 = private unnamed_addr constant [15 x i8] c" = sub i64 0, \00"
+@.str.565 = private unnamed_addr constant [34 x i8] c" = call i1 @rockit_string_eq(i64 \00"
+@.str.566 = private unnamed_addr constant [7 x i8] c", i64 \00"
+@.str.567 = private unnamed_addr constant [35 x i8] c" = call i1 @rockit_string_neq(i64 \00"
+@.str.568 = private unnamed_addr constant [12 x i8] c" = zext i1 \00"
+@.str.569 = private unnamed_addr constant [4 x i8] c"slt\00"
 @.str.57 = private unnamed_addr constant [9 x i8] c"KW_AWAIT\00"
-@.str.570 = private unnamed_addr constant [4 x i8] c"sgt\00"
-@.str.571 = private unnamed_addr constant [4 x i8] c"sge\00"
-@.str.572 = private unnamed_addr constant [9 x i8] c" = icmp \00"
-@.str.573 = private unnamed_addr constant [12 x i8] c" = and i64 \00"
-@.str.574 = private unnamed_addr constant [11 x i8] c" = or i64 \00"
-@.str.575 = private unnamed_addr constant [16 x i8] c" = icmp eq i64 \00"
-@.str.576 = private unnamed_addr constant [4 x i8] c", 0\00"
-@.str.577 = private unnamed_addr constant [13 x i8] c", 3405691582\00"
-@.str.578 = private unnamed_addr constant [17 x i8] c" = inttoptr i64 \00"
-@.str.579 = private unnamed_addr constant [8 x i8] c" to ptr\00"
+@.str.570 = private unnamed_addr constant [4 x i8] c"sle\00"
+@.str.571 = private unnamed_addr constant [4 x i8] c"sgt\00"
+@.str.572 = private unnamed_addr constant [4 x i8] c"sge\00"
+@.str.573 = private unnamed_addr constant [9 x i8] c" = icmp \00"
+@.str.574 = private unnamed_addr constant [12 x i8] c" = and i64 \00"
+@.str.575 = private unnamed_addr constant [11 x i8] c" = or i64 \00"
+@.str.576 = private unnamed_addr constant [16 x i8] c" = icmp eq i64 \00"
+@.str.577 = private unnamed_addr constant [4 x i8] c", 0\00"
+@.str.578 = private unnamed_addr constant [13 x i8] c", 3405691582\00"
+@.str.579 = private unnamed_addr constant [17 x i8] c" = inttoptr i64 \00"
 @.str.58 = private unnamed_addr constant [11 x i8] c"concurrent\00"
-@.str.580 = private unnamed_addr constant [42 x i8] c" = call i64 @rockit_object_get_field(ptr \00"
-@.str.581 = private unnamed_addr constant [7 x i8] c", i32 \00"
-@.str.582 = private unnamed_addr constant [42 x i8] c"  call void @rockit_object_set_field(ptr \00"
-@.str.583 = private unnamed_addr constant [12 x i8] c"@.typename.\00"
-@.str.584 = private unnamed_addr constant [38 x i8] c" = call ptr @rockit_object_alloc(ptr \00"
-@.str.585 = private unnamed_addr constant [8 x i8] c"_setjmp\00"
-@.str.586 = private unnamed_addr constant [31 x i8] c" = call ptr @rockit_exc_push()\00"
-@.str.587 = private unnamed_addr constant [26 x i8] c" = call i32 @_setjmp(ptr \00"
-@.str.588 = private unnamed_addr constant [5 x i8] c") #0\00"
-@.str.589 = private unnamed_addr constant [16 x i8] c" = icmp ne i32 \00"
+@.str.580 = private unnamed_addr constant [8 x i8] c" to ptr\00"
+@.str.581 = private unnamed_addr constant [42 x i8] c" = call i64 @rockit_object_get_field(ptr \00"
+@.str.582 = private unnamed_addr constant [7 x i8] c", i32 \00"
+@.str.583 = private unnamed_addr constant [42 x i8] c"  call void @rockit_object_set_field(ptr \00"
+@.str.584 = private unnamed_addr constant [12 x i8] c"@.typename.\00"
+@.str.585 = private unnamed_addr constant [38 x i8] c" = call ptr @rockit_object_alloc(ptr \00"
+@.str.586 = private unnamed_addr constant [8 x i8] c"_setjmp\00"
+@.str.587 = private unnamed_addr constant [31 x i8] c" = call ptr @rockit_exc_push()\00"
+@.str.588 = private unnamed_addr constant [26 x i8] c" = call i32 @_setjmp(ptr \00"
+@.str.589 = private unnamed_addr constant [5 x i8] c") #0\00"
 @.str.59 = private unnamed_addr constant [14 x i8] c"KW_CONCURRENT\00"
-@.str.590 = private unnamed_addr constant [10 x i8] c"try_body_\00"
-@.str.591 = private unnamed_addr constant [9 x i8] c"  br i1 \00"
-@.str.592 = private unnamed_addr constant [10 x i8] c", label %\00"
-@.str.593 = private unnamed_addr constant [30 x i8] c"  call void @rockit_exc_pop()\00"
-@.str.594 = private unnamed_addr constant [35 x i8] c"  call void @rockit_exc_throw(i64 \00"
-@.str.595 = private unnamed_addr constant [14 x i8] c"  unreachable\00"
-@.str.596 = private unnamed_addr constant [12 x i8] c"  ret i32 0\00"
-@.str.597 = private unnamed_addr constant [11 x i8] c"  ret i64 \00"
-@.str.598 = private unnamed_addr constant [21 x i8] c"  ret i64 3405691582\00"
-@.str.599 = private unnamed_addr constant [16 x i8] c" = icmp ne i64 \00"
+@.str.590 = private unnamed_addr constant [16 x i8] c" = icmp ne i32 \00"
+@.str.591 = private unnamed_addr constant [10 x i8] c"try_body_\00"
+@.str.592 = private unnamed_addr constant [9 x i8] c"  br i1 \00"
+@.str.593 = private unnamed_addr constant [10 x i8] c", label %\00"
+@.str.594 = private unnamed_addr constant [30 x i8] c"  call void @rockit_exc_pop()\00"
+@.str.595 = private unnamed_addr constant [35 x i8] c"  call void @rockit_exc_throw(i64 \00"
+@.str.596 = private unnamed_addr constant [14 x i8] c"  unreachable\00"
+@.str.597 = private unnamed_addr constant [12 x i8] c"  ret i32 0\00"
+@.str.598 = private unnamed_addr constant [11 x i8] c"  ret i64 \00"
+@.str.599 = private unnamed_addr constant [21 x i8] c"  ret i64 3405691582\00"
 @.str.6 = private unnamed_addr constant [4 x i8] c"val\00"
 @.str.60 = private unnamed_addr constant [5 x i8] c"weak\00"
-@.str.600 = private unnamed_addr constant [5 x i8] c"i64 \00"
-@.str.601 = private unnamed_addr constant [14 x i8] c" = call i64 @\00"
-@.str.602 = private unnamed_addr constant [4 x i8] c"i64\00"
-@.str.603 = private unnamed_addr constant [13 x i8] c" = call i64 \00"
-@.str.604 = private unnamed_addr constant [4 x i8] c"ptr\00"
-@.str.605 = private unnamed_addr constant [5 x i8] c"ptr \00"
-@.str.606 = private unnamed_addr constant [4 x i8] c"i32\00"
-@.str.607 = private unnamed_addr constant [14 x i8] c" = trunc i64 \00"
-@.str.608 = private unnamed_addr constant [8 x i8] c" to i32\00"
-@.str.609 = private unnamed_addr constant [5 x i8] c"i32 \00"
+@.str.600 = private unnamed_addr constant [16 x i8] c" = icmp ne i64 \00"
+@.str.601 = private unnamed_addr constant [5 x i8] c"i64 \00"
+@.str.602 = private unnamed_addr constant [14 x i8] c" = call i64 @\00"
+@.str.603 = private unnamed_addr constant [4 x i8] c"i64\00"
+@.str.604 = private unnamed_addr constant [13 x i8] c" = call i64 \00"
+@.str.605 = private unnamed_addr constant [4 x i8] c"ptr\00"
+@.str.606 = private unnamed_addr constant [5 x i8] c"ptr \00"
+@.str.607 = private unnamed_addr constant [4 x i8] c"i32\00"
+@.str.608 = private unnamed_addr constant [14 x i8] c" = trunc i64 \00"
+@.str.609 = private unnamed_addr constant [8 x i8] c" to i32\00"
 @.str.61 = private unnamed_addr constant [8 x i8] c"KW_WEAK\00"
-@.str.610 = private unnamed_addr constant [3 x i8] c"i1\00"
-@.str.611 = private unnamed_addr constant [7 x i8] c" to i1\00"
-@.str.612 = private unnamed_addr constant [4 x i8] c"i1 \00"
-@.str.613 = private unnamed_addr constant [5 x i8] c"void\00"
-@.str.614 = private unnamed_addr constant [14 x i8] c"  call void @\00"
-@.str.615 = private unnamed_addr constant [14 x i8] c" = call ptr @\00"
-@.str.616 = private unnamed_addr constant [13 x i8] c" = call i1 @\00"
-@.str.617 = private unnamed_addr constant [52 x i8] c"; Rockit LLVM IR \E2\80\94 generated by command (Stage 1)\00"
-@.str.618 = private unnamed_addr constant [43 x i8] c"target triple = \22arm64-apple-macosx14.0.0\22\00"
-@.str.619 = private unnamed_addr constant [35 x i8] c" = private unnamed_addr constant [\00"
+@.str.610 = private unnamed_addr constant [5 x i8] c"i32 \00"
+@.str.611 = private unnamed_addr constant [3 x i8] c"i1\00"
+@.str.612 = private unnamed_addr constant [7 x i8] c" to i1\00"
+@.str.613 = private unnamed_addr constant [4 x i8] c"i1 \00"
+@.str.614 = private unnamed_addr constant [5 x i8] c"void\00"
+@.str.615 = private unnamed_addr constant [14 x i8] c"  call void @\00"
+@.str.616 = private unnamed_addr constant [14 x i8] c" = call ptr @\00"
+@.str.617 = private unnamed_addr constant [13 x i8] c" = call i1 @\00"
+@.str.618 = private unnamed_addr constant [3 x i8] c"i8\00"
+@.str.619 = private unnamed_addr constant [13 x i8] c" = call i8 @\00"
 @.str.62 = private unnamed_addr constant [8 x i8] c"unowned\00"
-@.str.620 = private unnamed_addr constant [10 x i8] c" x i8] c\22\00"
-@.str.621 = private unnamed_addr constant [5 x i8] c"\5C00\22\00"
-@.str.622 = private unnamed_addr constant [23 x i8] c"; Runtime declarations\00"
-@.str.623 = private unnamed_addr constant [9 x i8] c"declare \00"
-@.str.624 = private unnamed_addr constant [3 x i8] c" @\00"
-@.str.625 = private unnamed_addr constant [29 x i8] c"declare i32 @_setjmp(ptr) #0\00"
-@.str.626 = private unnamed_addr constant [34 x i8] c"attributes #0 = { returns_twice }\00"
-@.str.627 = private unnamed_addr constant [8 x i8] c"poolMap\00"
-@.str.628 = private unnamed_addr constant [11 x i8] c"classNames\00"
-@.str.629 = private unnamed_addr constant [10 x i8] c"enumNames\00"
+@.str.620 = private unnamed_addr constant [12 x i8] c" = zext i8 \00"
+@.str.621 = private unnamed_addr constant [52 x i8] c"; Rockit LLVM IR \E2\80\94 generated by command (Stage 1)\00"
+@.str.622 = private unnamed_addr constant [43 x i8] c"target triple = \22arm64-apple-macosx15.0.0\22\00"
+@.str.623 = private unnamed_addr constant [35 x i8] c" = private unnamed_addr constant [\00"
+@.str.624 = private unnamed_addr constant [10 x i8] c" x i8] c\22\00"
+@.str.625 = private unnamed_addr constant [5 x i8] c"\5C00\22\00"
+@.str.626 = private unnamed_addr constant [23 x i8] c"; Runtime declarations\00"
+@.str.627 = private unnamed_addr constant [9 x i8] c"declare \00"
+@.str.628 = private unnamed_addr constant [3 x i8] c" @\00"
+@.str.629 = private unnamed_addr constant [29 x i8] c"declare i32 @_setjmp(ptr) #0\00"
 @.str.63 = private unnamed_addr constant [11 x i8] c"KW_UNOWNED\00"
-@.str.630 = private unnamed_addr constant [12 x i8] c"objectNames\00"
-@.str.631 = private unnamed_addr constant [15 x i8] c"interfaceNames\00"
-@.str.632 = private unnamed_addr constant [12 x i8] c"sealedNames\00"
-@.str.633 = private unnamed_addr constant [15 x i8] c"funcSignatures\00"
-@.str.634 = private unnamed_addr constant [12 x i8] c"typeAliases\00"
-@.str.635 = private unnamed_addr constant [15 x i8] c"extensionFuncs\00"
-@.str.636 = private unnamed_addr constant [14 x i8] c"lambdaCounter\00"
-@.str.637 = private unnamed_addr constant [9 x i8] c"compiler\00"
-@.str.638 = private unnamed_addr constant [7 x i8] c"locals\00"
-@.str.639 = private unnamed_addr constant [8 x i8] c"patches\00"
+@.str.630 = private unnamed_addr constant [34 x i8] c"attributes #0 = { returns_twice }\00"
+@.str.631 = private unnamed_addr constant [8 x i8] c"poolMap\00"
+@.str.632 = private unnamed_addr constant [11 x i8] c"classNames\00"
+@.str.633 = private unnamed_addr constant [10 x i8] c"enumNames\00"
+@.str.634 = private unnamed_addr constant [12 x i8] c"objectNames\00"
+@.str.635 = private unnamed_addr constant [15 x i8] c"interfaceNames\00"
+@.str.636 = private unnamed_addr constant [12 x i8] c"sealedNames\00"
+@.str.637 = private unnamed_addr constant [15 x i8] c"funcSignatures\00"
+@.str.638 = private unnamed_addr constant [12 x i8] c"typeAliases\00"
+@.str.639 = private unnamed_addr constant [15 x i8] c"extensionFuncs\00"
 @.str.64 = private unnamed_addr constant [3 x i8] c"if\00"
-@.str.640 = private unnamed_addr constant [7 x i8] c"labels\00"
-@.str.641 = private unnamed_addr constant [13 x i8] c"labelCounter\00"
-@.str.642 = private unnamed_addr constant [10 x i8] c"loopStack\00"
-@.str.643 = private unnamed_addr constant [11 x i8] c"localFuncs\00"
-@.str.644 = private unnamed_addr constant [10 x i8] c"lineTable\00"
-@.str.645 = private unnamed_addr constant [9 x i8] c"lastLine\00"
-@.str.646 = private unnamed_addr constant [2 x i8] c"L\00"
-@.str.647 = private unnamed_addr constant [7 x i8] c"offset\00"
-@.str.648 = private unnamed_addr constant [10 x i8] c"thenPatch\00"
-@.str.649 = private unnamed_addr constant [10 x i8] c"elsePatch\00"
+@.str.640 = private unnamed_addr constant [14 x i8] c"lambdaCounter\00"
+@.str.641 = private unnamed_addr constant [9 x i8] c"compiler\00"
+@.str.642 = private unnamed_addr constant [7 x i8] c"locals\00"
+@.str.643 = private unnamed_addr constant [8 x i8] c"patches\00"
+@.str.644 = private unnamed_addr constant [7 x i8] c"labels\00"
+@.str.645 = private unnamed_addr constant [13 x i8] c"labelCounter\00"
+@.str.646 = private unnamed_addr constant [10 x i8] c"loopStack\00"
+@.str.647 = private unnamed_addr constant [11 x i8] c"localFuncs\00"
+@.str.648 = private unnamed_addr constant [10 x i8] c"lineTable\00"
+@.str.649 = private unnamed_addr constant [9 x i8] c"lastLine\00"
 @.str.65 = private unnamed_addr constant [6 x i8] c"KW_IF\00"
-@.str.650 = private unnamed_addr constant [4 x i8] c"lit\00"
-@.str.651 = private unnamed_addr constant [10 x i8] c"className\00"
-@.str.652 = private unnamed_addr constant [12 x i8] c"classFields\00"
-@.str.653 = private unnamed_addr constant [8 x i8] c"__init_\00"
-@.str.654 = private unnamed_addr constant [3 x i8] c"??\00"
-@.str.655 = private unnamed_addr constant [6 x i8] c"parts\00"
-@.str.656 = private unnamed_addr constant [9 x i8] c"exprStmt\00"
-@.str.657 = private unnamed_addr constant [10 x i8] c"__lambda_\00"
-@.str.658 = private unnamed_addr constant [10 x i8] c"__variant\00"
-@.str.659 = private unnamed_addr constant [34 x i8] c"warning: 'when' on sealed class '\00"
+@.str.650 = private unnamed_addr constant [2 x i8] c"L\00"
+@.str.651 = private unnamed_addr constant [7 x i8] c"offset\00"
+@.str.652 = private unnamed_addr constant [10 x i8] c"thenPatch\00"
+@.str.653 = private unnamed_addr constant [10 x i8] c"elsePatch\00"
+@.str.654 = private unnamed_addr constant [4 x i8] c"lit\00"
+@.str.655 = private unnamed_addr constant [10 x i8] c"className\00"
+@.str.656 = private unnamed_addr constant [12 x i8] c"classFields\00"
+@.str.657 = private unnamed_addr constant [8 x i8] c"__init_\00"
+@.str.658 = private unnamed_addr constant [3 x i8] c"??\00"
+@.str.659 = private unnamed_addr constant [6 x i8] c"parts\00"
 @.str.66 = private unnamed_addr constant [5 x i8] c"else\00"
-@.str.660 = private unnamed_addr constant [23 x i8] c"' missing branch for '\00"
-@.str.661 = private unnamed_addr constant [11 x i8] c"breakLabel\00"
-@.str.662 = private unnamed_addr constant [14 x i8] c"continueLabel\00"
-@.str.663 = private unnamed_addr constant [6 x i8] c"label\00"
-@.str.664 = private unnamed_addr constant [11 x i8] c"_className\00"
-@.str.665 = private unnamed_addr constant [13 x i8] c"_classFields\00"
-@.str.666 = private unnamed_addr constant [13 x i8] c"classMethods\00"
-@.str.667 = private unnamed_addr constant [14 x i8] c"_classMethods\00"
-@.str.668 = private unnamed_addr constant [10 x i8] c"returnTag\00"
-@.str.669 = private unnamed_addr constant [8 x i8] c"Float64\00"
+@.str.660 = private unnamed_addr constant [9 x i8] c"exprStmt\00"
+@.str.661 = private unnamed_addr constant [10 x i8] c"__lambda_\00"
+@.str.662 = private unnamed_addr constant [10 x i8] c"__variant\00"
+@.str.663 = private unnamed_addr constant [34 x i8] c"warning: 'when' on sealed class '\00"
+@.str.664 = private unnamed_addr constant [23 x i8] c"' missing branch for '\00"
+@.str.665 = private unnamed_addr constant [11 x i8] c"breakLabel\00"
+@.str.666 = private unnamed_addr constant [14 x i8] c"continueLabel\00"
+@.str.667 = private unnamed_addr constant [6 x i8] c"label\00"
+@.str.668 = private unnamed_addr constant [11 x i8] c"_className\00"
+@.str.669 = private unnamed_addr constant [13 x i8] c"_classFields\00"
 @.str.67 = private unnamed_addr constant [8 x i8] c"KW_ELSE\00"
-@.str.670 = private unnamed_addr constant [9 x i8] c"typeName\00"
-@.str.671 = private unnamed_addr constant [9 x i8] c"__result\00"
-@.str.672 = private unnamed_addr constant [10 x i8] c".toString\00"
-@.str.673 = private unnamed_addr constant [7 x i8] c"equals\00"
-@.str.674 = private unnamed_addr constant [6 x i8] c"other\00"
-@.str.675 = private unnamed_addr constant [8 x i8] c".equals\00"
-@.str.676 = private unnamed_addr constant [4 x i8] c"__v\00"
-@.str.677 = private unnamed_addr constant [8 x i8] c"callArg\00"
-@.str.678 = private unnamed_addr constant [5 x i8] c".rok\00"
-@.str.679 = private unnamed_addr constant [27 x i8] c"Rockit REPL (Stage 1) v0.1\00"
+@.str.670 = private unnamed_addr constant [13 x i8] c"classMethods\00"
+@.str.671 = private unnamed_addr constant [14 x i8] c"_classMethods\00"
+@.str.672 = private unnamed_addr constant [10 x i8] c"returnTag\00"
+@.str.673 = private unnamed_addr constant [8 x i8] c"Float64\00"
+@.str.674 = private unnamed_addr constant [9 x i8] c"typeName\00"
+@.str.675 = private unnamed_addr constant [9 x i8] c"__result\00"
+@.str.676 = private unnamed_addr constant [10 x i8] c".toString\00"
+@.str.677 = private unnamed_addr constant [7 x i8] c"equals\00"
+@.str.678 = private unnamed_addr constant [6 x i8] c"other\00"
+@.str.679 = private unnamed_addr constant [8 x i8] c".equals\00"
 @.str.68 = private unnamed_addr constant [5 x i8] c"when\00"
-@.str.680 = private unnamed_addr constant [42 x i8] c"Type :quit to exit, :reset to clear state\00"
-@.str.681 = private unnamed_addr constant [9 x i8] c"rockit> \00"
-@.str.682 = private unnamed_addr constant [6 x i8] c":quit\00"
-@.str.683 = private unnamed_addr constant [3 x i8] c":q\00"
-@.str.684 = private unnamed_addr constant [7 x i8] c":reset\00"
-@.str.685 = private unnamed_addr constant [15 x i8] c"State cleared.\00"
-@.str.686 = private unnamed_addr constant [7 x i8] c"  ... \00"
-@.str.687 = private unnamed_addr constant [5 x i8] c"fun \00"
-@.str.688 = private unnamed_addr constant [7 x i8] c"class \00"
-@.str.689 = private unnamed_addr constant [6 x i8] c"data \00"
+@.str.680 = private unnamed_addr constant [4 x i8] c"__v\00"
+@.str.681 = private unnamed_addr constant [8 x i8] c"callArg\00"
+@.str.682 = private unnamed_addr constant [5 x i8] c".rok\00"
+@.str.683 = private unnamed_addr constant [27 x i8] c"Rockit REPL (Stage 1) v0.1\00"
+@.str.684 = private unnamed_addr constant [42 x i8] c"Type :quit to exit, :reset to clear state\00"
+@.str.685 = private unnamed_addr constant [9 x i8] c"rockit> \00"
+@.str.686 = private unnamed_addr constant [6 x i8] c":quit\00"
+@.str.687 = private unnamed_addr constant [3 x i8] c":q\00"
+@.str.688 = private unnamed_addr constant [7 x i8] c":reset\00"
+@.str.689 = private unnamed_addr constant [15 x i8] c"State cleared.\00"
 @.str.69 = private unnamed_addr constant [8 x i8] c"KW_WHEN\00"
-@.str.690 = private unnamed_addr constant [8 x i8] c"sealed \00"
-@.str.691 = private unnamed_addr constant [6 x i8] c"enum \00"
-@.str.692 = private unnamed_addr constant [11 x i8] c"interface \00"
-@.str.693 = private unnamed_addr constant [8 x i8] c"object \00"
-@.str.694 = private unnamed_addr constant [5 x i8] c"val \00"
-@.str.695 = private unnamed_addr constant [5 x i8] c"var \00"
-@.str.696 = private unnamed_addr constant [7 x i8] c"print(\00"
-@.str.697 = private unnamed_addr constant [4 x i8] c"if \00"
-@.str.698 = private unnamed_addr constant [4 x i8] c"if(\00"
-@.str.699 = private unnamed_addr constant [7 x i8] c"while \00"
+@.str.690 = private unnamed_addr constant [7 x i8] c"  ... \00"
+@.str.691 = private unnamed_addr constant [5 x i8] c"fun \00"
+@.str.692 = private unnamed_addr constant [7 x i8] c"class \00"
+@.str.693 = private unnamed_addr constant [6 x i8] c"data \00"
+@.str.694 = private unnamed_addr constant [8 x i8] c"sealed \00"
+@.str.695 = private unnamed_addr constant [6 x i8] c"enum \00"
+@.str.696 = private unnamed_addr constant [11 x i8] c"interface \00"
+@.str.697 = private unnamed_addr constant [8 x i8] c"object \00"
+@.str.698 = private unnamed_addr constant [5 x i8] c"val \00"
+@.str.699 = private unnamed_addr constant [5 x i8] c"var \00"
 @.str.7 = private unnamed_addr constant [7 x i8] c"KW_VAL\00"
 @.str.70 = private unnamed_addr constant [4 x i8] c"for\00"
-@.str.700 = private unnamed_addr constant [7 x i8] c"while(\00"
-@.str.701 = private unnamed_addr constant [5 x i8] c"for \00"
-@.str.702 = private unnamed_addr constant [5 x i8] c"for(\00"
-@.str.703 = private unnamed_addr constant [8 x i8] c"return \00"
-@.str.704 = private unnamed_addr constant [3 x i8] c"\0A\0A\00"
-@.str.705 = private unnamed_addr constant [20 x i8] c"fun main(): Unit {\0A\00"
-@.str.706 = private unnamed_addr constant [3 x i8] c"}\0A\00"
-@.str.707 = private unnamed_addr constant [7 x i8] c"ERROR:\00"
-@.str.708 = private unnamed_addr constant [3 x i8] c"OK\00"
-@.str.709 = private unnamed_addr constant [5 x i8] c"    \00"
+@.str.700 = private unnamed_addr constant [7 x i8] c"print(\00"
+@.str.701 = private unnamed_addr constant [4 x i8] c"if \00"
+@.str.702 = private unnamed_addr constant [4 x i8] c"if(\00"
+@.str.703 = private unnamed_addr constant [7 x i8] c"while \00"
+@.str.704 = private unnamed_addr constant [7 x i8] c"while(\00"
+@.str.705 = private unnamed_addr constant [5 x i8] c"for \00"
+@.str.706 = private unnamed_addr constant [5 x i8] c"for(\00"
+@.str.707 = private unnamed_addr constant [8 x i8] c"return \00"
+@.str.708 = private unnamed_addr constant [3 x i8] c"\0A\0A\00"
+@.str.709 = private unnamed_addr constant [20 x i8] c"fun main(): Unit {\0A\00"
 @.str.71 = private unnamed_addr constant [7 x i8] c"KW_FOR\00"
-@.str.710 = private unnamed_addr constant [22 x i8] c"    println(toString(\00"
-@.str.711 = private unnamed_addr constant [4 x i8] c"))\0A\00"
-@.str.712 = private unnamed_addr constant [108 x i8] c"Usage: command compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]\00"
-@.str.713 = private unnamed_addr constant [20 x i8] c"       command repl\00"
-@.str.714 = private unnamed_addr constant [5 x i8] c"repl\00"
-@.str.715 = private unnamed_addr constant [11 x i8] c"--lib-path\00"
-@.str.716 = private unnamed_addr constant [3 x i8] c"-o\00"
-@.str.717 = private unnamed_addr constant [11 x i8] c"--no-check\00"
-@.str.718 = private unnamed_addr constant [11 x i8] c"--optimize\00"
-@.str.719 = private unnamed_addr constant [12 x i8] c"--emit-llvm\00"
+@.str.710 = private unnamed_addr constant [3 x i8] c"}\0A\00"
+@.str.711 = private unnamed_addr constant [7 x i8] c"ERROR:\00"
+@.str.712 = private unnamed_addr constant [3 x i8] c"OK\00"
+@.str.713 = private unnamed_addr constant [5 x i8] c"    \00"
+@.str.714 = private unnamed_addr constant [22 x i8] c"    println(toString(\00"
+@.str.715 = private unnamed_addr constant [4 x i8] c"))\0A\00"
+@.str.716 = private unnamed_addr constant [108 x i8] c"Usage: command compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]\00"
+@.str.717 = private unnamed_addr constant [123 x i8] c"       command build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]\00"
+@.str.718 = private unnamed_addr constant [20 x i8] c"       command repl\00"
+@.str.719 = private unnamed_addr constant [5 x i8] c"repl\00"
 @.str.72 = private unnamed_addr constant [6 x i8] c"while\00"
-@.str.720 = private unnamed_addr constant [3 x i8] c": \00"
-@.str.721 = private unnamed_addr constant [17 x i8] c" parse error(s):\00"
-@.str.722 = private unnamed_addr constant [17 x i8] c" type warning(s)\00"
-@.str.723 = private unnamed_addr constant [5 x i8] c" -> \00"
-@.str.724 = private unnamed_addr constant [22 x i8] c" function(s), LLVM IR\00"
-@.str.725 = private unnamed_addr constant [15 x i8] c" function(s), \00"
-@.str.726 = private unnamed_addr constant [7 x i8] c" bytes\00"
+@.str.720 = private unnamed_addr constant [13 x i8] c"build-native\00"
+@.str.721 = private unnamed_addr constant [11 x i8] c"--lib-path\00"
+@.str.722 = private unnamed_addr constant [3 x i8] c"-o\00"
+@.str.723 = private unnamed_addr constant [15 x i8] c"--runtime-path\00"
+@.str.724 = private unnamed_addr constant [11 x i8] c"--no-check\00"
+@.str.725 = private unnamed_addr constant [11 x i8] c"--optimize\00"
+@.str.726 = private unnamed_addr constant [12 x i8] c"--emit-llvm\00"
+@.str.727 = private unnamed_addr constant [5 x i8] c".out\00"
+@.str.728 = private unnamed_addr constant [3 x i8] c": \00"
+@.str.729 = private unnamed_addr constant [17 x i8] c" parse error(s):\00"
 @.str.73 = private unnamed_addr constant [9 x i8] c"KW_WHILE\00"
+@.str.730 = private unnamed_addr constant [17 x i8] c" type warning(s)\00"
+@.str.731 = private unnamed_addr constant [4 x i8] c".ll\00"
+@.str.732 = private unnamed_addr constant [5 x i8] c" -> \00"
+@.str.733 = private unnamed_addr constant [10 x i8] c" (native)\00"
+@.str.734 = private unnamed_addr constant [13 x i8] c" function(s)\00"
+@.str.735 = private unnamed_addr constant [29 x i8] c"/../Runtime/rockit_runtime.c\00"
+@.str.736 = private unnamed_addr constant [25 x i8] c"Runtime/rockit_runtime.c\00"
+@.str.737 = private unnamed_addr constant [59 x i8] c"error: cannot find rockit_runtime.c \E2\80\94 use --runtime-path\00"
+@.str.738 = private unnamed_addr constant [14 x i8] c"clang -O1 -w \00"
+@.str.739 = private unnamed_addr constant [5 x i8] c" -o \00"
 @.str.74 = private unnamed_addr constant [3 x i8] c"do\00"
+@.str.740 = private unnamed_addr constant [27 x i8] c"error: clang failed (exit \00"
+@.str.741 = private unnamed_addr constant [22 x i8] c" function(s), LLVM IR\00"
+@.str.742 = private unnamed_addr constant [15 x i8] c" function(s), \00"
+@.str.743 = private unnamed_addr constant [7 x i8] c" bytes\00"
 @.str.75 = private unnamed_addr constant [6 x i8] c"KW_DO\00"
 @.str.76 = private unnamed_addr constant [7 x i8] c"return\00"
 @.str.77 = private unnamed_addr constant [10 x i8] c"KW_RETURN\00"
@@ -764,6 +781,7 @@ declare i64 @rockit_object_get_field(ptr, i32)
 declare i64 @rockit_string_length(ptr)
 declare i64 @stringIndexOf(ptr, ptr)
 declare i64 @stringLength(ptr)
+declare i64 @systemExec(ptr)
 declare i64 @toInt(i64)
 declare ptr @charAt(ptr, i64)
 declare ptr @fileRead(ptr)
@@ -39594,6 +39612,10 @@ prologue:
   %t200 = alloca ptr
   %t201 = alloca i64
   %t202 = alloca i64
+  %t203 = alloca ptr
+  %t204 = alloca ptr
+  %t205 = alloca i64
+  %t206 = alloca i64
   %t21 = alloca i64
   %t22 = alloca i64
   %t23 = alloca ptr
@@ -39996,9 +40018,9 @@ entry:
   store i64 %_197, ptr %t113
   %_198 = load i64, ptr %t0
   store i64 %_198, ptr %t114
-  %_199 = call ptr @rockit_string_new(ptr @.str.430)
+  %_199 = call ptr @rockit_string_new(ptr @.str.484)
   store ptr %_199, ptr %t115
-  %_200 = call ptr @rockit_string_new(ptr @.str.484)
+  %_200 = call ptr @rockit_string_new(ptr @.str.474)
   store ptr %_200, ptr %t116
   %_201 = load i64, ptr %t114
   %_202 = load ptr, ptr %t115
@@ -40007,7 +40029,7 @@ entry:
   store i64 %_204, ptr %t117
   %_205 = load i64, ptr %t0
   store i64 %_205, ptr %t118
-  %_206 = call ptr @rockit_string_new(ptr @.str.405)
+  %_206 = call ptr @rockit_string_new(ptr @.str.430)
   store ptr %_206, ptr %t119
   %_207 = call ptr @rockit_string_new(ptr @.str.485)
   store ptr %_207, ptr %t120
@@ -40018,9 +40040,9 @@ entry:
   store i64 %_211, ptr %t121
   %_212 = load i64, ptr %t0
   store i64 %_212, ptr %t122
-  %_213 = call ptr @rockit_string_new(ptr @.str.389)
+  %_213 = call ptr @rockit_string_new(ptr @.str.405)
   store ptr %_213, ptr %t123
-  %_214 = call ptr @rockit_string_new(ptr @.str.481)
+  %_214 = call ptr @rockit_string_new(ptr @.str.486)
   store ptr %_214, ptr %t124
   %_215 = load i64, ptr %t122
   %_216 = load ptr, ptr %t123
@@ -40029,7 +40051,7 @@ entry:
   store i64 %_218, ptr %t125
   %_219 = load i64, ptr %t0
   store i64 %_219, ptr %t126
-  %_220 = call ptr @rockit_string_new(ptr @.str.390)
+  %_220 = call ptr @rockit_string_new(ptr @.str.389)
   store ptr %_220, ptr %t127
   %_221 = call ptr @rockit_string_new(ptr @.str.481)
   store ptr %_221, ptr %t128
@@ -40040,7 +40062,7 @@ entry:
   store i64 %_225, ptr %t129
   %_226 = load i64, ptr %t0
   store i64 %_226, ptr %t130
-  %_227 = call ptr @rockit_string_new(ptr @.str.392)
+  %_227 = call ptr @rockit_string_new(ptr @.str.390)
   store ptr %_227, ptr %t131
   %_228 = call ptr @rockit_string_new(ptr @.str.481)
   store ptr %_228, ptr %t132
@@ -40051,9 +40073,9 @@ entry:
   store i64 %_232, ptr %t133
   %_233 = load i64, ptr %t0
   store i64 %_233, ptr %t134
-  %_234 = call ptr @rockit_string_new(ptr @.str.486)
+  %_234 = call ptr @rockit_string_new(ptr @.str.392)
   store ptr %_234, ptr %t135
-  %_235 = call ptr @rockit_string_new(ptr @.str.484)
+  %_235 = call ptr @rockit_string_new(ptr @.str.481)
   store ptr %_235, ptr %t136
   %_236 = load i64, ptr %t134
   %_237 = load ptr, ptr %t135
@@ -40062,9 +40084,9 @@ entry:
   store i64 %_239, ptr %t137
   %_240 = load i64, ptr %t0
   store i64 %_240, ptr %t138
-  %_241 = call ptr @rockit_string_new(ptr @.str.361)
+  %_241 = call ptr @rockit_string_new(ptr @.str.487)
   store ptr %_241, ptr %t139
-  %_242 = call ptr @rockit_string_new(ptr @.str.487)
+  %_242 = call ptr @rockit_string_new(ptr @.str.485)
   store ptr %_242, ptr %t140
   %_243 = load i64, ptr %t138
   %_244 = load ptr, ptr %t139
@@ -40073,9 +40095,9 @@ entry:
   store i64 %_246, ptr %t141
   %_247 = load i64, ptr %t0
   store i64 %_247, ptr %t142
-  %_248 = call ptr @rockit_string_new(ptr @.str.363)
+  %_248 = call ptr @rockit_string_new(ptr @.str.361)
   store ptr %_248, ptr %t143
-  %_249 = call ptr @rockit_string_new(ptr @.str.487)
+  %_249 = call ptr @rockit_string_new(ptr @.str.488)
   store ptr %_249, ptr %t144
   %_250 = load i64, ptr %t142
   %_251 = load ptr, ptr %t143
@@ -40084,9 +40106,9 @@ entry:
   store i64 %_253, ptr %t145
   %_254 = load i64, ptr %t0
   store i64 %_254, ptr %t146
-  %_255 = call ptr @rockit_string_new(ptr @.str.488)
+  %_255 = call ptr @rockit_string_new(ptr @.str.363)
   store ptr %_255, ptr %t147
-  %_256 = call ptr @rockit_string_new(ptr @.str.480)
+  %_256 = call ptr @rockit_string_new(ptr @.str.488)
   store ptr %_256, ptr %t148
   %_257 = load i64, ptr %t146
   %_258 = load ptr, ptr %t147
@@ -40097,7 +40119,7 @@ entry:
   store i64 %_261, ptr %t150
   %_262 = call ptr @rockit_string_new(ptr @.str.489)
   store ptr %_262, ptr %t151
-  %_263 = call ptr @rockit_string_new(ptr @.str.487)
+  %_263 = call ptr @rockit_string_new(ptr @.str.480)
   store ptr %_263, ptr %t152
   %_264 = load i64, ptr %t150
   %_265 = load ptr, ptr %t151
@@ -40108,7 +40130,7 @@ entry:
   store i64 %_268, ptr %t154
   %_269 = call ptr @rockit_string_new(ptr @.str.490)
   store ptr %_269, ptr %t155
-  %_270 = call ptr @rockit_string_new(ptr @.str.487)
+  %_270 = call ptr @rockit_string_new(ptr @.str.488)
   store ptr %_270, ptr %t156
   %_271 = load i64, ptr %t154
   %_272 = load ptr, ptr %t155
@@ -40119,7 +40141,7 @@ entry:
   store i64 %_275, ptr %t158
   %_276 = call ptr @rockit_string_new(ptr @.str.491)
   store ptr %_276, ptr %t159
-  %_277 = call ptr @rockit_string_new(ptr @.str.492)
+  %_277 = call ptr @rockit_string_new(ptr @.str.488)
   store ptr %_277, ptr %t160
   %_278 = load i64, ptr %t158
   %_279 = load ptr, ptr %t159
@@ -40128,9 +40150,9 @@ entry:
   store i64 %_281, ptr %t161
   %_282 = load i64, ptr %t0
   store i64 %_282, ptr %t162
-  %_283 = call ptr @rockit_string_new(ptr @.str.493)
+  %_283 = call ptr @rockit_string_new(ptr @.str.492)
   store ptr %_283, ptr %t163
-  %_284 = call ptr @rockit_string_new(ptr @.str.485)
+  %_284 = call ptr @rockit_string_new(ptr @.str.493)
   store ptr %_284, ptr %t164
   %_285 = load i64, ptr %t162
   %_286 = load ptr, ptr %t163
@@ -40141,7 +40163,7 @@ entry:
   store i64 %_289, ptr %t166
   %_290 = call ptr @rockit_string_new(ptr @.str.494)
   store ptr %_290, ptr %t167
-  %_291 = call ptr @rockit_string_new(ptr @.str.485)
+  %_291 = call ptr @rockit_string_new(ptr @.str.486)
   store ptr %_291, ptr %t168
   %_292 = load i64, ptr %t166
   %_293 = load ptr, ptr %t167
@@ -40152,7 +40174,7 @@ entry:
   store i64 %_296, ptr %t170
   %_297 = call ptr @rockit_string_new(ptr @.str.495)
   store ptr %_297, ptr %t171
-  %_298 = call ptr @rockit_string_new(ptr @.str.496)
+  %_298 = call ptr @rockit_string_new(ptr @.str.486)
   store ptr %_298, ptr %t172
   %_299 = load i64, ptr %t170
   %_300 = load ptr, ptr %t171
@@ -40161,9 +40183,9 @@ entry:
   store i64 %_302, ptr %t173
   %_303 = load i64, ptr %t0
   store i64 %_303, ptr %t174
-  %_304 = call ptr @rockit_string_new(ptr @.str.497)
+  %_304 = call ptr @rockit_string_new(ptr @.str.496)
   store ptr %_304, ptr %t175
-  %_305 = call ptr @rockit_string_new(ptr @.str.482)
+  %_305 = call ptr @rockit_string_new(ptr @.str.497)
   store ptr %_305, ptr %t176
   %_306 = load i64, ptr %t174
   %_307 = load ptr, ptr %t175
@@ -40174,7 +40196,7 @@ entry:
   store i64 %_310, ptr %t178
   %_311 = call ptr @rockit_string_new(ptr @.str.498)
   store ptr %_311, ptr %t179
-  %_312 = call ptr @rockit_string_new(ptr @.str.499)
+  %_312 = call ptr @rockit_string_new(ptr @.str.482)
   store ptr %_312, ptr %t180
   %_313 = load i64, ptr %t178
   %_314 = load ptr, ptr %t179
@@ -40183,9 +40205,9 @@ entry:
   store i64 %_316, ptr %t181
   %_317 = load i64, ptr %t0
   store i64 %_317, ptr %t182
-  %_318 = call ptr @rockit_string_new(ptr @.str.500)
+  %_318 = call ptr @rockit_string_new(ptr @.str.499)
   store ptr %_318, ptr %t183
-  %_319 = call ptr @rockit_string_new(ptr @.str.487)
+  %_319 = call ptr @rockit_string_new(ptr @.str.500)
   store ptr %_319, ptr %t184
   %_320 = load i64, ptr %t182
   %_321 = load ptr, ptr %t183
@@ -40196,7 +40218,7 @@ entry:
   store i64 %_324, ptr %t186
   %_325 = call ptr @rockit_string_new(ptr @.str.501)
   store ptr %_325, ptr %t187
-  %_326 = call ptr @rockit_string_new(ptr @.str.465)
+  %_326 = call ptr @rockit_string_new(ptr @.str.488)
   store ptr %_326, ptr %t188
   %_327 = load i64, ptr %t186
   %_328 = load ptr, ptr %t187
@@ -40207,7 +40229,7 @@ entry:
   store i64 %_331, ptr %t190
   %_332 = call ptr @rockit_string_new(ptr @.str.502)
   store ptr %_332, ptr %t191
-  %_333 = call ptr @rockit_string_new(ptr @.str.503)
+  %_333 = call ptr @rockit_string_new(ptr @.str.465)
   store ptr %_333, ptr %t192
   %_334 = load i64, ptr %t190
   %_335 = load ptr, ptr %t191
@@ -40216,9 +40238,9 @@ entry:
   store i64 %_337, ptr %t193
   %_338 = load i64, ptr %t0
   store i64 %_338, ptr %t194
-  %_339 = call ptr @rockit_string_new(ptr @.str.504)
+  %_339 = call ptr @rockit_string_new(ptr @.str.503)
   store ptr %_339, ptr %t195
-  %_340 = call ptr @rockit_string_new(ptr @.str.505)
+  %_340 = call ptr @rockit_string_new(ptr @.str.504)
   store ptr %_340, ptr %t196
   %_341 = load i64, ptr %t194
   %_342 = load ptr, ptr %t195
@@ -40227,9 +40249,9 @@ entry:
   store i64 %_344, ptr %t197
   %_345 = load i64, ptr %t0
   store i64 %_345, ptr %t198
-  %_346 = call ptr @rockit_string_new(ptr @.str.506)
+  %_346 = call ptr @rockit_string_new(ptr @.str.505)
   store ptr %_346, ptr %t199
-  %_347 = call ptr @rockit_string_new(ptr @.str.507)
+  %_347 = call ptr @rockit_string_new(ptr @.str.506)
   store ptr %_347, ptr %t200
   %_348 = load i64, ptr %t198
   %_349 = load ptr, ptr %t199
@@ -40238,8 +40260,19 @@ entry:
   store i64 %_351, ptr %t201
   %_352 = load i64, ptr %t0
   store i64 %_352, ptr %t202
-  %_353 = load ptr, ptr %t202
-  ret ptr %_353
+  %_353 = call ptr @rockit_string_new(ptr @.str.507)
+  store ptr %_353, ptr %t203
+  %_354 = call ptr @rockit_string_new(ptr @.str.508)
+  store ptr %_354, ptr %t204
+  %_355 = load i64, ptr %t202
+  %_356 = load ptr, ptr %t203
+  %_357 = load ptr, ptr %t204
+  %_358 = call i64 @mapPut(i64 %_355, ptr %_356, ptr %_357)
+  store i64 %_358, ptr %t205
+  %_359 = load i64, ptr %t0
+  store i64 %_359, ptr %t206
+  %_360 = load ptr, ptr %t206
+  ret ptr %_360
 }
 
 define ptr @llvmParseSig(i64 %param.sig) {
@@ -40716,7 +40749,7 @@ while_body_0:
 if_then_0:
   %_30 = load i64, ptr %t2
   store i64 %_30, ptr %t22
-  %_31 = call ptr @rockit_string_new(ptr @.str.508)
+  %_31 = call ptr @rockit_string_new(ptr @.str.509)
   store ptr %_31, ptr %t23
   %_32 = load i64, ptr %t22
   %_33 = load ptr, ptr %t23
@@ -40738,7 +40771,7 @@ if_else_0:
 if_then_1:
   %_41 = load i64, ptr %t2
   store i64 %_41, ptr %t29
-  %_42 = call ptr @rockit_string_new(ptr @.str.509)
+  %_42 = call ptr @rockit_string_new(ptr @.str.510)
   store ptr %_42, ptr %t30
   %_43 = load i64, ptr %t29
   %_44 = load ptr, ptr %t30
@@ -40760,7 +40793,7 @@ if_else_1:
 if_then_2:
   %_52 = load i64, ptr %t2
   store i64 %_52, ptr %t36
-  %_53 = call ptr @rockit_string_new(ptr @.str.510)
+  %_53 = call ptr @rockit_string_new(ptr @.str.511)
   store ptr %_53, ptr %t37
   %_54 = load i64, ptr %t36
   %_55 = load ptr, ptr %t37
@@ -40782,7 +40815,7 @@ if_else_2:
 if_then_3:
   %_63 = load i64, ptr %t2
   store i64 %_63, ptr %t43
-  %_64 = call ptr @rockit_string_new(ptr @.str.511)
+  %_64 = call ptr @rockit_string_new(ptr @.str.512)
   store ptr %_64, ptr %t44
   %_65 = load i64, ptr %t43
   %_66 = load ptr, ptr %t44
@@ -40804,7 +40837,7 @@ if_else_3:
 if_then_4:
   %_74 = load i64, ptr %t2
   store i64 %_74, ptr %t50
-  %_75 = call ptr @rockit_string_new(ptr @.str.512)
+  %_75 = call ptr @rockit_string_new(ptr @.str.513)
   store ptr %_75, ptr %t51
   %_76 = load i64, ptr %t50
   %_77 = load ptr, ptr %t51
@@ -40826,7 +40859,7 @@ if_else_4:
 if_then_5:
   %_85 = load i64, ptr %t2
   store i64 %_85, ptr %t57
-  %_86 = call ptr @rockit_string_new(ptr @.str.513)
+  %_86 = call ptr @rockit_string_new(ptr @.str.514)
   store ptr %_86, ptr %t58
   %_87 = load i64, ptr %t57
   %_88 = load ptr, ptr %t58
@@ -41070,7 +41103,7 @@ if_merge_1:
   %_20 = load i1, ptr %t16
   br i1 %_20, label %if_then_2, label %if_else_2
 if_then_2:
-  %_21 = call ptr @rockit_string_new(ptr @.str.514)
+  %_21 = call ptr @rockit_string_new(ptr @.str.515)
   store ptr %_21, ptr %t18
   %_22 = load ptr, ptr %t18
   ret ptr %_22
@@ -41087,7 +41120,7 @@ if_merge_2:
   %_27 = load i1, ptr %t22
   br i1 %_27, label %if_then_3, label %if_else_3
 if_then_3:
-  %_28 = call ptr @rockit_string_new(ptr @.str.515)
+  %_28 = call ptr @rockit_string_new(ptr @.str.516)
   store ptr %_28, ptr %t24
   %_29 = load ptr, ptr %t24
   ret ptr %_29
@@ -41104,7 +41137,7 @@ if_merge_3:
   %_34 = load i1, ptr %t28
   br i1 %_34, label %if_then_4, label %if_else_4
 if_then_4:
-  %_35 = call ptr @rockit_string_new(ptr @.str.516)
+  %_35 = call ptr @rockit_string_new(ptr @.str.517)
   store ptr %_35, ptr %t30
   %_36 = load ptr, ptr %t30
   ret ptr %_36
@@ -41121,7 +41154,7 @@ if_merge_4:
   %_41 = load i1, ptr %t34
   br i1 %_41, label %if_then_5, label %if_else_5
 if_then_5:
-  %_42 = call ptr @rockit_string_new(ptr @.str.517)
+  %_42 = call ptr @rockit_string_new(ptr @.str.518)
   store ptr %_42, ptr %t36
   %_43 = load ptr, ptr %t36
   ret ptr %_43
@@ -41138,7 +41171,7 @@ if_merge_5:
   %_48 = load i1, ptr %t40
   br i1 %_48, label %if_then_6, label %if_else_6
 if_then_6:
-  %_49 = call ptr @rockit_string_new(ptr @.str.518)
+  %_49 = call ptr @rockit_string_new(ptr @.str.519)
   store ptr %_49, ptr %t42
   %_50 = load ptr, ptr %t42
   ret ptr %_50
@@ -41155,7 +41188,7 @@ if_merge_6:
   %_55 = load i1, ptr %t46
   br i1 %_55, label %if_then_7, label %if_else_7
 if_then_7:
-  %_56 = call ptr @rockit_string_new(ptr @.str.519)
+  %_56 = call ptr @rockit_string_new(ptr @.str.520)
   store ptr %_56, ptr %t48
   %_57 = load ptr, ptr %t48
   ret ptr %_57
@@ -41172,7 +41205,7 @@ if_merge_7:
   %_62 = load i1, ptr %t52
   br i1 %_62, label %if_then_8, label %if_else_8
 if_then_8:
-  %_63 = call ptr @rockit_string_new(ptr @.str.520)
+  %_63 = call ptr @rockit_string_new(ptr @.str.521)
   store ptr %_63, ptr %t54
   %_64 = load ptr, ptr %t54
   ret ptr %_64
@@ -41189,7 +41222,7 @@ if_merge_8:
   %_69 = load i1, ptr %t58
   br i1 %_69, label %if_then_9, label %if_else_9
 if_then_9:
-  %_70 = call ptr @rockit_string_new(ptr @.str.521)
+  %_70 = call ptr @rockit_string_new(ptr @.str.522)
   store ptr %_70, ptr %t60
   %_71 = load ptr, ptr %t60
   ret ptr %_71
@@ -43179,14 +43212,14 @@ entry:
   %_6 = load i1, ptr %t4
   br i1 %_6, label %if_then_0, label %if_else_0
 if_then_0:
-  %_7 = call ptr @rockit_string_new(ptr @.str.522)
+  %_7 = call ptr @rockit_string_new(ptr @.str.523)
   store ptr %_7, ptr %t6
   %_8 = load ptr, ptr %t6
   ret ptr %_8
 if_else_0:
   br label %if_merge_0
 if_merge_0:
-  %_9 = call ptr @rockit_string_new(ptr @.str.523)
+  %_9 = call ptr @rockit_string_new(ptr @.str.524)
   store ptr %_9, ptr %t8
   %_10 = load i64, ptr %t0
   store i64 %_10, ptr %t9
@@ -43230,7 +43263,7 @@ entry:
   store i64 %_1, ptr %t0
   %_2 = load i64, ptr %t0
   store i64 %_2, ptr %t3
-  %_3 = call ptr @rockit_string_new(ptr @.str.524)
+  %_3 = call ptr @rockit_string_new(ptr @.str.525)
   store ptr %_3, ptr %t4
   %_4 = load i64, ptr %t3
   %_5 = load ptr, ptr %t4
@@ -43243,7 +43276,7 @@ entry:
   store i64 %_9, ptr %t2
   %_10 = load i64, ptr %t0
   store i64 %_10, ptr %t7
-  %_11 = call ptr @rockit_string_new(ptr @.str.524)
+  %_11 = call ptr @rockit_string_new(ptr @.str.525)
   store ptr %_11, ptr %t8
   %_12 = load i64, ptr %t2
   store i64 %_12, ptr %t9
@@ -43257,7 +43290,7 @@ entry:
   %_18 = load i64, ptr %t11
   %_19 = call i64 @mapPut(i64 %_16, ptr %_17, i64 %_18)
   store i64 %_19, ptr %t12
-  %_20 = call ptr @rockit_string_new(ptr @.str.525)
+  %_20 = call ptr @rockit_string_new(ptr @.str.526)
   store ptr %_20, ptr %t13
   %_21 = load i64, ptr %t2
   store i64 %_21, ptr %t14
@@ -45465,7 +45498,7 @@ entry:
   store ptr %_27, ptr %t17
   %_28 = load i64, ptr %t2
   store i64 %_28, ptr %t22
-  %_29 = call ptr @rockit_string_new(ptr @.str.526)
+  %_29 = call ptr @rockit_string_new(ptr @.str.527)
   store ptr %_29, ptr %t23
   %_30 = load i64, ptr %t22
   %_31 = load ptr, ptr %t23
@@ -45478,7 +45511,7 @@ entry:
   store i64 %_35, ptr %t21
   %_36 = load i64, ptr %t2
   store i64 %_36, ptr %t27
-  %_37 = call ptr @rockit_string_new(ptr @.str.527)
+  %_37 = call ptr @rockit_string_new(ptr @.str.528)
   store ptr %_37, ptr %t28
   %_38 = load i64, ptr %t27
   %_39 = load ptr, ptr %t28
@@ -45516,7 +45549,7 @@ entry:
   store ptr %_58, ptr %t39
   %_59 = load i64, ptr %t39
   store i64 %_59, ptr %t41
-  %_60 = call ptr @rockit_string_new(ptr @.str.524)
+  %_60 = call ptr @rockit_string_new(ptr @.str.525)
   store ptr %_60, ptr %t42
   store i64 0, ptr %t43
   %_61 = load i64, ptr %t41
@@ -45530,7 +45563,7 @@ entry:
   store ptr %_66, ptr %t45
   %_67 = load i64, ptr %t39
   store i64 %_67, ptr %t47
-  %_68 = call ptr @rockit_string_new(ptr @.str.528)
+  %_68 = call ptr @rockit_string_new(ptr @.str.529)
   store ptr %_68, ptr %t48
   %_69 = load i64, ptr %t45
   store i64 %_69, ptr %t49
@@ -45546,7 +45579,7 @@ entry:
 if_then_0:
   %_76 = load i64, ptr %t6
   store i64 %_76, ptr %t53
-  %_77 = call ptr @rockit_string_new(ptr @.str.529)
+  %_77 = call ptr @rockit_string_new(ptr @.str.530)
   store ptr %_77, ptr %t54
   %_78 = load i64, ptr %t53
   %_79 = load ptr, ptr %t54
@@ -45554,7 +45587,7 @@ if_then_0:
   store i64 %_80, ptr %t55
   br label %if_merge_0
 if_else_0:
-  %_81 = call ptr @rockit_string_new(ptr @.str.530)
+  %_81 = call ptr @rockit_string_new(ptr @.str.531)
   store ptr %_81, ptr %t57
   %_82 = load i64, ptr %t17
   store i64 %_82, ptr %t58
@@ -45598,7 +45631,7 @@ while_body_0:
 if_then_1:
   %_103 = load i64, ptr %t56
   store i64 %_103, ptr %t71
-  %_104 = call ptr @rockit_string_new(ptr @.str.531)
+  %_104 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_104, ptr %t72
   %_105 = load i64, ptr %t71
   %_106 = load ptr, ptr %t72
@@ -45612,7 +45645,7 @@ if_else_1:
 if_merge_1:
   %_109 = load i64, ptr %t56
   store i64 %_109, ptr %t75
-  %_110 = call ptr @rockit_string_new(ptr @.str.532)
+  %_110 = call ptr @rockit_string_new(ptr @.str.533)
   store ptr %_110, ptr %t76
   %_111 = load i64, ptr %t62
   store i64 %_111, ptr %t77
@@ -45642,7 +45675,7 @@ if_merge_1:
 while_exit_0:
   %_126 = load i64, ptr %t56
   store i64 %_126, ptr %t84
-  %_127 = call ptr @rockit_string_new(ptr @.str.533)
+  %_127 = call ptr @rockit_string_new(ptr @.str.534)
   store ptr %_127, ptr %t85
   %_128 = load i64, ptr %t84
   %_129 = load ptr, ptr %t85
@@ -45662,7 +45695,7 @@ while_exit_0:
 if_merge_0:
   %_137 = load i64, ptr %t6
   store i64 %_137, ptr %t91
-  %_138 = call ptr @rockit_string_new(ptr @.str.534)
+  %_138 = call ptr @rockit_string_new(ptr @.str.535)
   store ptr %_138, ptr %t92
   %_139 = load i64, ptr %t91
   %_140 = load ptr, ptr %t92
@@ -45686,14 +45719,14 @@ while_header_1:
 while_body_1:
   %_149 = load i64, ptr %t6
   store i64 %_149, ptr %t99
-  %_150 = call ptr @rockit_string_new(ptr @.str.535)
+  %_150 = call ptr @rockit_string_new(ptr @.str.536)
   store ptr %_150, ptr %t100
   %_151 = load i64, ptr %t94
   store i64 %_151, ptr %t101
   %_152 = load i64, ptr %t101
   %_153 = call ptr @toString(i64 %_152)
   store ptr %_153, ptr %t102
-  %_154 = call ptr @rockit_string_new(ptr @.str.536)
+  %_154 = call ptr @rockit_string_new(ptr @.str.537)
   store ptr %_154, ptr %t103
   %_155 = load ptr, ptr %t102
   %_156 = load ptr, ptr %t103
@@ -45736,14 +45769,14 @@ while_header_2:
 while_body_2:
   %_176 = load i64, ptr %t6
   store i64 %_176, ptr %t115
-  %_177 = call ptr @rockit_string_new(ptr @.str.537)
+  %_177 = call ptr @rockit_string_new(ptr @.str.538)
   store ptr %_177, ptr %t116
   %_178 = load i64, ptr %t110
   store i64 %_178, ptr %t117
   %_179 = load i64, ptr %t117
   %_180 = call ptr @toString(i64 %_179)
   store ptr %_180, ptr %t118
-  %_181 = call ptr @rockit_string_new(ptr @.str.536)
+  %_181 = call ptr @rockit_string_new(ptr @.str.537)
   store ptr %_181, ptr %t119
   %_182 = load ptr, ptr %t118
   %_183 = load ptr, ptr %t119
@@ -45764,7 +45797,7 @@ while_body_2:
 if_then_2:
   %_193 = load i64, ptr %t6
   store i64 %_193, ptr %t125
-  %_194 = call ptr @rockit_string_new(ptr @.str.538)
+  %_194 = call ptr @rockit_string_new(ptr @.str.539)
   store ptr %_194, ptr %t126
   %_195 = load i64, ptr %t110
   store i64 %_195, ptr %t127
@@ -45783,14 +45816,14 @@ if_then_2:
 if_else_2:
   %_204 = load i64, ptr %t6
   store i64 %_204, ptr %t131
-  %_205 = call ptr @rockit_string_new(ptr @.str.539)
+  %_205 = call ptr @rockit_string_new(ptr @.str.540)
   store ptr %_205, ptr %t132
   %_206 = load i64, ptr %t110
   store i64 %_206, ptr %t133
   %_207 = load i64, ptr %t133
   %_208 = call ptr @toString(i64 %_207)
   store ptr %_208, ptr %t134
-  %_209 = call ptr @rockit_string_new(ptr @.str.540)
+  %_209 = call ptr @rockit_string_new(ptr @.str.541)
   store ptr %_209, ptr %t135
   %_210 = load i64, ptr %t110
   store i64 %_210, ptr %t136
@@ -45833,7 +45866,7 @@ while_exit_2:
 if_then_3:
   %_232 = load i64, ptr %t45
   store i64 %_232, ptr %t148
-  %_233 = call ptr @rockit_string_new(ptr @.str.491)
+  %_233 = call ptr @rockit_string_new(ptr @.str.492)
   store ptr %_233, ptr %t149
   store i1 1, ptr %t150
   %_234 = load i64, ptr %t148
@@ -45843,7 +45876,7 @@ if_then_3:
   store i64 %_237, ptr %t151
   %_238 = load i64, ptr %t6
   store i64 %_238, ptr %t152
-  %_239 = call ptr @rockit_string_new(ptr @.str.541)
+  %_239 = call ptr @rockit_string_new(ptr @.str.542)
   store ptr %_239, ptr %t153
   %_240 = load i64, ptr %t152
   %_241 = load ptr, ptr %t153
@@ -45855,7 +45888,7 @@ if_else_3:
 if_merge_3:
   %_243 = load i64, ptr %t6
   store i64 %_243, ptr %t156
-  %_244 = call ptr @rockit_string_new(ptr @.str.542)
+  %_244 = call ptr @rockit_string_new(ptr @.str.543)
   store ptr %_244, ptr %t157
   %_245 = load i64, ptr %t156
   %_246 = load ptr, ptr %t157
@@ -45932,7 +45965,7 @@ if_then_4:
 if_then_5:
   %_286 = load i64, ptr %t6
   store i64 %_286, ptr %t184
-  %_287 = call ptr @rockit_string_new(ptr @.str.543)
+  %_287 = call ptr @rockit_string_new(ptr @.str.544)
   store ptr %_287, ptr %t185
   %_288 = load i64, ptr %t162
   store i64 %_288, ptr %t186
@@ -46033,14 +46066,14 @@ if_then_6:
   store i64 %_340, ptr %t215
   %_341 = load i64, ptr %t6
   store i64 %_341, ptr %t221
-  %_342 = call ptr @rockit_string_new(ptr @.str.544)
+  %_342 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_342, ptr %t222
   %_343 = load i64, ptr %t215
   store i64 %_343, ptr %t223
   %_344 = load i64, ptr %t223
   %_345 = call ptr @toString(i64 %_344)
   store ptr %_345, ptr %t224
-  %_346 = call ptr @rockit_string_new(ptr @.str.545)
+  %_346 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_346, ptr %t225
   %_347 = load i64, ptr %t209
   store i64 %_347, ptr %t226
@@ -46116,14 +46149,14 @@ if_then_7:
   store i64 %_389, ptr %t245
   %_390 = load i64, ptr %t6
   store i64 %_390, ptr %t251
-  %_391 = call ptr @rockit_string_new(ptr @.str.544)
+  %_391 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_391, ptr %t252
   %_392 = load i64, ptr %t245
   store i64 %_392, ptr %t253
   %_393 = load i64, ptr %t253
   %_394 = call ptr @toString(i64 %_393)
   store ptr %_394, ptr %t254
-  %_395 = call ptr @rockit_string_new(ptr @.str.545)
+  %_395 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_395, ptr %t255
   %_396 = load i64, ptr %t239
   store i64 %_396, ptr %t256
@@ -46184,7 +46217,7 @@ if_then_8:
   store i64 %_429, ptr %t269
   %_430 = load i64, ptr %t6
   store i64 %_430, ptr %t275
-  %_431 = call ptr @rockit_string_new(ptr @.str.546)
+  %_431 = call ptr @rockit_string_new(ptr @.str.547)
   store ptr %_431, ptr %t276
   %_432 = load i64, ptr %t269
   store i64 %_432, ptr %t277
@@ -46237,7 +46270,7 @@ if_then_9:
   store i64 %_459, ptr %t288
   %_460 = load i64, ptr %t6
   store i64 %_460, ptr %t294
-  %_461 = call ptr @rockit_string_new(ptr @.str.547)
+  %_461 = call ptr @rockit_string_new(ptr @.str.548)
   store ptr %_461, ptr %t295
   %_462 = load i64, ptr %t288
   store i64 %_462, ptr %t296
@@ -46313,7 +46346,7 @@ if_then_10:
   store ptr %_503, ptr %t322
   %_504 = load ptr, ptr %t322
   store ptr %_504, ptr %t319
-  %_505 = call ptr @rockit_string_new(ptr @.str.548)
+  %_505 = call ptr @rockit_string_new(ptr @.str.549)
   store ptr %_505, ptr %t324
   %_506 = load i64, ptr %t313
   store i64 %_506, ptr %t325
@@ -46342,7 +46375,7 @@ if_then_10:
   store ptr %_520, ptr %t331
   %_521 = load i64, ptr %t45
   store i64 %_521, ptr %t334
-  %_522 = call ptr @rockit_string_new(ptr @.str.488)
+  %_522 = call ptr @rockit_string_new(ptr @.str.489)
   store ptr %_522, ptr %t335
   store i1 1, ptr %t336
   %_523 = load i64, ptr %t334
@@ -46352,11 +46385,11 @@ if_then_10:
   store i64 %_526, ptr %t337
   %_527 = load i64, ptr %t6
   store i64 %_527, ptr %t338
-  %_528 = call ptr @rockit_string_new(ptr @.str.549)
+  %_528 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_528, ptr %t339
   %_529 = load i64, ptr %t328
   store i64 %_529, ptr %t340
-  %_530 = call ptr @rockit_string_new(ptr @.str.550)
+  %_530 = call ptr @rockit_string_new(ptr @.str.551)
   store ptr %_530, ptr %t341
   %_531 = load i64, ptr %t323
   store i64 %_531, ptr %t342
@@ -46384,15 +46417,15 @@ if_then_10:
   store i64 %_547, ptr %t348
   %_548 = load i64, ptr %t6
   store i64 %_548, ptr %t349
-  %_549 = call ptr @rockit_string_new(ptr @.str.549)
+  %_549 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_549, ptr %t350
   %_550 = load i64, ptr %t331
   store i64 %_550, ptr %t351
-  %_551 = call ptr @rockit_string_new(ptr @.str.551)
+  %_551 = call ptr @rockit_string_new(ptr @.str.552)
   store ptr %_551, ptr %t352
   %_552 = load i64, ptr %t328
   store i64 %_552, ptr %t353
-  %_553 = call ptr @rockit_string_new(ptr @.str.552)
+  %_553 = call ptr @rockit_string_new(ptr @.str.553)
   store ptr %_553, ptr %t354
   %_554 = load i64, ptr %t353
   %_555 = load ptr, ptr %t354
@@ -46416,11 +46449,11 @@ if_then_10:
   store i64 %_568, ptr %t359
   %_569 = load i64, ptr %t6
   store i64 %_569, ptr %t360
-  %_570 = call ptr @rockit_string_new(ptr @.str.544)
+  %_570 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_570, ptr %t361
   %_571 = load i64, ptr %t331
   store i64 %_571, ptr %t362
-  %_572 = call ptr @rockit_string_new(ptr @.str.545)
+  %_572 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_572, ptr %t363
   %_573 = load i64, ptr %t307
   store i64 %_573, ptr %t364
@@ -46481,7 +46514,7 @@ if_then_11:
   store i64 %_606, ptr %t377
   %_607 = load i64, ptr %t6
   store i64 %_607, ptr %t383
-  %_608 = call ptr @rockit_string_new(ptr @.str.553)
+  %_608 = call ptr @rockit_string_new(ptr @.str.554)
   store ptr %_608, ptr %t384
   %_609 = load i64, ptr %t377
   store i64 %_609, ptr %t385
@@ -46577,11 +46610,11 @@ if_then_13:
   store ptr %_659, ptr %t415
   %_660 = load i64, ptr %t6
   store i64 %_660, ptr %t418
-  %_661 = call ptr @rockit_string_new(ptr @.str.549)
+  %_661 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_661, ptr %t419
   %_662 = load i64, ptr %t415
   store i64 %_662, ptr %t420
-  %_663 = call ptr @rockit_string_new(ptr @.str.554)
+  %_663 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_663, ptr %t421
   %_664 = load i64, ptr %t409
   store i64 %_664, ptr %t422
@@ -46606,11 +46639,11 @@ if_then_13:
   store i64 %_678, ptr %t427
   %_679 = load i64, ptr %t6
   store i64 %_679, ptr %t428
-  %_680 = call ptr @rockit_string_new(ptr @.str.544)
+  %_680 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_680, ptr %t429
   %_681 = load i64, ptr %t415
   store i64 %_681, ptr %t430
-  %_682 = call ptr @rockit_string_new(ptr @.str.545)
+  %_682 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_682, ptr %t431
   %_683 = load i64, ptr %t403
   store i64 %_683, ptr %t432
@@ -46693,11 +46726,11 @@ if_then_14:
   store ptr %_729, ptr %t457
   %_730 = load i64, ptr %t6
   store i64 %_730, ptr %t460
-  %_731 = call ptr @rockit_string_new(ptr @.str.549)
+  %_731 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_731, ptr %t461
   %_732 = load i64, ptr %t457
   store i64 %_732, ptr %t462
-  %_733 = call ptr @rockit_string_new(ptr @.str.554)
+  %_733 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_733, ptr %t463
   %_734 = load i64, ptr %t451
   store i64 %_734, ptr %t464
@@ -46722,11 +46755,11 @@ if_then_14:
   store i64 %_748, ptr %t469
   %_749 = load i64, ptr %t6
   store i64 %_749, ptr %t470
-  %_750 = call ptr @rockit_string_new(ptr @.str.544)
+  %_750 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_750, ptr %t471
   %_751 = load i64, ptr %t457
   store i64 %_751, ptr %t472
-  %_752 = call ptr @rockit_string_new(ptr @.str.545)
+  %_752 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_752, ptr %t473
   %_753 = load i64, ptr %t445
   store i64 %_753, ptr %t474
@@ -46809,11 +46842,11 @@ if_then_15:
   store ptr %_799, ptr %t499
   %_800 = load i64, ptr %t6
   store i64 %_800, ptr %t502
-  %_801 = call ptr @rockit_string_new(ptr @.str.549)
+  %_801 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_801, ptr %t503
   %_802 = load i64, ptr %t499
   store i64 %_802, ptr %t504
-  %_803 = call ptr @rockit_string_new(ptr @.str.555)
+  %_803 = call ptr @rockit_string_new(ptr @.str.556)
   store ptr %_803, ptr %t505
   %_804 = load i64, ptr %t493
   store i64 %_804, ptr %t506
@@ -46838,11 +46871,11 @@ if_then_15:
   store i64 %_818, ptr %t511
   %_819 = load i64, ptr %t6
   store i64 %_819, ptr %t512
-  %_820 = call ptr @rockit_string_new(ptr @.str.544)
+  %_820 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_820, ptr %t513
   %_821 = load i64, ptr %t499
   store i64 %_821, ptr %t514
-  %_822 = call ptr @rockit_string_new(ptr @.str.545)
+  %_822 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_822, ptr %t515
   %_823 = load i64, ptr %t487
   store i64 %_823, ptr %t516
@@ -46965,11 +46998,11 @@ if_then_16:
   store ptr %_893, ptr %t557
   %_894 = load i64, ptr %t6
   store i64 %_894, ptr %t560
-  %_895 = call ptr @rockit_string_new(ptr @.str.549)
+  %_895 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_895, ptr %t561
   %_896 = load i64, ptr %t551
   store i64 %_896, ptr %t562
-  %_897 = call ptr @rockit_string_new(ptr @.str.554)
+  %_897 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_897, ptr %t563
   %_898 = load i64, ptr %t539
   store i64 %_898, ptr %t564
@@ -46994,11 +47027,11 @@ if_then_16:
   store i64 %_912, ptr %t569
   %_913 = load i64, ptr %t6
   store i64 %_913, ptr %t570
-  %_914 = call ptr @rockit_string_new(ptr @.str.549)
+  %_914 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_914, ptr %t571
   %_915 = load i64, ptr %t554
   store i64 %_915, ptr %t572
-  %_916 = call ptr @rockit_string_new(ptr @.str.554)
+  %_916 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_916, ptr %t573
   %_917 = load i64, ptr %t545
   store i64 %_917, ptr %t574
@@ -47021,7 +47054,7 @@ if_then_16:
   %_930 = load ptr, ptr %t578
   %_931 = call i64 @llvmLine(i64 %_929, ptr %_930)
   store i64 %_931, ptr %t579
-  %_932 = call ptr @rockit_string_new(ptr @.str.556)
+  %_932 = call ptr @rockit_string_new(ptr @.str.557)
   store ptr %_932, ptr %t581
   %_933 = load ptr, ptr %t581
   store ptr %_933, ptr %t580
@@ -47035,7 +47068,7 @@ if_then_16:
   %_938 = load i1, ptr %t584
   br i1 %_938, label %if_then_17, label %if_else_17
 if_then_17:
-  %_939 = call ptr @rockit_string_new(ptr @.str.557)
+  %_939 = call ptr @rockit_string_new(ptr @.str.558)
   store ptr %_939, ptr %t586
   %_940 = load ptr, ptr %t586
   store ptr %_940, ptr %t580
@@ -47053,7 +47086,7 @@ if_merge_17:
   %_945 = load i1, ptr %t590
   br i1 %_945, label %if_then_18, label %if_else_18
 if_then_18:
-  %_946 = call ptr @rockit_string_new(ptr @.str.558)
+  %_946 = call ptr @rockit_string_new(ptr @.str.559)
   store ptr %_946, ptr %t592
   %_947 = load ptr, ptr %t592
   store ptr %_947, ptr %t580
@@ -47071,7 +47104,7 @@ if_merge_18:
   %_952 = load i1, ptr %t596
   br i1 %_952, label %if_then_19, label %if_else_19
 if_then_19:
-  %_953 = call ptr @rockit_string_new(ptr @.str.559)
+  %_953 = call ptr @rockit_string_new(ptr @.str.560)
   store ptr %_953, ptr %t598
   %_954 = load ptr, ptr %t598
   store ptr %_954, ptr %t580
@@ -47089,7 +47122,7 @@ if_merge_19:
   %_959 = load i1, ptr %t602
   br i1 %_959, label %if_then_20, label %if_else_20
 if_then_20:
-  %_960 = call ptr @rockit_string_new(ptr @.str.560)
+  %_960 = call ptr @rockit_string_new(ptr @.str.561)
   store ptr %_960, ptr %t604
   %_961 = load ptr, ptr %t604
   store ptr %_961, ptr %t580
@@ -47099,19 +47132,19 @@ if_else_20:
 if_merge_20:
   %_962 = load i64, ptr %t6
   store i64 %_962, ptr %t606
-  %_963 = call ptr @rockit_string_new(ptr @.str.549)
+  %_963 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_963, ptr %t607
   %_964 = load i64, ptr %t557
   store i64 %_964, ptr %t608
-  %_965 = call ptr @rockit_string_new(ptr @.str.561)
+  %_965 = call ptr @rockit_string_new(ptr @.str.562)
   store ptr %_965, ptr %t609
   %_966 = load i64, ptr %t580
   store i64 %_966, ptr %t610
-  %_967 = call ptr @rockit_string_new(ptr @.str.562)
+  %_967 = call ptr @rockit_string_new(ptr @.str.563)
   store ptr %_967, ptr %t611
   %_968 = load i64, ptr %t551
   store i64 %_968, ptr %t612
-  %_969 = call ptr @rockit_string_new(ptr @.str.531)
+  %_969 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_969, ptr %t613
   %_970 = load i64, ptr %t554
   store i64 %_970, ptr %t614
@@ -47149,11 +47182,11 @@ if_merge_20:
   store i64 %_994, ptr %t622
   %_995 = load i64, ptr %t6
   store i64 %_995, ptr %t623
-  %_996 = call ptr @rockit_string_new(ptr @.str.544)
+  %_996 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_996, ptr %t624
   %_997 = load i64, ptr %t557
   store i64 %_997, ptr %t625
-  %_998 = call ptr @rockit_string_new(ptr @.str.545)
+  %_998 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_998, ptr %t626
   %_999 = load i64, ptr %t533
   store i64 %_999, ptr %t627
@@ -47243,11 +47276,11 @@ if_then_21:
   store ptr %_1049, ptr %t655
   %_1050 = load i64, ptr %t6
   store i64 %_1050, ptr %t658
-  %_1051 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1051 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1051, ptr %t659
   %_1052 = load i64, ptr %t652
   store i64 %_1052, ptr %t660
-  %_1053 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1053 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1053, ptr %t661
   %_1054 = load i64, ptr %t646
   store i64 %_1054, ptr %t662
@@ -47272,11 +47305,11 @@ if_then_21:
   store i64 %_1068, ptr %t667
   %_1069 = load i64, ptr %t6
   store i64 %_1069, ptr %t668
-  %_1070 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1070 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1070, ptr %t669
   %_1071 = load i64, ptr %t655
   store i64 %_1071, ptr %t670
-  %_1072 = call ptr @rockit_string_new(ptr @.str.563)
+  %_1072 = call ptr @rockit_string_new(ptr @.str.564)
   store ptr %_1072, ptr %t671
   %_1073 = load i64, ptr %t652
   store i64 %_1073, ptr %t672
@@ -47298,11 +47331,11 @@ if_then_21:
   store i64 %_1085, ptr %t676
   %_1086 = load i64, ptr %t6
   store i64 %_1086, ptr %t677
-  %_1087 = call ptr @rockit_string_new(ptr @.str.544)
+  %_1087 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_1087, ptr %t678
   %_1088 = load i64, ptr %t655
   store i64 %_1088, ptr %t679
-  %_1089 = call ptr @rockit_string_new(ptr @.str.545)
+  %_1089 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_1089, ptr %t680
   %_1090 = load i64, ptr %t640
   store i64 %_1090, ptr %t681
@@ -47432,11 +47465,11 @@ if_then_22:
   store ptr %_1164, ptr %t725
   %_1165 = load i64, ptr %t6
   store i64 %_1165, ptr %t728
-  %_1166 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1166 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1166, ptr %t729
   %_1167 = load i64, ptr %t716
   store i64 %_1167, ptr %t730
-  %_1168 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1168 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1168, ptr %t731
   %_1169 = load i64, ptr %t704
   store i64 %_1169, ptr %t732
@@ -47461,11 +47494,11 @@ if_then_22:
   store i64 %_1183, ptr %t737
   %_1184 = load i64, ptr %t6
   store i64 %_1184, ptr %t738
-  %_1185 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1185 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1185, ptr %t739
   %_1186 = load i64, ptr %t719
   store i64 %_1186, ptr %t740
-  %_1187 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1187 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1187, ptr %t741
   %_1188 = load i64, ptr %t710
   store i64 %_1188, ptr %t742
@@ -47500,7 +47533,7 @@ if_then_22:
 if_then_23:
   %_1208 = load i64, ptr %t45
   store i64 %_1208, ptr %t752
-  %_1209 = call ptr @rockit_string_new(ptr @.str.493)
+  %_1209 = call ptr @rockit_string_new(ptr @.str.494)
   store ptr %_1209, ptr %t753
   store i1 1, ptr %t754
   %_1210 = load i64, ptr %t752
@@ -47510,15 +47543,15 @@ if_then_23:
   store i64 %_1213, ptr %t755
   %_1214 = load i64, ptr %t6
   store i64 %_1214, ptr %t756
-  %_1215 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1215 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1215, ptr %t757
   %_1216 = load i64, ptr %t722
   store i64 %_1216, ptr %t758
-  %_1217 = call ptr @rockit_string_new(ptr @.str.564)
+  %_1217 = call ptr @rockit_string_new(ptr @.str.565)
   store ptr %_1217, ptr %t759
   %_1218 = load i64, ptr %t716
   store i64 %_1218, ptr %t760
-  %_1219 = call ptr @rockit_string_new(ptr @.str.565)
+  %_1219 = call ptr @rockit_string_new(ptr @.str.566)
   store ptr %_1219, ptr %t761
   %_1220 = load i64, ptr %t719
   store i64 %_1220, ptr %t762
@@ -47556,7 +47589,7 @@ if_then_23:
 if_else_23:
   %_1243 = load i64, ptr %t45
   store i64 %_1243, ptr %t771
-  %_1244 = call ptr @rockit_string_new(ptr @.str.494)
+  %_1244 = call ptr @rockit_string_new(ptr @.str.495)
   store ptr %_1244, ptr %t772
   store i1 1, ptr %t773
   %_1245 = load i64, ptr %t771
@@ -47566,15 +47599,15 @@ if_else_23:
   store i64 %_1248, ptr %t774
   %_1249 = load i64, ptr %t6
   store i64 %_1249, ptr %t775
-  %_1250 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1250 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1250, ptr %t776
   %_1251 = load i64, ptr %t722
   store i64 %_1251, ptr %t777
-  %_1252 = call ptr @rockit_string_new(ptr @.str.566)
+  %_1252 = call ptr @rockit_string_new(ptr @.str.567)
   store ptr %_1252, ptr %t778
   %_1253 = load i64, ptr %t716
   store i64 %_1253, ptr %t779
-  %_1254 = call ptr @rockit_string_new(ptr @.str.565)
+  %_1254 = call ptr @rockit_string_new(ptr @.str.566)
   store ptr %_1254, ptr %t780
   %_1255 = load i64, ptr %t719
   store i64 %_1255, ptr %t781
@@ -47612,15 +47645,15 @@ if_else_23:
 if_merge_23:
   %_1278 = load i64, ptr %t6
   store i64 %_1278, ptr %t791
-  %_1279 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1279 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1279, ptr %t792
   %_1280 = load i64, ptr %t725
   store i64 %_1280, ptr %t793
-  %_1281 = call ptr @rockit_string_new(ptr @.str.567)
+  %_1281 = call ptr @rockit_string_new(ptr @.str.568)
   store ptr %_1281, ptr %t794
   %_1282 = load i64, ptr %t722
   store i64 %_1282, ptr %t795
-  %_1283 = call ptr @rockit_string_new(ptr @.str.552)
+  %_1283 = call ptr @rockit_string_new(ptr @.str.553)
   store ptr %_1283, ptr %t796
   %_1284 = load i64, ptr %t795
   %_1285 = load ptr, ptr %t796
@@ -47644,11 +47677,11 @@ if_merge_23:
   store i64 %_1298, ptr %t801
   %_1299 = load i64, ptr %t6
   store i64 %_1299, ptr %t802
-  %_1300 = call ptr @rockit_string_new(ptr @.str.544)
+  %_1300 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_1300, ptr %t803
   %_1301 = load i64, ptr %t725
   store i64 %_1301, ptr %t804
-  %_1302 = call ptr @rockit_string_new(ptr @.str.545)
+  %_1302 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_1302, ptr %t805
   %_1303 = load i64, ptr %t698
   store i64 %_1303, ptr %t806
@@ -47778,11 +47811,11 @@ if_then_24:
   store ptr %_1377, ptr %t850
   %_1378 = load i64, ptr %t6
   store i64 %_1378, ptr %t853
-  %_1379 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1379 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1379, ptr %t854
   %_1380 = load i64, ptr %t841
   store i64 %_1380, ptr %t855
-  %_1381 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1381 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1381, ptr %t856
   %_1382 = load i64, ptr %t829
   store i64 %_1382, ptr %t857
@@ -47807,11 +47840,11 @@ if_then_24:
   store i64 %_1396, ptr %t862
   %_1397 = load i64, ptr %t6
   store i64 %_1397, ptr %t863
-  %_1398 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1398 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1398, ptr %t864
   %_1399 = load i64, ptr %t844
   store i64 %_1399, ptr %t865
-  %_1400 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1400 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1400, ptr %t866
   %_1401 = load i64, ptr %t835
   store i64 %_1401, ptr %t867
@@ -47834,7 +47867,7 @@ if_then_24:
   %_1414 = load ptr, ptr %t871
   %_1415 = call i64 @llvmLine(i64 %_1413, ptr %_1414)
   store i64 %_1415, ptr %t872
-  %_1416 = call ptr @rockit_string_new(ptr @.str.568)
+  %_1416 = call ptr @rockit_string_new(ptr @.str.569)
   store ptr %_1416, ptr %t874
   %_1417 = load ptr, ptr %t874
   store ptr %_1417, ptr %t873
@@ -47848,7 +47881,7 @@ if_then_24:
   %_1422 = load i1, ptr %t877
   br i1 %_1422, label %if_then_25, label %if_else_25
 if_then_25:
-  %_1423 = call ptr @rockit_string_new(ptr @.str.569)
+  %_1423 = call ptr @rockit_string_new(ptr @.str.570)
   store ptr %_1423, ptr %t879
   %_1424 = load ptr, ptr %t879
   store ptr %_1424, ptr %t873
@@ -47866,7 +47899,7 @@ if_merge_25:
   %_1429 = load i1, ptr %t883
   br i1 %_1429, label %if_then_26, label %if_else_26
 if_then_26:
-  %_1430 = call ptr @rockit_string_new(ptr @.str.570)
+  %_1430 = call ptr @rockit_string_new(ptr @.str.571)
   store ptr %_1430, ptr %t885
   %_1431 = load ptr, ptr %t885
   store ptr %_1431, ptr %t873
@@ -47884,7 +47917,7 @@ if_merge_26:
   %_1436 = load i1, ptr %t889
   br i1 %_1436, label %if_then_27, label %if_else_27
 if_then_27:
-  %_1437 = call ptr @rockit_string_new(ptr @.str.571)
+  %_1437 = call ptr @rockit_string_new(ptr @.str.572)
   store ptr %_1437, ptr %t891
   %_1438 = load ptr, ptr %t891
   store ptr %_1438, ptr %t873
@@ -47894,19 +47927,19 @@ if_else_27:
 if_merge_27:
   %_1439 = load i64, ptr %t6
   store i64 %_1439, ptr %t893
-  %_1440 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1440 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1440, ptr %t894
   %_1441 = load i64, ptr %t847
   store i64 %_1441, ptr %t895
-  %_1442 = call ptr @rockit_string_new(ptr @.str.572)
+  %_1442 = call ptr @rockit_string_new(ptr @.str.573)
   store ptr %_1442, ptr %t896
   %_1443 = load i64, ptr %t873
   store i64 %_1443, ptr %t897
-  %_1444 = call ptr @rockit_string_new(ptr @.str.562)
+  %_1444 = call ptr @rockit_string_new(ptr @.str.563)
   store ptr %_1444, ptr %t898
   %_1445 = load i64, ptr %t841
   store i64 %_1445, ptr %t899
-  %_1446 = call ptr @rockit_string_new(ptr @.str.531)
+  %_1446 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_1446, ptr %t900
   %_1447 = load i64, ptr %t844
   store i64 %_1447, ptr %t901
@@ -47944,15 +47977,15 @@ if_merge_27:
   store i64 %_1471, ptr %t909
   %_1472 = load i64, ptr %t6
   store i64 %_1472, ptr %t910
-  %_1473 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1473 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1473, ptr %t911
   %_1474 = load i64, ptr %t850
   store i64 %_1474, ptr %t912
-  %_1475 = call ptr @rockit_string_new(ptr @.str.567)
+  %_1475 = call ptr @rockit_string_new(ptr @.str.568)
   store ptr %_1475, ptr %t913
   %_1476 = load i64, ptr %t847
   store i64 %_1476, ptr %t914
-  %_1477 = call ptr @rockit_string_new(ptr @.str.552)
+  %_1477 = call ptr @rockit_string_new(ptr @.str.553)
   store ptr %_1477, ptr %t915
   %_1478 = load i64, ptr %t914
   %_1479 = load ptr, ptr %t915
@@ -47976,11 +48009,11 @@ if_merge_27:
   store i64 %_1492, ptr %t920
   %_1493 = load i64, ptr %t6
   store i64 %_1493, ptr %t921
-  %_1494 = call ptr @rockit_string_new(ptr @.str.544)
+  %_1494 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_1494, ptr %t922
   %_1495 = load i64, ptr %t850
   store i64 %_1495, ptr %t923
-  %_1496 = call ptr @rockit_string_new(ptr @.str.545)
+  %_1496 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_1496, ptr %t924
   %_1497 = load i64, ptr %t823
   store i64 %_1497, ptr %t925
@@ -48103,11 +48136,11 @@ if_then_28:
   store ptr %_1567, ptr %t966
   %_1568 = load i64, ptr %t6
   store i64 %_1568, ptr %t969
-  %_1569 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1569 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1569, ptr %t970
   %_1570 = load i64, ptr %t960
   store i64 %_1570, ptr %t971
-  %_1571 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1571 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1571, ptr %t972
   %_1572 = load i64, ptr %t948
   store i64 %_1572, ptr %t973
@@ -48132,11 +48165,11 @@ if_then_28:
   store i64 %_1586, ptr %t978
   %_1587 = load i64, ptr %t6
   store i64 %_1587, ptr %t979
-  %_1588 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1588 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1588, ptr %t980
   %_1589 = load i64, ptr %t963
   store i64 %_1589, ptr %t981
-  %_1590 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1590 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1590, ptr %t982
   %_1591 = load i64, ptr %t954
   store i64 %_1591, ptr %t983
@@ -48171,15 +48204,15 @@ if_then_28:
 if_then_29:
   %_1611 = load i64, ptr %t6
   store i64 %_1611, ptr %t993
-  %_1612 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1612 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1612, ptr %t994
   %_1613 = load i64, ptr %t966
   store i64 %_1613, ptr %t995
-  %_1614 = call ptr @rockit_string_new(ptr @.str.573)
+  %_1614 = call ptr @rockit_string_new(ptr @.str.574)
   store ptr %_1614, ptr %t996
   %_1615 = load i64, ptr %t960
   store i64 %_1615, ptr %t997
-  %_1616 = call ptr @rockit_string_new(ptr @.str.531)
+  %_1616 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_1616, ptr %t998
   %_1617 = load i64, ptr %t963
   store i64 %_1617, ptr %t999
@@ -48211,15 +48244,15 @@ if_then_29:
 if_else_29:
   %_1636 = load i64, ptr %t6
   store i64 %_1636, ptr %t1006
-  %_1637 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1637 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1637, ptr %t1007
   %_1638 = load i64, ptr %t966
   store i64 %_1638, ptr %t1008
-  %_1639 = call ptr @rockit_string_new(ptr @.str.574)
+  %_1639 = call ptr @rockit_string_new(ptr @.str.575)
   store ptr %_1639, ptr %t1009
   %_1640 = load i64, ptr %t960
   store i64 %_1640, ptr %t1010
-  %_1641 = call ptr @rockit_string_new(ptr @.str.531)
+  %_1641 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_1641, ptr %t1011
   %_1642 = load i64, ptr %t963
   store i64 %_1642, ptr %t1012
@@ -48251,11 +48284,11 @@ if_else_29:
 if_merge_29:
   %_1661 = load i64, ptr %t6
   store i64 %_1661, ptr %t1020
-  %_1662 = call ptr @rockit_string_new(ptr @.str.544)
+  %_1662 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_1662, ptr %t1021
   %_1663 = load i64, ptr %t966
   store i64 %_1663, ptr %t1022
-  %_1664 = call ptr @rockit_string_new(ptr @.str.545)
+  %_1664 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_1664, ptr %t1023
   %_1665 = load i64, ptr %t942
   store i64 %_1665, ptr %t1024
@@ -48352,11 +48385,11 @@ if_then_30:
   store ptr %_1719, ptr %t1055
   %_1720 = load i64, ptr %t6
   store i64 %_1720, ptr %t1058
-  %_1721 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1721 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1721, ptr %t1059
   %_1722 = load i64, ptr %t1049
   store i64 %_1722, ptr %t1060
-  %_1723 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1723 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1723, ptr %t1061
   %_1724 = load i64, ptr %t1043
   store i64 %_1724, ptr %t1062
@@ -48381,15 +48414,15 @@ if_then_30:
   store i64 %_1738, ptr %t1067
   %_1739 = load i64, ptr %t6
   store i64 %_1739, ptr %t1068
-  %_1740 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1740 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1740, ptr %t1069
   %_1741 = load i64, ptr %t1052
   store i64 %_1741, ptr %t1070
-  %_1742 = call ptr @rockit_string_new(ptr @.str.575)
+  %_1742 = call ptr @rockit_string_new(ptr @.str.576)
   store ptr %_1742, ptr %t1071
   %_1743 = load i64, ptr %t1049
   store i64 %_1743, ptr %t1072
-  %_1744 = call ptr @rockit_string_new(ptr @.str.576)
+  %_1744 = call ptr @rockit_string_new(ptr @.str.577)
   store ptr %_1744, ptr %t1073
   %_1745 = load i64, ptr %t1072
   %_1746 = load ptr, ptr %t1073
@@ -48413,15 +48446,15 @@ if_then_30:
   store i64 %_1759, ptr %t1078
   %_1760 = load i64, ptr %t6
   store i64 %_1760, ptr %t1079
-  %_1761 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1761 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1761, ptr %t1080
   %_1762 = load i64, ptr %t1055
   store i64 %_1762, ptr %t1081
-  %_1763 = call ptr @rockit_string_new(ptr @.str.567)
+  %_1763 = call ptr @rockit_string_new(ptr @.str.568)
   store ptr %_1763, ptr %t1082
   %_1764 = load i64, ptr %t1052
   store i64 %_1764, ptr %t1083
-  %_1765 = call ptr @rockit_string_new(ptr @.str.552)
+  %_1765 = call ptr @rockit_string_new(ptr @.str.553)
   store ptr %_1765, ptr %t1084
   %_1766 = load i64, ptr %t1083
   %_1767 = load ptr, ptr %t1084
@@ -48445,11 +48478,11 @@ if_then_30:
   store i64 %_1780, ptr %t1089
   %_1781 = load i64, ptr %t6
   store i64 %_1781, ptr %t1090
-  %_1782 = call ptr @rockit_string_new(ptr @.str.544)
+  %_1782 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_1782, ptr %t1091
   %_1783 = load i64, ptr %t1055
   store i64 %_1783, ptr %t1092
-  %_1784 = call ptr @rockit_string_new(ptr @.str.545)
+  %_1784 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_1784, ptr %t1093
   %_1785 = load i64, ptr %t1037
   store i64 %_1785, ptr %t1094
@@ -48659,11 +48692,11 @@ if_then_32:
   store ptr %_1907, ptr %t1166
   %_1908 = load i64, ptr %t6
   store i64 %_1908, ptr %t1169
-  %_1909 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1909 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1909, ptr %t1170
   %_1910 = load i64, ptr %t1166
   store i64 %_1910, ptr %t1171
-  %_1911 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1911 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1911, ptr %t1172
   %_1912 = load i64, ptr %t1160
   store i64 %_1912, ptr %t1173
@@ -48688,11 +48721,11 @@ if_then_32:
   store i64 %_1926, ptr %t1178
   %_1927 = load i64, ptr %t6
   store i64 %_1927, ptr %t1179
-  %_1928 = call ptr @rockit_string_new(ptr @.str.544)
+  %_1928 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_1928, ptr %t1180
   %_1929 = load i64, ptr %t1166
   store i64 %_1929, ptr %t1181
-  %_1930 = call ptr @rockit_string_new(ptr @.str.545)
+  %_1930 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_1930, ptr %t1182
   %_1931 = load i64, ptr %t1154
   store i64 %_1931, ptr %t1183
@@ -48789,11 +48822,11 @@ if_then_33:
   store ptr %_1985, ptr %t1214
   %_1986 = load i64, ptr %t6
   store i64 %_1986, ptr %t1217
-  %_1987 = call ptr @rockit_string_new(ptr @.str.549)
+  %_1987 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_1987, ptr %t1218
   %_1988 = load i64, ptr %t1208
   store i64 %_1988, ptr %t1219
-  %_1989 = call ptr @rockit_string_new(ptr @.str.554)
+  %_1989 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_1989, ptr %t1220
   %_1990 = load i64, ptr %t1202
   store i64 %_1990, ptr %t1221
@@ -48818,15 +48851,15 @@ if_then_33:
   store i64 %_2004, ptr %t1226
   %_2005 = load i64, ptr %t6
   store i64 %_2005, ptr %t1227
-  %_2006 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2006 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2006, ptr %t1228
   %_2007 = load i64, ptr %t1211
   store i64 %_2007, ptr %t1229
-  %_2008 = call ptr @rockit_string_new(ptr @.str.575)
+  %_2008 = call ptr @rockit_string_new(ptr @.str.576)
   store ptr %_2008, ptr %t1230
   %_2009 = load i64, ptr %t1208
   store i64 %_2009, ptr %t1231
-  %_2010 = call ptr @rockit_string_new(ptr @.str.577)
+  %_2010 = call ptr @rockit_string_new(ptr @.str.578)
   store ptr %_2010, ptr %t1232
   %_2011 = load i64, ptr %t1231
   %_2012 = load ptr, ptr %t1232
@@ -48850,15 +48883,15 @@ if_then_33:
   store i64 %_2025, ptr %t1237
   %_2026 = load i64, ptr %t6
   store i64 %_2026, ptr %t1238
-  %_2027 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2027 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2027, ptr %t1239
   %_2028 = load i64, ptr %t1214
   store i64 %_2028, ptr %t1240
-  %_2029 = call ptr @rockit_string_new(ptr @.str.567)
+  %_2029 = call ptr @rockit_string_new(ptr @.str.568)
   store ptr %_2029, ptr %t1241
   %_2030 = load i64, ptr %t1211
   store i64 %_2030, ptr %t1242
-  %_2031 = call ptr @rockit_string_new(ptr @.str.552)
+  %_2031 = call ptr @rockit_string_new(ptr @.str.553)
   store ptr %_2031, ptr %t1243
   %_2032 = load i64, ptr %t1242
   %_2033 = load ptr, ptr %t1243
@@ -48882,11 +48915,11 @@ if_then_33:
   store i64 %_2046, ptr %t1248
   %_2047 = load i64, ptr %t6
   store i64 %_2047, ptr %t1249
-  %_2048 = call ptr @rockit_string_new(ptr @.str.544)
+  %_2048 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_2048, ptr %t1250
   %_2049 = load i64, ptr %t1214
   store i64 %_2049, ptr %t1251
-  %_2050 = call ptr @rockit_string_new(ptr @.str.545)
+  %_2050 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_2050, ptr %t1252
   %_2051 = load i64, ptr %t1196
   store i64 %_2051, ptr %t1253
@@ -48998,7 +49031,7 @@ if_then_34:
   store ptr %_2114, ptr %t1290
   %_2115 = load i64, ptr %t45
   store i64 %_2115, ptr %t1293
-  %_2116 = call ptr @rockit_string_new(ptr @.str.504)
+  %_2116 = call ptr @rockit_string_new(ptr @.str.505)
   store ptr %_2116, ptr %t1294
   store i1 1, ptr %t1295
   %_2117 = load i64, ptr %t1293
@@ -49008,11 +49041,11 @@ if_then_34:
   store i64 %_2120, ptr %t1296
   %_2121 = load i64, ptr %t6
   store i64 %_2121, ptr %t1297
-  %_2122 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2122 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2122, ptr %t1298
   %_2123 = load i64, ptr %t1284
   store i64 %_2123, ptr %t1299
-  %_2124 = call ptr @rockit_string_new(ptr @.str.554)
+  %_2124 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_2124, ptr %t1300
   %_2125 = load i64, ptr %t1272
   store i64 %_2125, ptr %t1301
@@ -49037,15 +49070,15 @@ if_then_34:
   store i64 %_2139, ptr %t1306
   %_2140 = load i64, ptr %t6
   store i64 %_2140, ptr %t1307
-  %_2141 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2141 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2141, ptr %t1308
   %_2142 = load i64, ptr %t1287
   store i64 %_2142, ptr %t1309
-  %_2143 = call ptr @rockit_string_new(ptr @.str.578)
+  %_2143 = call ptr @rockit_string_new(ptr @.str.579)
   store ptr %_2143, ptr %t1310
   %_2144 = load i64, ptr %t1284
   store i64 %_2144, ptr %t1311
-  %_2145 = call ptr @rockit_string_new(ptr @.str.579)
+  %_2145 = call ptr @rockit_string_new(ptr @.str.580)
   store ptr %_2145, ptr %t1312
   %_2146 = load i64, ptr %t1311
   %_2147 = load ptr, ptr %t1312
@@ -49069,15 +49102,15 @@ if_then_34:
   store i64 %_2160, ptr %t1317
   %_2161 = load i64, ptr %t6
   store i64 %_2161, ptr %t1318
-  %_2162 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2162 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2162, ptr %t1319
   %_2163 = load i64, ptr %t1290
   store i64 %_2163, ptr %t1320
-  %_2164 = call ptr @rockit_string_new(ptr @.str.580)
+  %_2164 = call ptr @rockit_string_new(ptr @.str.581)
   store ptr %_2164, ptr %t1321
   %_2165 = load i64, ptr %t1287
   store i64 %_2165, ptr %t1322
-  %_2166 = call ptr @rockit_string_new(ptr @.str.581)
+  %_2166 = call ptr @rockit_string_new(ptr @.str.582)
   store ptr %_2166, ptr %t1323
   %_2167 = load i64, ptr %t1278
   store i64 %_2167, ptr %t1324
@@ -49116,11 +49149,11 @@ if_then_34:
   store i64 %_2191, ptr %t1333
   %_2192 = load i64, ptr %t6
   store i64 %_2192, ptr %t1334
-  %_2193 = call ptr @rockit_string_new(ptr @.str.544)
+  %_2193 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_2193, ptr %t1335
   %_2194 = load i64, ptr %t1290
   store i64 %_2194, ptr %t1336
-  %_2195 = call ptr @rockit_string_new(ptr @.str.545)
+  %_2195 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_2195, ptr %t1337
   %_2196 = load i64, ptr %t1266
   store i64 %_2196, ptr %t1338
@@ -49232,7 +49265,7 @@ if_then_35:
   store ptr %_2259, ptr %t1375
   %_2260 = load i64, ptr %t45
   store i64 %_2260, ptr %t1378
-  %_2261 = call ptr @rockit_string_new(ptr @.str.506)
+  %_2261 = call ptr @rockit_string_new(ptr @.str.507)
   store ptr %_2261, ptr %t1379
   store i1 1, ptr %t1380
   %_2262 = load i64, ptr %t1378
@@ -49242,11 +49275,11 @@ if_then_35:
   store i64 %_2265, ptr %t1381
   %_2266 = load i64, ptr %t6
   store i64 %_2266, ptr %t1382
-  %_2267 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2267 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2267, ptr %t1383
   %_2268 = load i64, ptr %t1369
   store i64 %_2268, ptr %t1384
-  %_2269 = call ptr @rockit_string_new(ptr @.str.554)
+  %_2269 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_2269, ptr %t1385
   %_2270 = load i64, ptr %t1351
   store i64 %_2270, ptr %t1386
@@ -49271,15 +49304,15 @@ if_then_35:
   store i64 %_2284, ptr %t1391
   %_2285 = load i64, ptr %t6
   store i64 %_2285, ptr %t1392
-  %_2286 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2286 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2286, ptr %t1393
   %_2287 = load i64, ptr %t1372
   store i64 %_2287, ptr %t1394
-  %_2288 = call ptr @rockit_string_new(ptr @.str.578)
+  %_2288 = call ptr @rockit_string_new(ptr @.str.579)
   store ptr %_2288, ptr %t1395
   %_2289 = load i64, ptr %t1369
   store i64 %_2289, ptr %t1396
-  %_2290 = call ptr @rockit_string_new(ptr @.str.579)
+  %_2290 = call ptr @rockit_string_new(ptr @.str.580)
   store ptr %_2290, ptr %t1397
   %_2291 = load i64, ptr %t1396
   %_2292 = load ptr, ptr %t1397
@@ -49303,11 +49336,11 @@ if_then_35:
   store i64 %_2305, ptr %t1402
   %_2306 = load i64, ptr %t6
   store i64 %_2306, ptr %t1403
-  %_2307 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2307 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2307, ptr %t1404
   %_2308 = load i64, ptr %t1375
   store i64 %_2308, ptr %t1405
-  %_2309 = call ptr @rockit_string_new(ptr @.str.554)
+  %_2309 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_2309, ptr %t1406
   %_2310 = load i64, ptr %t1363
   store i64 %_2310, ptr %t1407
@@ -49332,18 +49365,18 @@ if_then_35:
   store i64 %_2324, ptr %t1412
   %_2325 = load i64, ptr %t6
   store i64 %_2325, ptr %t1413
-  %_2326 = call ptr @rockit_string_new(ptr @.str.582)
+  %_2326 = call ptr @rockit_string_new(ptr @.str.583)
   store ptr %_2326, ptr %t1414
   %_2327 = load i64, ptr %t1372
   store i64 %_2327, ptr %t1415
-  %_2328 = call ptr @rockit_string_new(ptr @.str.581)
+  %_2328 = call ptr @rockit_string_new(ptr @.str.582)
   store ptr %_2328, ptr %t1416
   %_2329 = load i64, ptr %t1357
   store i64 %_2329, ptr %t1417
   %_2330 = load i64, ptr %t1417
   %_2331 = call ptr @toString(i64 %_2330)
   store ptr %_2331, ptr %t1418
-  %_2332 = call ptr @rockit_string_new(ptr @.str.565)
+  %_2332 = call ptr @rockit_string_new(ptr @.str.566)
   store ptr %_2332, ptr %t1419
   %_2333 = load i64, ptr %t1375
   store i64 %_2333, ptr %t1420
@@ -49453,7 +49486,7 @@ if_then_36:
   store ptr %_2397, ptr %t1457
   %_2398 = load ptr, ptr %t1457
   store ptr %_2398, ptr %t1454
-  %_2399 = call ptr @rockit_string_new(ptr @.str.583)
+  %_2399 = call ptr @rockit_string_new(ptr @.str.584)
   store ptr %_2399, ptr %t1459
   %_2400 = load i64, ptr %t1442
   store i64 %_2400, ptr %t1460
@@ -49482,7 +49515,7 @@ if_then_36:
   store ptr %_2414, ptr %t1466
   %_2415 = load i64, ptr %t45
   store i64 %_2415, ptr %t1469
-  %_2416 = call ptr @rockit_string_new(ptr @.str.502)
+  %_2416 = call ptr @rockit_string_new(ptr @.str.503)
   store ptr %_2416, ptr %t1470
   store i1 1, ptr %t1471
   %_2417 = load i64, ptr %t1469
@@ -49492,15 +49525,15 @@ if_then_36:
   store i64 %_2420, ptr %t1472
   %_2421 = load i64, ptr %t6
   store i64 %_2421, ptr %t1473
-  %_2422 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2422 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2422, ptr %t1474
   %_2423 = load i64, ptr %t1463
   store i64 %_2423, ptr %t1475
-  %_2424 = call ptr @rockit_string_new(ptr @.str.584)
+  %_2424 = call ptr @rockit_string_new(ptr @.str.585)
   store ptr %_2424, ptr %t1476
   %_2425 = load i64, ptr %t1458
   store i64 %_2425, ptr %t1477
-  %_2426 = call ptr @rockit_string_new(ptr @.str.581)
+  %_2426 = call ptr @rockit_string_new(ptr @.str.582)
   store ptr %_2426, ptr %t1478
   %_2427 = load i64, ptr %t1448
   store i64 %_2427, ptr %t1479
@@ -49588,7 +49621,7 @@ while_body_4:
   store ptr %_2478, ptr %t1504
   %_2479 = load i64, ptr %t45
   store i64 %_2479, ptr %t1507
-  %_2480 = call ptr @rockit_string_new(ptr @.str.506)
+  %_2480 = call ptr @rockit_string_new(ptr @.str.507)
   store ptr %_2480, ptr %t1508
   store i1 1, ptr %t1509
   %_2481 = load i64, ptr %t1507
@@ -49598,11 +49631,11 @@ while_body_4:
   store i64 %_2484, ptr %t1510
   %_2485 = load i64, ptr %t6
   store i64 %_2485, ptr %t1511
-  %_2486 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2486 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2486, ptr %t1512
   %_2487 = load i64, ptr %t1504
   store i64 %_2487, ptr %t1513
-  %_2488 = call ptr @rockit_string_new(ptr @.str.554)
+  %_2488 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_2488, ptr %t1514
   %_2489 = load i64, ptr %t1494
   store i64 %_2489, ptr %t1515
@@ -49627,18 +49660,18 @@ while_body_4:
   store i64 %_2503, ptr %t1520
   %_2504 = load i64, ptr %t6
   store i64 %_2504, ptr %t1521
-  %_2505 = call ptr @rockit_string_new(ptr @.str.582)
+  %_2505 = call ptr @rockit_string_new(ptr @.str.583)
   store ptr %_2505, ptr %t1522
   %_2506 = load i64, ptr %t1463
   store i64 %_2506, ptr %t1523
-  %_2507 = call ptr @rockit_string_new(ptr @.str.581)
+  %_2507 = call ptr @rockit_string_new(ptr @.str.582)
   store ptr %_2507, ptr %t1524
   %_2508 = load i64, ptr %t1489
   store i64 %_2508, ptr %t1525
   %_2509 = load i64, ptr %t1525
   %_2510 = call ptr @toString(i64 %_2509)
   store ptr %_2510, ptr %t1526
-  %_2511 = call ptr @rockit_string_new(ptr @.str.565)
+  %_2511 = call ptr @rockit_string_new(ptr @.str.566)
   store ptr %_2511, ptr %t1527
   %_2512 = load i64, ptr %t1504
   store i64 %_2512, ptr %t1528
@@ -49685,15 +49718,15 @@ while_body_4:
 while_exit_4:
   %_2540 = load i64, ptr %t6
   store i64 %_2540, ptr %t1540
-  %_2541 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2541 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2541, ptr %t1541
   %_2542 = load i64, ptr %t1466
   store i64 %_2542, ptr %t1542
-  %_2543 = call ptr @rockit_string_new(ptr @.str.551)
+  %_2543 = call ptr @rockit_string_new(ptr @.str.552)
   store ptr %_2543, ptr %t1543
   %_2544 = load i64, ptr %t1463
   store i64 %_2544, ptr %t1544
-  %_2545 = call ptr @rockit_string_new(ptr @.str.552)
+  %_2545 = call ptr @rockit_string_new(ptr @.str.553)
   store ptr %_2545, ptr %t1545
   %_2546 = load i64, ptr %t1544
   %_2547 = load ptr, ptr %t1545
@@ -49717,11 +49750,11 @@ while_exit_4:
   store i64 %_2560, ptr %t1550
   %_2561 = load i64, ptr %t6
   store i64 %_2561, ptr %t1551
-  %_2562 = call ptr @rockit_string_new(ptr @.str.544)
+  %_2562 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_2562, ptr %t1552
   %_2563 = load i64, ptr %t1466
   store i64 %_2563, ptr %t1553
-  %_2564 = call ptr @rockit_string_new(ptr @.str.545)
+  %_2564 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_2564, ptr %t1554
   %_2565 = load i64, ptr %t1436
   store i64 %_2565, ptr %t1555
@@ -49829,7 +49862,7 @@ if_then_37:
   store ptr %_2626, ptr %t1590
   %_2627 = load i64, ptr %t45
   store i64 %_2627, ptr %t1593
-  %_2628 = call ptr @rockit_string_new(ptr @.str.497)
+  %_2628 = call ptr @rockit_string_new(ptr @.str.498)
   store ptr %_2628, ptr %t1594
   store i1 1, ptr %t1595
   %_2629 = load i64, ptr %t1593
@@ -49839,7 +49872,7 @@ if_then_37:
   store i64 %_2632, ptr %t1596
   %_2633 = load i64, ptr %t45
   store i64 %_2633, ptr %t1597
-  %_2634 = call ptr @rockit_string_new(ptr @.str.585)
+  %_2634 = call ptr @rockit_string_new(ptr @.str.586)
   store ptr %_2634, ptr %t1598
   store i1 1, ptr %t1599
   %_2635 = load i64, ptr %t1597
@@ -49849,11 +49882,11 @@ if_then_37:
   store i64 %_2638, ptr %t1600
   %_2639 = load i64, ptr %t6
   store i64 %_2639, ptr %t1601
-  %_2640 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2640 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2640, ptr %t1602
   %_2641 = load i64, ptr %t1584
   store i64 %_2641, ptr %t1603
-  %_2642 = call ptr @rockit_string_new(ptr @.str.586)
+  %_2642 = call ptr @rockit_string_new(ptr @.str.587)
   store ptr %_2642, ptr %t1604
   %_2643 = load i64, ptr %t1603
   %_2644 = load ptr, ptr %t1604
@@ -49869,15 +49902,15 @@ if_then_37:
   store i64 %_2651, ptr %t1607
   %_2652 = load i64, ptr %t6
   store i64 %_2652, ptr %t1608
-  %_2653 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2653 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2653, ptr %t1609
   %_2654 = load i64, ptr %t1587
   store i64 %_2654, ptr %t1610
-  %_2655 = call ptr @rockit_string_new(ptr @.str.587)
+  %_2655 = call ptr @rockit_string_new(ptr @.str.588)
   store ptr %_2655, ptr %t1611
   %_2656 = load i64, ptr %t1584
   store i64 %_2656, ptr %t1612
-  %_2657 = call ptr @rockit_string_new(ptr @.str.588)
+  %_2657 = call ptr @rockit_string_new(ptr @.str.589)
   store ptr %_2657, ptr %t1613
   %_2658 = load i64, ptr %t1612
   %_2659 = load ptr, ptr %t1613
@@ -49901,15 +49934,15 @@ if_then_37:
   store i64 %_2672, ptr %t1618
   %_2673 = load i64, ptr %t6
   store i64 %_2673, ptr %t1619
-  %_2674 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2674 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2674, ptr %t1620
   %_2675 = load i64, ptr %t1590
   store i64 %_2675, ptr %t1621
-  %_2676 = call ptr @rockit_string_new(ptr @.str.589)
+  %_2676 = call ptr @rockit_string_new(ptr @.str.590)
   store ptr %_2676, ptr %t1622
   %_2677 = load i64, ptr %t1587
   store i64 %_2677, ptr %t1623
-  %_2678 = call ptr @rockit_string_new(ptr @.str.576)
+  %_2678 = call ptr @rockit_string_new(ptr @.str.577)
   store ptr %_2678, ptr %t1624
   %_2679 = load i64, ptr %t1623
   %_2680 = load ptr, ptr %t1624
@@ -49931,7 +49964,7 @@ if_then_37:
   %_2692 = load ptr, ptr %t1628
   %_2693 = call i64 @llvmLine(i64 %_2691, ptr %_2692)
   store i64 %_2693, ptr %t1629
-  %_2694 = call ptr @rockit_string_new(ptr @.str.590)
+  %_2694 = call ptr @rockit_string_new(ptr @.str.591)
   store ptr %_2694, ptr %t1631
   %_2695 = load i64, ptr %t162
   store i64 %_2695, ptr %t1632
@@ -49953,15 +49986,15 @@ if_then_37:
   store ptr %_2705, ptr %t1635
   %_2706 = load i64, ptr %t6
   store i64 %_2706, ptr %t1638
-  %_2707 = call ptr @rockit_string_new(ptr @.str.591)
+  %_2707 = call ptr @rockit_string_new(ptr @.str.592)
   store ptr %_2707, ptr %t1639
   %_2708 = load i64, ptr %t1590
   store i64 %_2708, ptr %t1640
-  %_2709 = call ptr @rockit_string_new(ptr @.str.592)
+  %_2709 = call ptr @rockit_string_new(ptr @.str.593)
   store ptr %_2709, ptr %t1641
   %_2710 = load i64, ptr %t1635
   store i64 %_2710, ptr %t1642
-  %_2711 = call ptr @rockit_string_new(ptr @.str.592)
+  %_2711 = call ptr @rockit_string_new(ptr @.str.593)
   store ptr %_2711, ptr %t1643
   %_2712 = load i64, ptr %t1630
   store i64 %_2712, ptr %t1644
@@ -50029,7 +50062,7 @@ if_else_37:
 if_then_38:
   %_2751 = load i64, ptr %t45
   store i64 %_2751, ptr %t1664
-  %_2752 = call ptr @rockit_string_new(ptr @.str.498)
+  %_2752 = call ptr @rockit_string_new(ptr @.str.499)
   store ptr %_2752, ptr %t1665
   store i1 1, ptr %t1666
   %_2753 = load i64, ptr %t1664
@@ -50039,7 +50072,7 @@ if_then_38:
   store i64 %_2756, ptr %t1667
   %_2757 = load i64, ptr %t6
   store i64 %_2757, ptr %t1668
-  %_2758 = call ptr @rockit_string_new(ptr @.str.593)
+  %_2758 = call ptr @rockit_string_new(ptr @.str.594)
   store ptr %_2758, ptr %t1669
   %_2759 = load i64, ptr %t1668
   %_2760 = load ptr, ptr %t1669
@@ -50090,7 +50123,7 @@ if_then_39:
   store ptr %_2784, ptr %t1684
   %_2785 = load i64, ptr %t45
   store i64 %_2785, ptr %t1687
-  %_2786 = call ptr @rockit_string_new(ptr @.str.500)
+  %_2786 = call ptr @rockit_string_new(ptr @.str.501)
   store ptr %_2786, ptr %t1688
   store i1 1, ptr %t1689
   %_2787 = load i64, ptr %t1687
@@ -50100,11 +50133,11 @@ if_then_39:
   store i64 %_2790, ptr %t1690
   %_2791 = load i64, ptr %t6
   store i64 %_2791, ptr %t1691
-  %_2792 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2792 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2792, ptr %t1692
   %_2793 = load i64, ptr %t1684
   store i64 %_2793, ptr %t1693
-  %_2794 = call ptr @rockit_string_new(ptr @.str.554)
+  %_2794 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_2794, ptr %t1694
   %_2795 = load i64, ptr %t1678
   store i64 %_2795, ptr %t1695
@@ -50129,7 +50162,7 @@ if_then_39:
   store i64 %_2809, ptr %t1700
   %_2810 = load i64, ptr %t6
   store i64 %_2810, ptr %t1701
-  %_2811 = call ptr @rockit_string_new(ptr @.str.594)
+  %_2811 = call ptr @rockit_string_new(ptr @.str.595)
   store ptr %_2811, ptr %t1702
   %_2812 = load i64, ptr %t1684
   store i64 %_2812, ptr %t1703
@@ -50149,7 +50182,7 @@ if_then_39:
   store i64 %_2822, ptr %t1707
   %_2823 = load i64, ptr %t6
   store i64 %_2823, ptr %t1708
-  %_2824 = call ptr @rockit_string_new(ptr @.str.595)
+  %_2824 = call ptr @rockit_string_new(ptr @.str.596)
   store ptr %_2824, ptr %t1709
   %_2825 = load i64, ptr %t1708
   %_2826 = load ptr, ptr %t1709
@@ -50201,7 +50234,7 @@ if_then_40:
 if_then_41:
   %_2850 = load i64, ptr %t6
   store i64 %_2850, ptr %t1727
-  %_2851 = call ptr @rockit_string_new(ptr @.str.596)
+  %_2851 = call ptr @rockit_string_new(ptr @.str.597)
   store ptr %_2851, ptr %t1728
   %_2852 = load i64, ptr %t1727
   %_2853 = load ptr, ptr %t1728
@@ -50218,11 +50251,11 @@ if_else_41:
   store ptr %_2858, ptr %t1730
   %_2859 = load i64, ptr %t6
   store i64 %_2859, ptr %t1733
-  %_2860 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2860 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2860, ptr %t1734
   %_2861 = load i64, ptr %t1730
   store i64 %_2861, ptr %t1735
-  %_2862 = call ptr @rockit_string_new(ptr @.str.554)
+  %_2862 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_2862, ptr %t1736
   %_2863 = load i64, ptr %t1719
   store i64 %_2863, ptr %t1737
@@ -50247,7 +50280,7 @@ if_else_41:
   store i64 %_2877, ptr %t1742
   %_2878 = load i64, ptr %t6
   store i64 %_2878, ptr %t1743
-  %_2879 = call ptr @rockit_string_new(ptr @.str.597)
+  %_2879 = call ptr @rockit_string_new(ptr @.str.598)
   store ptr %_2879, ptr %t1744
   %_2880 = load i64, ptr %t1730
   store i64 %_2880, ptr %t1745
@@ -50292,7 +50325,7 @@ if_then_42:
 if_then_43:
   %_2900 = load i64, ptr %t6
   store i64 %_2900, ptr %t1759
-  %_2901 = call ptr @rockit_string_new(ptr @.str.596)
+  %_2901 = call ptr @rockit_string_new(ptr @.str.597)
   store ptr %_2901, ptr %t1760
   %_2902 = load i64, ptr %t1759
   %_2903 = load ptr, ptr %t1760
@@ -50302,7 +50335,7 @@ if_then_43:
 if_else_43:
   %_2905 = load i64, ptr %t6
   store i64 %_2905, ptr %t1762
-  %_2906 = call ptr @rockit_string_new(ptr @.str.598)
+  %_2906 = call ptr @rockit_string_new(ptr @.str.599)
   store ptr %_2906, ptr %t1763
   %_2907 = load i64, ptr %t1762
   %_2908 = load ptr, ptr %t1763
@@ -50351,7 +50384,7 @@ if_then_44:
   store i64 %_2929, ptr %t1774
   %_2930 = load i64, ptr %t6
   store i64 %_2930, ptr %t1780
-  %_2931 = call ptr @rockit_string_new(ptr @.str.543)
+  %_2931 = call ptr @rockit_string_new(ptr @.str.544)
   store ptr %_2931, ptr %t1781
   %_2932 = load i64, ptr %t1774
   store i64 %_2932, ptr %t1782
@@ -50451,11 +50484,11 @@ if_then_45:
   store ptr %_2986, ptr %t1815
   %_2987 = load i64, ptr %t6
   store i64 %_2987, ptr %t1818
-  %_2988 = call ptr @rockit_string_new(ptr @.str.549)
+  %_2988 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_2988, ptr %t1819
   %_2989 = load i64, ptr %t1812
   store i64 %_2989, ptr %t1820
-  %_2990 = call ptr @rockit_string_new(ptr @.str.554)
+  %_2990 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_2990, ptr %t1821
   %_2991 = load i64, ptr %t1794
   store i64 %_2991, ptr %t1822
@@ -50480,15 +50513,15 @@ if_then_45:
   store i64 %_3005, ptr %t1827
   %_3006 = load i64, ptr %t6
   store i64 %_3006, ptr %t1828
-  %_3007 = call ptr @rockit_string_new(ptr @.str.549)
+  %_3007 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_3007, ptr %t1829
   %_3008 = load i64, ptr %t1815
   store i64 %_3008, ptr %t1830
-  %_3009 = call ptr @rockit_string_new(ptr @.str.599)
+  %_3009 = call ptr @rockit_string_new(ptr @.str.600)
   store ptr %_3009, ptr %t1831
   %_3010 = load i64, ptr %t1812
   store i64 %_3010, ptr %t1832
-  %_3011 = call ptr @rockit_string_new(ptr @.str.576)
+  %_3011 = call ptr @rockit_string_new(ptr @.str.577)
   store ptr %_3011, ptr %t1833
   %_3012 = load i64, ptr %t1832
   %_3013 = load ptr, ptr %t1833
@@ -50512,18 +50545,18 @@ if_then_45:
   store i64 %_3026, ptr %t1838
   %_3027 = load i64, ptr %t6
   store i64 %_3027, ptr %t1839
-  %_3028 = call ptr @rockit_string_new(ptr @.str.591)
+  %_3028 = call ptr @rockit_string_new(ptr @.str.592)
   store ptr %_3028, ptr %t1840
   %_3029 = load i64, ptr %t1815
   store i64 %_3029, ptr %t1841
-  %_3030 = call ptr @rockit_string_new(ptr @.str.592)
+  %_3030 = call ptr @rockit_string_new(ptr @.str.593)
   store ptr %_3030, ptr %t1842
   %_3031 = load i64, ptr %t1800
   store i64 %_3031, ptr %t1843
   %_3032 = load i64, ptr %t1843
   %_3033 = call ptr @llvmBlockLabel(i64 %_3032)
   store ptr %_3033, ptr %t1844
-  %_3034 = call ptr @rockit_string_new(ptr @.str.592)
+  %_3034 = call ptr @rockit_string_new(ptr @.str.593)
   store ptr %_3034, ptr %t1845
   %_3035 = load i64, ptr %t1806
   store i64 %_3035, ptr %t1846
@@ -50657,11 +50690,11 @@ if_then_46:
   store ptr %_3112, ptr %t1890
   %_3113 = load i64, ptr %t6
   store i64 %_3113, ptr %t1893
-  %_3114 = call ptr @rockit_string_new(ptr @.str.549)
+  %_3114 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_3114, ptr %t1894
   %_3115 = load i64, ptr %t1890
   store i64 %_3115, ptr %t1895
-  %_3116 = call ptr @rockit_string_new(ptr @.str.554)
+  %_3116 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_3116, ptr %t1896
   %_3117 = load i64, ptr %t1868
   store i64 %_3117, ptr %t1897
@@ -50684,7 +50717,7 @@ if_then_46:
   %_3130 = load ptr, ptr %t1901
   %_3131 = call i64 @llvmLine(i64 %_3129, ptr %_3130)
   store i64 %_3131, ptr %t1902
-  %_3132 = call ptr @rockit_string_new(ptr @.str.600)
+  %_3132 = call ptr @rockit_string_new(ptr @.str.601)
   store ptr %_3132, ptr %t1904
   %_3133 = load i64, ptr %t1890
   store i64 %_3133, ptr %t1905
@@ -50745,11 +50778,11 @@ while_body_5:
   store ptr %_3164, ptr %t1922
   %_3165 = load i64, ptr %t6
   store i64 %_3165, ptr %t1925
-  %_3166 = call ptr @rockit_string_new(ptr @.str.549)
+  %_3166 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_3166, ptr %t1926
   %_3167 = load i64, ptr %t1922
   store i64 %_3167, ptr %t1927
-  %_3168 = call ptr @rockit_string_new(ptr @.str.554)
+  %_3168 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_3168, ptr %t1928
   %_3169 = load i64, ptr %t1912
   store i64 %_3169, ptr %t1929
@@ -50774,7 +50807,7 @@ while_body_5:
   store i64 %_3183, ptr %t1934
   %_3184 = load i64, ptr %t1903
   store i64 %_3184, ptr %t1935
-  %_3185 = call ptr @rockit_string_new(ptr @.str.565)
+  %_3185 = call ptr @rockit_string_new(ptr @.str.566)
   store ptr %_3185, ptr %t1936
   %_3186 = load i64, ptr %t1922
   store i64 %_3186, ptr %t1937
@@ -50818,11 +50851,11 @@ while_exit_5:
   store i64 %_3208, ptr %t1949
   %_3209 = load i64, ptr %t6
   store i64 %_3209, ptr %t1950
-  %_3210 = call ptr @rockit_string_new(ptr @.str.549)
+  %_3210 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_3210, ptr %t1951
   %_3211 = load i64, ptr %t1943
   store i64 %_3211, ptr %t1952
-  %_3212 = call ptr @rockit_string_new(ptr @.str.601)
+  %_3212 = call ptr @rockit_string_new(ptr @.str.602)
   store ptr %_3212, ptr %t1953
   %_3213 = load i64, ptr %t1886
   store i64 %_3213, ptr %t1954
@@ -50862,11 +50895,11 @@ while_exit_5:
   store i64 %_3237, ptr %t1964
   %_3238 = load i64, ptr %t6
   store i64 %_3238, ptr %t1965
-  %_3239 = call ptr @rockit_string_new(ptr @.str.544)
+  %_3239 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_3239, ptr %t1966
   %_3240 = load i64, ptr %t1943
   store i64 %_3240, ptr %t1967
-  %_3241 = call ptr @rockit_string_new(ptr @.str.545)
+  %_3241 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_3241, ptr %t1968
   %_3242 = load i64, ptr %t1862
   store i64 %_3242, ptr %t1969
@@ -50982,11 +51015,11 @@ if_then_47:
   store ptr %_3308, ptr %t2007
   %_3309 = load i64, ptr %t6
   store i64 %_3309, ptr %t2010
-  %_3310 = call ptr @rockit_string_new(ptr @.str.549)
+  %_3310 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_3310, ptr %t2011
   %_3311 = load i64, ptr %t2004
   store i64 %_3311, ptr %t2012
-  %_3312 = call ptr @rockit_string_new(ptr @.str.554)
+  %_3312 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_3312, ptr %t2013
   %_3313 = load i64, ptr %t1992
   store i64 %_3313, ptr %t2014
@@ -51011,15 +51044,15 @@ if_then_47:
   store i64 %_3327, ptr %t2019
   %_3328 = load i64, ptr %t6
   store i64 %_3328, ptr %t2020
-  %_3329 = call ptr @rockit_string_new(ptr @.str.549)
+  %_3329 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_3329, ptr %t2021
   %_3330 = load i64, ptr %t2007
   store i64 %_3330, ptr %t2022
-  %_3331 = call ptr @rockit_string_new(ptr @.str.578)
+  %_3331 = call ptr @rockit_string_new(ptr @.str.579)
   store ptr %_3331, ptr %t2023
   %_3332 = load i64, ptr %t2004
   store i64 %_3332, ptr %t2024
-  %_3333 = call ptr @rockit_string_new(ptr @.str.579)
+  %_3333 = call ptr @rockit_string_new(ptr @.str.580)
   store ptr %_3333, ptr %t2025
   %_3334 = load i64, ptr %t2024
   %_3335 = load ptr, ptr %t2025
@@ -51100,11 +51133,11 @@ while_body_6:
   store ptr %_3379, ptr %t2050
   %_3380 = load i64, ptr %t6
   store i64 %_3380, ptr %t2053
-  %_3381 = call ptr @rockit_string_new(ptr @.str.549)
+  %_3381 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_3381, ptr %t2054
   %_3382 = load i64, ptr %t2050
   store i64 %_3382, ptr %t2055
-  %_3383 = call ptr @rockit_string_new(ptr @.str.554)
+  %_3383 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_3383, ptr %t2056
   %_3384 = load i64, ptr %t2040
   store i64 %_3384, ptr %t2057
@@ -51139,7 +51172,7 @@ while_body_6:
 if_then_48:
   %_3404 = load i64, ptr %t2031
   store i64 %_3404, ptr %t2067
-  %_3405 = call ptr @rockit_string_new(ptr @.str.531)
+  %_3405 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_3405, ptr %t2068
   %_3406 = load i64, ptr %t2067
   %_3407 = load ptr, ptr %t2068
@@ -51149,7 +51182,7 @@ if_then_48:
   store ptr %_3409, ptr %t2031
   %_3410 = load i64, ptr %t2033
   store i64 %_3410, ptr %t2070
-  %_3411 = call ptr @rockit_string_new(ptr @.str.531)
+  %_3411 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_3411, ptr %t2071
   %_3412 = load i64, ptr %t2070
   %_3413 = load ptr, ptr %t2071
@@ -51163,7 +51196,7 @@ if_else_48:
 if_merge_48:
   %_3416 = load i64, ptr %t2031
   store i64 %_3416, ptr %t2074
-  %_3417 = call ptr @rockit_string_new(ptr @.str.602)
+  %_3417 = call ptr @rockit_string_new(ptr @.str.603)
   store ptr %_3417, ptr %t2075
   %_3418 = load i64, ptr %t2074
   %_3419 = load ptr, ptr %t2075
@@ -51173,7 +51206,7 @@ if_merge_48:
   store ptr %_3421, ptr %t2031
   %_3422 = load i64, ptr %t2033
   store i64 %_3422, ptr %t2077
-  %_3423 = call ptr @rockit_string_new(ptr @.str.600)
+  %_3423 = call ptr @rockit_string_new(ptr @.str.601)
   store ptr %_3423, ptr %t2078
   %_3424 = load i64, ptr %t2050
   store i64 %_3424, ptr %t2079
@@ -51207,11 +51240,11 @@ while_exit_6:
   store ptr %_3440, ptr %t2085
   %_3441 = load i64, ptr %t6
   store i64 %_3441, ptr %t2088
-  %_3442 = call ptr @rockit_string_new(ptr @.str.549)
+  %_3442 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_3442, ptr %t2089
   %_3443 = load i64, ptr %t2085
   store i64 %_3443, ptr %t2090
-  %_3444 = call ptr @rockit_string_new(ptr @.str.603)
+  %_3444 = call ptr @rockit_string_new(ptr @.str.604)
   store ptr %_3444, ptr %t2091
   %_3445 = load i64, ptr %t2007
   store i64 %_3445, ptr %t2092
@@ -51251,11 +51284,11 @@ while_exit_6:
   store i64 %_3469, ptr %t2102
   %_3470 = load i64, ptr %t6
   store i64 %_3470, ptr %t2103
-  %_3471 = call ptr @rockit_string_new(ptr @.str.544)
+  %_3471 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_3471, ptr %t2104
   %_3472 = load i64, ptr %t2085
   store i64 %_3472, ptr %t2105
-  %_3473 = call ptr @rockit_string_new(ptr @.str.545)
+  %_3473 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_3473, ptr %t2106
   %_3474 = load i64, ptr %t1986
   store i64 %_3474, ptr %t2107
@@ -51327,7 +51360,7 @@ if_then_49:
   store i64 %_3514, ptr %t2124
   %_3515 = load i64, ptr %t6
   store i64 %_3515, ptr %t2130
-  %_3516 = call ptr @rockit_string_new(ptr @.str.547)
+  %_3516 = call ptr @rockit_string_new(ptr @.str.548)
   store ptr %_3516, ptr %t2131
   %_3517 = load i64, ptr %t2124
   store i64 %_3517, ptr %t2132
@@ -51402,11 +51435,11 @@ if_then_50:
   store ptr %_3557, ptr %t2155
   %_3558 = load i64, ptr %t6
   store i64 %_3558, ptr %t2158
-  %_3559 = call ptr @rockit_string_new(ptr @.str.549)
+  %_3559 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_3559, ptr %t2159
   %_3560 = load i64, ptr %t2155
   store i64 %_3560, ptr %t2160
-  %_3561 = call ptr @rockit_string_new(ptr @.str.554)
+  %_3561 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_3561, ptr %t2161
   %_3562 = load i64, ptr %t2149
   store i64 %_3562, ptr %t2162
@@ -51431,11 +51464,11 @@ if_then_50:
   store i64 %_3576, ptr %t2167
   %_3577 = load i64, ptr %t6
   store i64 %_3577, ptr %t2168
-  %_3578 = call ptr @rockit_string_new(ptr @.str.544)
+  %_3578 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_3578, ptr %t2169
   %_3579 = load i64, ptr %t2155
   store i64 %_3579, ptr %t2170
-  %_3580 = call ptr @rockit_string_new(ptr @.str.545)
+  %_3580 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_3580, ptr %t2171
   %_3581 = load i64, ptr %t2143
   store i64 %_3581, ptr %t2172
@@ -51561,7 +51594,7 @@ if_then_51:
 if_then_52:
   %_3612 = load i64, ptr %t6
   store i64 %_3612, ptr %t2222
-  %_3613 = call ptr @rockit_string_new(ptr @.str.596)
+  %_3613 = call ptr @rockit_string_new(ptr @.str.597)
   store ptr %_3613, ptr %t2223
   %_3614 = load i64, ptr %t2222
   %_3615 = load ptr, ptr %t2223
@@ -51571,7 +51604,7 @@ if_then_52:
 if_else_52:
   %_3617 = load i64, ptr %t6
   store i64 %_3617, ptr %t2225
-  %_3618 = call ptr @rockit_string_new(ptr @.str.598)
+  %_3618 = call ptr @rockit_string_new(ptr @.str.599)
   store ptr %_3618, ptr %t2226
   %_3619 = load i64, ptr %t2225
   %_3620 = load ptr, ptr %t2226
@@ -51852,39 +51885,84 @@ prologue:
   %t306 = alloca ptr
   %t307 = alloca i64
   %t308 = alloca i64
-  %t309 = alloca i64
+  %t309 = alloca ptr
   %t31 = alloca ptr
-  %t310 = alloca ptr
-  %t311 = alloca i64
-  %t312 = alloca ptr
+  %t310 = alloca i1
+  %t312 = alloca i64
   %t313 = alloca i64
   %t314 = alloca ptr
   %t315 = alloca i64
-  %t316 = alloca ptr
-  %t317 = alloca i64
-  %t318 = alloca ptr
+  %t316 = alloca i64
+  %t317 = alloca ptr
+  %t318 = alloca i64
   %t319 = alloca ptr
   %t32 = alloca i1
-  %t320 = alloca ptr
+  %t320 = alloca i64
   %t321 = alloca ptr
-  %t322 = alloca ptr
+  %t322 = alloca i64
   %t323 = alloca ptr
-  %t324 = alloca ptr
-  %t325 = alloca i64
-  %t326 = alloca i64
+  %t324 = alloca i64
+  %t325 = alloca ptr
+  %t326 = alloca ptr
   %t327 = alloca ptr
-  %t328 = alloca i64
+  %t328 = alloca ptr
   %t329 = alloca ptr
-  %t330 = alloca i64
+  %t330 = alloca ptr
   %t331 = alloca ptr
-  %t332 = alloca ptr
-  %t333 = alloca ptr
+  %t332 = alloca i64
+  %t333 = alloca i64
   %t334 = alloca ptr
   %t335 = alloca i64
+  %t336 = alloca ptr
+  %t337 = alloca i64
+  %t338 = alloca ptr
+  %t339 = alloca ptr
   %t34 = alloca ptr
+  %t340 = alloca ptr
+  %t341 = alloca ptr
+  %t342 = alloca ptr
+  %t343 = alloca i64
+  %t344 = alloca i64
+  %t345 = alloca ptr
+  %t346 = alloca i64
+  %t347 = alloca ptr
+  %t348 = alloca i64
+  %t349 = alloca ptr
+  %t350 = alloca ptr
+  %t351 = alloca ptr
+  %t352 = alloca ptr
+  %t353 = alloca i64
+  %t354 = alloca i64
+  %t355 = alloca i64
+  %t356 = alloca ptr
+  %t357 = alloca i64
+  %t358 = alloca ptr
+  %t359 = alloca i64
   %t36 = alloca i64
+  %t360 = alloca ptr
+  %t361 = alloca i64
+  %t362 = alloca ptr
+  %t363 = alloca i64
+  %t364 = alloca ptr
+  %t365 = alloca ptr
+  %t366 = alloca ptr
+  %t367 = alloca ptr
+  %t368 = alloca ptr
+  %t369 = alloca ptr
   %t37 = alloca i64
+  %t370 = alloca ptr
+  %t371 = alloca i64
+  %t372 = alloca i64
+  %t373 = alloca ptr
+  %t374 = alloca i64
+  %t375 = alloca ptr
+  %t376 = alloca i64
+  %t377 = alloca ptr
+  %t378 = alloca ptr
+  %t379 = alloca ptr
   %t38 = alloca i1
+  %t380 = alloca ptr
+  %t381 = alloca i64
   %t39 = alloca i64
   %t4 = alloca i64
   %t40 = alloca i64
@@ -52012,7 +52090,7 @@ entry:
   %_30 = load i1, ptr %t26
   br i1 %_30, label %if_then_0, label %if_else_0
 if_then_0:
-  %_31 = call ptr @rockit_string_new(ptr @.str.489)
+  %_31 = call ptr @rockit_string_new(ptr @.str.490)
   store ptr %_31, ptr %t28
   %_32 = load ptr, ptr %t28
   store ptr %_32, ptr %t22
@@ -52032,7 +52110,7 @@ if_merge_0:
   %_39 = load i1, ptr %t32
   br i1 %_39, label %if_then_1, label %if_else_1
 if_then_1:
-  %_40 = call ptr @rockit_string_new(ptr @.str.490)
+  %_40 = call ptr @rockit_string_new(ptr @.str.491)
   store ptr %_40, ptr %t34
   %_41 = load ptr, ptr %t34
   store ptr %_41, ptr %t22
@@ -52171,11 +52249,11 @@ while_body_0:
   store ptr %_114, ptr %t81
   %_115 = load i64, ptr %t0
   store i64 %_115, ptr %t84
-  %_116 = call ptr @rockit_string_new(ptr @.str.549)
+  %_116 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_116, ptr %t85
   %_117 = load i64, ptr %t81
   store i64 %_117, ptr %t86
-  %_118 = call ptr @rockit_string_new(ptr @.str.554)
+  %_118 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_118, ptr %t87
   %_119 = load i64, ptr %t73
   store i64 %_119, ptr %t88
@@ -52247,7 +52325,7 @@ if_merge_3:
   store ptr %_158, ptr %t110
   %_159 = load i64, ptr %t94
   store i64 %_159, ptr %t112
-  %_160 = call ptr @rockit_string_new(ptr @.str.604)
+  %_160 = call ptr @rockit_string_new(ptr @.str.605)
   store ptr %_160, ptr %t113
   %_161 = load i64, ptr %t112
   %_164 = load ptr, ptr %t113
@@ -52266,15 +52344,15 @@ if_then_4:
   store ptr %_169, ptr %t116
   %_170 = load i64, ptr %t0
   store i64 %_170, ptr %t119
-  %_171 = call ptr @rockit_string_new(ptr @.str.549)
+  %_171 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_171, ptr %t120
   %_172 = load i64, ptr %t116
   store i64 %_172, ptr %t121
-  %_173 = call ptr @rockit_string_new(ptr @.str.578)
+  %_173 = call ptr @rockit_string_new(ptr @.str.579)
   store ptr %_173, ptr %t122
   %_174 = load i64, ptr %t81
   store i64 %_174, ptr %t123
-  %_175 = call ptr @rockit_string_new(ptr @.str.579)
+  %_175 = call ptr @rockit_string_new(ptr @.str.580)
   store ptr %_175, ptr %t124
   %_176 = load i64, ptr %t123
   %_177 = load ptr, ptr %t124
@@ -52296,7 +52374,7 @@ if_then_4:
   %_189 = load ptr, ptr %t128
   %_190 = call i64 @llvmLine(i64 %_188, ptr %_189)
   store i64 %_190, ptr %t129
-  %_191 = call ptr @rockit_string_new(ptr @.str.605)
+  %_191 = call ptr @rockit_string_new(ptr @.str.606)
   store ptr %_191, ptr %t130
   %_192 = load i64, ptr %t116
   store i64 %_192, ptr %t131
@@ -52310,7 +52388,7 @@ if_then_4:
 if_else_4:
   %_197 = load i64, ptr %t94
   store i64 %_197, ptr %t133
-  %_198 = call ptr @rockit_string_new(ptr @.str.606)
+  %_198 = call ptr @rockit_string_new(ptr @.str.607)
   store ptr %_198, ptr %t134
   %_199 = load i64, ptr %t133
   %_202 = load ptr, ptr %t134
@@ -52329,15 +52407,15 @@ if_then_5:
   store ptr %_207, ptr %t137
   %_208 = load i64, ptr %t0
   store i64 %_208, ptr %t140
-  %_209 = call ptr @rockit_string_new(ptr @.str.549)
+  %_209 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_209, ptr %t141
   %_210 = load i64, ptr %t137
   store i64 %_210, ptr %t142
-  %_211 = call ptr @rockit_string_new(ptr @.str.607)
+  %_211 = call ptr @rockit_string_new(ptr @.str.608)
   store ptr %_211, ptr %t143
   %_212 = load i64, ptr %t81
   store i64 %_212, ptr %t144
-  %_213 = call ptr @rockit_string_new(ptr @.str.608)
+  %_213 = call ptr @rockit_string_new(ptr @.str.609)
   store ptr %_213, ptr %t145
   %_214 = load i64, ptr %t144
   %_215 = load ptr, ptr %t145
@@ -52359,7 +52437,7 @@ if_then_5:
   %_227 = load ptr, ptr %t149
   %_228 = call i64 @llvmLine(i64 %_226, ptr %_227)
   store i64 %_228, ptr %t150
-  %_229 = call ptr @rockit_string_new(ptr @.str.609)
+  %_229 = call ptr @rockit_string_new(ptr @.str.610)
   store ptr %_229, ptr %t151
   %_230 = load i64, ptr %t137
   store i64 %_230, ptr %t152
@@ -52373,7 +52451,7 @@ if_then_5:
 if_else_5:
   %_235 = load i64, ptr %t94
   store i64 %_235, ptr %t154
-  %_236 = call ptr @rockit_string_new(ptr @.str.610)
+  %_236 = call ptr @rockit_string_new(ptr @.str.611)
   store ptr %_236, ptr %t155
   %_237 = load i64, ptr %t154
   %_240 = load ptr, ptr %t155
@@ -52392,15 +52470,15 @@ if_then_6:
   store ptr %_245, ptr %t158
   %_246 = load i64, ptr %t0
   store i64 %_246, ptr %t161
-  %_247 = call ptr @rockit_string_new(ptr @.str.549)
+  %_247 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_247, ptr %t162
   %_248 = load i64, ptr %t158
   store i64 %_248, ptr %t163
-  %_249 = call ptr @rockit_string_new(ptr @.str.607)
+  %_249 = call ptr @rockit_string_new(ptr @.str.608)
   store ptr %_249, ptr %t164
   %_250 = load i64, ptr %t81
   store i64 %_250, ptr %t165
-  %_251 = call ptr @rockit_string_new(ptr @.str.611)
+  %_251 = call ptr @rockit_string_new(ptr @.str.612)
   store ptr %_251, ptr %t166
   %_252 = load i64, ptr %t165
   %_253 = load ptr, ptr %t166
@@ -52422,7 +52500,7 @@ if_then_6:
   %_265 = load ptr, ptr %t170
   %_266 = call i64 @llvmLine(i64 %_264, ptr %_265)
   store i64 %_266, ptr %t171
-  %_267 = call ptr @rockit_string_new(ptr @.str.612)
+  %_267 = call ptr @rockit_string_new(ptr @.str.613)
   store ptr %_267, ptr %t172
   %_268 = load i64, ptr %t158
   store i64 %_268, ptr %t173
@@ -52434,7 +52512,7 @@ if_then_6:
   store ptr %_272, ptr %t110
   br label %if_merge_6
 if_else_6:
-  %_273 = call ptr @rockit_string_new(ptr @.str.600)
+  %_273 = call ptr @rockit_string_new(ptr @.str.601)
   store ptr %_273, ptr %t175
   %_274 = load i64, ptr %t81
   store i64 %_274, ptr %t176
@@ -52462,7 +52540,7 @@ if_merge_4:
 if_then_7:
   %_284 = load i64, ptr %t66
   store i64 %_284, ptr %t185
-  %_285 = call ptr @rockit_string_new(ptr @.str.531)
+  %_285 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_285, ptr %t186
   %_286 = load i64, ptr %t185
   %_287 = load ptr, ptr %t186
@@ -52497,7 +52575,7 @@ if_merge_7:
 while_exit_0:
   %_301 = load i64, ptr %t61
   store i64 %_301, ptr %t195
-  %_302 = call ptr @rockit_string_new(ptr @.str.613)
+  %_302 = call ptr @rockit_string_new(ptr @.str.614)
   store ptr %_302, ptr %t196
   %_303 = load i64, ptr %t195
   %_306 = load ptr, ptr %t196
@@ -52509,7 +52587,7 @@ while_exit_0:
 if_then_8:
   %_308 = load i64, ptr %t0
   store i64 %_308, ptr %t199
-  %_309 = call ptr @rockit_string_new(ptr @.str.614)
+  %_309 = call ptr @rockit_string_new(ptr @.str.615)
   store ptr %_309, ptr %t200
   %_310 = load i64, ptr %t22
   store i64 %_310, ptr %t201
@@ -52541,7 +52619,7 @@ if_then_8:
   store i64 %_328, ptr %t209
   %_329 = load i64, ptr %t0
   store i64 %_329, ptr %t210
-  %_330 = call ptr @rockit_string_new(ptr @.str.553)
+  %_330 = call ptr @rockit_string_new(ptr @.str.554)
   store ptr %_330, ptr %t211
   %_331 = load i64, ptr %t12
   store i64 %_331, ptr %t212
@@ -52560,7 +52638,7 @@ if_then_8:
 if_else_8:
   %_340 = load i64, ptr %t61
   store i64 %_340, ptr %t216
-  %_341 = call ptr @rockit_string_new(ptr @.str.604)
+  %_341 = call ptr @rockit_string_new(ptr @.str.605)
   store ptr %_341, ptr %t217
   %_342 = load i64, ptr %t216
   %_345 = load ptr, ptr %t217
@@ -52586,11 +52664,11 @@ if_then_9:
   store ptr %_354, ptr %t223
   %_355 = load i64, ptr %t0
   store i64 %_355, ptr %t226
-  %_356 = call ptr @rockit_string_new(ptr @.str.549)
+  %_356 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_356, ptr %t227
   %_357 = load i64, ptr %t220
   store i64 %_357, ptr %t228
-  %_358 = call ptr @rockit_string_new(ptr @.str.615)
+  %_358 = call ptr @rockit_string_new(ptr @.str.616)
   store ptr %_358, ptr %t229
   %_359 = load i64, ptr %t22
   store i64 %_359, ptr %t230
@@ -52630,15 +52708,15 @@ if_then_9:
   store i64 %_383, ptr %t240
   %_384 = load i64, ptr %t0
   store i64 %_384, ptr %t241
-  %_385 = call ptr @rockit_string_new(ptr @.str.549)
+  %_385 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_385, ptr %t242
   %_386 = load i64, ptr %t223
   store i64 %_386, ptr %t243
-  %_387 = call ptr @rockit_string_new(ptr @.str.551)
+  %_387 = call ptr @rockit_string_new(ptr @.str.552)
   store ptr %_387, ptr %t244
   %_388 = load i64, ptr %t220
   store i64 %_388, ptr %t245
-  %_389 = call ptr @rockit_string_new(ptr @.str.552)
+  %_389 = call ptr @rockit_string_new(ptr @.str.553)
   store ptr %_389, ptr %t246
   %_390 = load i64, ptr %t245
   %_391 = load ptr, ptr %t246
@@ -52662,11 +52740,11 @@ if_then_9:
   store i64 %_404, ptr %t251
   %_405 = load i64, ptr %t0
   store i64 %_405, ptr %t252
-  %_406 = call ptr @rockit_string_new(ptr @.str.544)
+  %_406 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_406, ptr %t253
   %_407 = load i64, ptr %t223
   store i64 %_407, ptr %t254
-  %_408 = call ptr @rockit_string_new(ptr @.str.545)
+  %_408 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_408, ptr %t255
   %_409 = load i64, ptr %t12
   store i64 %_409, ptr %t256
@@ -52693,7 +52771,7 @@ if_then_9:
 if_else_9:
   %_424 = load i64, ptr %t61
   store i64 %_424, ptr %t262
-  %_425 = call ptr @rockit_string_new(ptr @.str.610)
+  %_425 = call ptr @rockit_string_new(ptr @.str.611)
   store ptr %_425, ptr %t263
   %_426 = load i64, ptr %t262
   %_429 = load ptr, ptr %t263
@@ -52719,11 +52797,11 @@ if_then_10:
   store ptr %_438, ptr %t269
   %_439 = load i64, ptr %t0
   store i64 %_439, ptr %t272
-  %_440 = call ptr @rockit_string_new(ptr @.str.549)
+  %_440 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_440, ptr %t273
   %_441 = load i64, ptr %t266
   store i64 %_441, ptr %t274
-  %_442 = call ptr @rockit_string_new(ptr @.str.616)
+  %_442 = call ptr @rockit_string_new(ptr @.str.617)
   store ptr %_442, ptr %t275
   %_443 = load i64, ptr %t22
   store i64 %_443, ptr %t276
@@ -52763,15 +52841,15 @@ if_then_10:
   store i64 %_467, ptr %t286
   %_468 = load i64, ptr %t0
   store i64 %_468, ptr %t287
-  %_469 = call ptr @rockit_string_new(ptr @.str.549)
+  %_469 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_469, ptr %t288
   %_470 = load i64, ptr %t269
   store i64 %_470, ptr %t289
-  %_471 = call ptr @rockit_string_new(ptr @.str.567)
+  %_471 = call ptr @rockit_string_new(ptr @.str.568)
   store ptr %_471, ptr %t290
   %_472 = load i64, ptr %t266
   store i64 %_472, ptr %t291
-  %_473 = call ptr @rockit_string_new(ptr @.str.552)
+  %_473 = call ptr @rockit_string_new(ptr @.str.553)
   store ptr %_473, ptr %t292
   %_474 = load i64, ptr %t291
   %_475 = load ptr, ptr %t292
@@ -52795,11 +52873,11 @@ if_then_10:
   store i64 %_488, ptr %t297
   %_489 = load i64, ptr %t0
   store i64 %_489, ptr %t298
-  %_490 = call ptr @rockit_string_new(ptr @.str.544)
+  %_490 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_490, ptr %t299
   %_491 = load i64, ptr %t269
   store i64 %_491, ptr %t300
-  %_492 = call ptr @rockit_string_new(ptr @.str.545)
+  %_492 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_492, ptr %t301
   %_493 = load i64, ptr %t12
   store i64 %_493, ptr %t302
@@ -52824,86 +52902,221 @@ if_then_10:
   store i64 %_507, ptr %t307
   br label %if_merge_10
 if_else_10:
-  %_508 = load i64, ptr %t2
-  store i64 %_508, ptr %t309
-  %_509 = load i64, ptr %t309
-  %_510 = call ptr @llvmNextSSA(i64 %_509)
-  store ptr %_510, ptr %t310
-  %_511 = load ptr, ptr %t310
-  store ptr %_511, ptr %t308
-  %_512 = load i64, ptr %t0
-  store i64 %_512, ptr %t311
-  %_513 = call ptr @rockit_string_new(ptr @.str.549)
-  store ptr %_513, ptr %t312
-  %_514 = load i64, ptr %t308
-  store i64 %_514, ptr %t313
-  %_515 = call ptr @rockit_string_new(ptr @.str.601)
-  store ptr %_515, ptr %t314
-  %_516 = load i64, ptr %t22
-  store i64 %_516, ptr %t315
-  %_517 = call ptr @rockit_string_new(ptr @.str.226)
-  store ptr %_517, ptr %t316
-  %_518 = load i64, ptr %t66
-  store i64 %_518, ptr %t317
-  %_519 = call ptr @rockit_string_new(ptr @.str.228)
-  store ptr %_519, ptr %t318
-  %_520 = load i64, ptr %t317
-  %_521 = load ptr, ptr %t318
-  %_522 = call ptr @stringConcat(i64 %_520, ptr %_521)
-  store ptr %_522, ptr %t319
-  %_523 = load ptr, ptr %t316
-  %_524 = load ptr, ptr %t319
-  %_525 = call ptr @stringConcat(ptr %_523, ptr %_524)
-  store ptr %_525, ptr %t320
-  %_526 = load i64, ptr %t315
-  %_527 = load ptr, ptr %t320
-  %_528 = call ptr @stringConcat(i64 %_526, ptr %_527)
-  store ptr %_528, ptr %t321
-  %_529 = load ptr, ptr %t314
-  %_530 = load ptr, ptr %t321
-  %_531 = call ptr @stringConcat(ptr %_529, ptr %_530)
-  store ptr %_531, ptr %t322
-  %_532 = load i64, ptr %t313
-  %_533 = load ptr, ptr %t322
-  %_534 = call ptr @stringConcat(i64 %_532, ptr %_533)
-  store ptr %_534, ptr %t323
-  %_535 = load ptr, ptr %t312
-  %_536 = load ptr, ptr %t323
-  %_537 = call ptr @stringConcat(ptr %_535, ptr %_536)
-  store ptr %_537, ptr %t324
-  %_538 = load i64, ptr %t311
-  %_539 = load ptr, ptr %t324
-  %_540 = call i64 @llvmLine(i64 %_538, ptr %_539)
-  store i64 %_540, ptr %t325
-  %_541 = load i64, ptr %t0
-  store i64 %_541, ptr %t326
-  %_542 = call ptr @rockit_string_new(ptr @.str.544)
-  store ptr %_542, ptr %t327
-  %_543 = load i64, ptr %t308
-  store i64 %_543, ptr %t328
-  %_544 = call ptr @rockit_string_new(ptr @.str.545)
-  store ptr %_544, ptr %t329
-  %_545 = load i64, ptr %t12
-  store i64 %_545, ptr %t330
-  %_546 = load i64, ptr %t330
-  %_547 = call ptr @toString(i64 %_546)
-  store ptr %_547, ptr %t331
-  %_548 = load ptr, ptr %t329
-  %_549 = load ptr, ptr %t331
-  %_550 = call ptr @stringConcat(ptr %_548, ptr %_549)
-  store ptr %_550, ptr %t332
-  %_551 = load i64, ptr %t328
-  %_552 = load ptr, ptr %t332
-  %_553 = call ptr @stringConcat(i64 %_551, ptr %_552)
-  store ptr %_553, ptr %t333
-  %_554 = load ptr, ptr %t327
-  %_555 = load ptr, ptr %t333
-  %_556 = call ptr @stringConcat(ptr %_554, ptr %_555)
-  store ptr %_556, ptr %t334
-  %_557 = load i64, ptr %t326
-  %_558 = load ptr, ptr %t334
-  %_559 = call i64 @llvmLine(i64 %_557, ptr %_558)
-  store i64 %_559, ptr %t335
+  %_508 = load i64, ptr %t61
+  store i64 %_508, ptr %t308
+  %_509 = call ptr @rockit_string_new(ptr @.str.618)
+  store ptr %_509, ptr %t309
+  %_510 = load i64, ptr %t308
+  %_513 = load ptr, ptr %t309
+  %_511 = ptrtoint ptr %_513 to i64
+  %_512 = call i1 @rockit_string_eq(i64 %_510, i64 %_511)
+  store i1 %_512, ptr %t310
+  %_514 = load i1, ptr %t310
+  br i1 %_514, label %if_then_11, label %if_else_11
+if_then_11:
+  %_515 = load i64, ptr %t2
+  store i64 %_515, ptr %t313
+  %_516 = load i64, ptr %t313
+  %_517 = call ptr @llvmNextSSA(i64 %_516)
+  store ptr %_517, ptr %t314
+  %_518 = load ptr, ptr %t314
+  store ptr %_518, ptr %t312
+  %_519 = load i64, ptr %t2
+  store i64 %_519, ptr %t316
+  %_520 = load i64, ptr %t316
+  %_521 = call ptr @llvmNextSSA(i64 %_520)
+  store ptr %_521, ptr %t317
+  %_522 = load ptr, ptr %t317
+  store ptr %_522, ptr %t315
+  %_523 = load i64, ptr %t0
+  store i64 %_523, ptr %t318
+  %_524 = call ptr @rockit_string_new(ptr @.str.550)
+  store ptr %_524, ptr %t319
+  %_525 = load i64, ptr %t312
+  store i64 %_525, ptr %t320
+  %_526 = call ptr @rockit_string_new(ptr @.str.619)
+  store ptr %_526, ptr %t321
+  %_527 = load i64, ptr %t22
+  store i64 %_527, ptr %t322
+  %_528 = call ptr @rockit_string_new(ptr @.str.226)
+  store ptr %_528, ptr %t323
+  %_529 = load i64, ptr %t66
+  store i64 %_529, ptr %t324
+  %_530 = call ptr @rockit_string_new(ptr @.str.228)
+  store ptr %_530, ptr %t325
+  %_531 = load i64, ptr %t324
+  %_532 = load ptr, ptr %t325
+  %_533 = call ptr @stringConcat(i64 %_531, ptr %_532)
+  store ptr %_533, ptr %t326
+  %_534 = load ptr, ptr %t323
+  %_535 = load ptr, ptr %t326
+  %_536 = call ptr @stringConcat(ptr %_534, ptr %_535)
+  store ptr %_536, ptr %t327
+  %_537 = load i64, ptr %t322
+  %_538 = load ptr, ptr %t327
+  %_539 = call ptr @stringConcat(i64 %_537, ptr %_538)
+  store ptr %_539, ptr %t328
+  %_540 = load ptr, ptr %t321
+  %_541 = load ptr, ptr %t328
+  %_542 = call ptr @stringConcat(ptr %_540, ptr %_541)
+  store ptr %_542, ptr %t329
+  %_543 = load i64, ptr %t320
+  %_544 = load ptr, ptr %t329
+  %_545 = call ptr @stringConcat(i64 %_543, ptr %_544)
+  store ptr %_545, ptr %t330
+  %_546 = load ptr, ptr %t319
+  %_547 = load ptr, ptr %t330
+  %_548 = call ptr @stringConcat(ptr %_546, ptr %_547)
+  store ptr %_548, ptr %t331
+  %_549 = load i64, ptr %t318
+  %_550 = load ptr, ptr %t331
+  %_551 = call i64 @llvmLine(i64 %_549, ptr %_550)
+  store i64 %_551, ptr %t332
+  %_552 = load i64, ptr %t0
+  store i64 %_552, ptr %t333
+  %_553 = call ptr @rockit_string_new(ptr @.str.550)
+  store ptr %_553, ptr %t334
+  %_554 = load i64, ptr %t315
+  store i64 %_554, ptr %t335
+  %_555 = call ptr @rockit_string_new(ptr @.str.620)
+  store ptr %_555, ptr %t336
+  %_556 = load i64, ptr %t312
+  store i64 %_556, ptr %t337
+  %_557 = call ptr @rockit_string_new(ptr @.str.553)
+  store ptr %_557, ptr %t338
+  %_558 = load i64, ptr %t337
+  %_559 = load ptr, ptr %t338
+  %_560 = call ptr @stringConcat(i64 %_558, ptr %_559)
+  store ptr %_560, ptr %t339
+  %_561 = load ptr, ptr %t336
+  %_562 = load ptr, ptr %t339
+  %_563 = call ptr @stringConcat(ptr %_561, ptr %_562)
+  store ptr %_563, ptr %t340
+  %_564 = load i64, ptr %t335
+  %_565 = load ptr, ptr %t340
+  %_566 = call ptr @stringConcat(i64 %_564, ptr %_565)
+  store ptr %_566, ptr %t341
+  %_567 = load ptr, ptr %t334
+  %_568 = load ptr, ptr %t341
+  %_569 = call ptr @stringConcat(ptr %_567, ptr %_568)
+  store ptr %_569, ptr %t342
+  %_570 = load i64, ptr %t333
+  %_571 = load ptr, ptr %t342
+  %_572 = call i64 @llvmLine(i64 %_570, ptr %_571)
+  store i64 %_572, ptr %t343
+  %_573 = load i64, ptr %t0
+  store i64 %_573, ptr %t344
+  %_574 = call ptr @rockit_string_new(ptr @.str.545)
+  store ptr %_574, ptr %t345
+  %_575 = load i64, ptr %t315
+  store i64 %_575, ptr %t346
+  %_576 = call ptr @rockit_string_new(ptr @.str.546)
+  store ptr %_576, ptr %t347
+  %_577 = load i64, ptr %t12
+  store i64 %_577, ptr %t348
+  %_578 = load i64, ptr %t348
+  %_579 = call ptr @toString(i64 %_578)
+  store ptr %_579, ptr %t349
+  %_580 = load ptr, ptr %t347
+  %_581 = load ptr, ptr %t349
+  %_582 = call ptr @stringConcat(ptr %_580, ptr %_581)
+  store ptr %_582, ptr %t350
+  %_583 = load i64, ptr %t346
+  %_584 = load ptr, ptr %t350
+  %_585 = call ptr @stringConcat(i64 %_583, ptr %_584)
+  store ptr %_585, ptr %t351
+  %_586 = load ptr, ptr %t345
+  %_587 = load ptr, ptr %t351
+  %_588 = call ptr @stringConcat(ptr %_586, ptr %_587)
+  store ptr %_588, ptr %t352
+  %_589 = load i64, ptr %t344
+  %_590 = load ptr, ptr %t352
+  %_591 = call i64 @llvmLine(i64 %_589, ptr %_590)
+  store i64 %_591, ptr %t353
+  br label %if_merge_11
+if_else_11:
+  %_592 = load i64, ptr %t2
+  store i64 %_592, ptr %t355
+  %_593 = load i64, ptr %t355
+  %_594 = call ptr @llvmNextSSA(i64 %_593)
+  store ptr %_594, ptr %t356
+  %_595 = load ptr, ptr %t356
+  store ptr %_595, ptr %t354
+  %_596 = load i64, ptr %t0
+  store i64 %_596, ptr %t357
+  %_597 = call ptr @rockit_string_new(ptr @.str.550)
+  store ptr %_597, ptr %t358
+  %_598 = load i64, ptr %t354
+  store i64 %_598, ptr %t359
+  %_599 = call ptr @rockit_string_new(ptr @.str.602)
+  store ptr %_599, ptr %t360
+  %_600 = load i64, ptr %t22
+  store i64 %_600, ptr %t361
+  %_601 = call ptr @rockit_string_new(ptr @.str.226)
+  store ptr %_601, ptr %t362
+  %_602 = load i64, ptr %t66
+  store i64 %_602, ptr %t363
+  %_603 = call ptr @rockit_string_new(ptr @.str.228)
+  store ptr %_603, ptr %t364
+  %_604 = load i64, ptr %t363
+  %_605 = load ptr, ptr %t364
+  %_606 = call ptr @stringConcat(i64 %_604, ptr %_605)
+  store ptr %_606, ptr %t365
+  %_607 = load ptr, ptr %t362
+  %_608 = load ptr, ptr %t365
+  %_609 = call ptr @stringConcat(ptr %_607, ptr %_608)
+  store ptr %_609, ptr %t366
+  %_610 = load i64, ptr %t361
+  %_611 = load ptr, ptr %t366
+  %_612 = call ptr @stringConcat(i64 %_610, ptr %_611)
+  store ptr %_612, ptr %t367
+  %_613 = load ptr, ptr %t360
+  %_614 = load ptr, ptr %t367
+  %_615 = call ptr @stringConcat(ptr %_613, ptr %_614)
+  store ptr %_615, ptr %t368
+  %_616 = load i64, ptr %t359
+  %_617 = load ptr, ptr %t368
+  %_618 = call ptr @stringConcat(i64 %_616, ptr %_617)
+  store ptr %_618, ptr %t369
+  %_619 = load ptr, ptr %t358
+  %_620 = load ptr, ptr %t369
+  %_621 = call ptr @stringConcat(ptr %_619, ptr %_620)
+  store ptr %_621, ptr %t370
+  %_622 = load i64, ptr %t357
+  %_623 = load ptr, ptr %t370
+  %_624 = call i64 @llvmLine(i64 %_622, ptr %_623)
+  store i64 %_624, ptr %t371
+  %_625 = load i64, ptr %t0
+  store i64 %_625, ptr %t372
+  %_626 = call ptr @rockit_string_new(ptr @.str.545)
+  store ptr %_626, ptr %t373
+  %_627 = load i64, ptr %t354
+  store i64 %_627, ptr %t374
+  %_628 = call ptr @rockit_string_new(ptr @.str.546)
+  store ptr %_628, ptr %t375
+  %_629 = load i64, ptr %t12
+  store i64 %_629, ptr %t376
+  %_630 = load i64, ptr %t376
+  %_631 = call ptr @toString(i64 %_630)
+  store ptr %_631, ptr %t377
+  %_632 = load ptr, ptr %t375
+  %_633 = load ptr, ptr %t377
+  %_634 = call ptr @stringConcat(ptr %_632, ptr %_633)
+  store ptr %_634, ptr %t378
+  %_635 = load i64, ptr %t374
+  %_636 = load ptr, ptr %t378
+  %_637 = call ptr @stringConcat(i64 %_635, ptr %_636)
+  store ptr %_637, ptr %t379
+  %_638 = load ptr, ptr %t373
+  %_639 = load ptr, ptr %t379
+  %_640 = call ptr @stringConcat(ptr %_638, ptr %_639)
+  store ptr %_640, ptr %t380
+  %_641 = load i64, ptr %t372
+  %_642 = load ptr, ptr %t380
+  %_643 = call i64 @llvmLine(i64 %_641, ptr %_642)
+  store i64 %_643, ptr %t381
+  br label %if_merge_11
+if_merge_11:
   br label %if_merge_10
 if_merge_10:
   br label %if_merge_9
@@ -53093,11 +53306,11 @@ while_body_0:
   store ptr %_39, ptr %t29
   %_40 = load i64, ptr %t0
   store i64 %_40, ptr %t32
-  %_41 = call ptr @rockit_string_new(ptr @.str.549)
+  %_41 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_41, ptr %t33
   %_42 = load i64, ptr %t29
   store i64 %_42, ptr %t34
-  %_43 = call ptr @rockit_string_new(ptr @.str.554)
+  %_43 = call ptr @rockit_string_new(ptr @.str.555)
   store ptr %_43, ptr %t35
   %_44 = load i64, ptr %t21
   store i64 %_44, ptr %t36
@@ -53132,7 +53345,7 @@ while_body_0:
 if_then_0:
   %_64 = load i64, ptr %t14
   store i64 %_64, ptr %t46
-  %_65 = call ptr @rockit_string_new(ptr @.str.531)
+  %_65 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_65, ptr %t47
   %_66 = load i64, ptr %t46
   %_67 = load ptr, ptr %t47
@@ -53146,7 +53359,7 @@ if_else_0:
 if_merge_0:
   %_70 = load i64, ptr %t14
   store i64 %_70, ptr %t50
-  %_71 = call ptr @rockit_string_new(ptr @.str.600)
+  %_71 = call ptr @rockit_string_new(ptr @.str.601)
   store ptr %_71, ptr %t51
   %_72 = load i64, ptr %t29
   store i64 %_72, ptr %t52
@@ -53180,11 +53393,11 @@ while_exit_0:
   store ptr %_88, ptr %t58
   %_89 = load i64, ptr %t0
   store i64 %_89, ptr %t61
-  %_90 = call ptr @rockit_string_new(ptr @.str.549)
+  %_90 = call ptr @rockit_string_new(ptr @.str.550)
   store ptr %_90, ptr %t62
   %_91 = load i64, ptr %t58
   store i64 %_91, ptr %t63
-  %_92 = call ptr @rockit_string_new(ptr @.str.601)
+  %_92 = call ptr @rockit_string_new(ptr @.str.602)
   store ptr %_92, ptr %t64
   %_93 = load i64, ptr %t4
   store i64 %_93, ptr %t65
@@ -53224,11 +53437,11 @@ while_exit_0:
   store i64 %_117, ptr %t75
   %_118 = load i64, ptr %t0
   store i64 %_118, ptr %t76
-  %_119 = call ptr @rockit_string_new(ptr @.str.544)
+  %_119 = call ptr @rockit_string_new(ptr @.str.545)
   store ptr %_119, ptr %t77
   %_120 = load i64, ptr %t58
   store i64 %_120, ptr %t78
-  %_121 = call ptr @rockit_string_new(ptr @.str.545)
+  %_121 = call ptr @rockit_string_new(ptr @.str.546)
   store ptr %_121, ptr %t79
   %_122 = load i64, ptr %t6
   store i64 %_122, ptr %t80
@@ -53608,7 +53821,7 @@ entry:
   store ptr %_25, ptr %t18
   %_26 = load i64, ptr %t18
   store i64 %_26, ptr %t20
-  %_27 = call ptr @rockit_string_new(ptr @.str.617)
+  %_27 = call ptr @rockit_string_new(ptr @.str.621)
   store ptr %_27, ptr %t21
   %_28 = load i64, ptr %t20
   %_29 = load ptr, ptr %t21
@@ -53616,7 +53829,7 @@ entry:
   store i64 %_30, ptr %t22
   %_31 = load i64, ptr %t18
   store i64 %_31, ptr %t23
-  %_32 = call ptr @rockit_string_new(ptr @.str.618)
+  %_32 = call ptr @rockit_string_new(ptr @.str.622)
   store ptr %_32, ptr %t24
   %_33 = load i64, ptr %t23
   %_34 = load ptr, ptr %t24
@@ -53738,25 +53951,25 @@ if_then_0:
   store i64 %_101, ptr %t64
   %_102 = load i64, ptr %t18
   store i64 %_102, ptr %t69
-  %_103 = call ptr @rockit_string_new(ptr @.str.548)
+  %_103 = call ptr @rockit_string_new(ptr @.str.549)
   store ptr %_103, ptr %t70
   %_104 = load i64, ptr %t29
   store i64 %_104, ptr %t71
   %_105 = load i64, ptr %t71
   %_106 = call ptr @toString(i64 %_105)
   store ptr %_106, ptr %t72
-  %_107 = call ptr @rockit_string_new(ptr @.str.619)
+  %_107 = call ptr @rockit_string_new(ptr @.str.623)
   store ptr %_107, ptr %t73
   %_108 = load i64, ptr %t64
   store i64 %_108, ptr %t74
   %_109 = load i64, ptr %t74
   %_110 = call ptr @toString(i64 %_109)
   store ptr %_110, ptr %t75
-  %_111 = call ptr @rockit_string_new(ptr @.str.620)
+  %_111 = call ptr @rockit_string_new(ptr @.str.624)
   store ptr %_111, ptr %t76
   %_112 = load i64, ptr %t61
   store i64 %_112, ptr %t77
-  %_113 = call ptr @rockit_string_new(ptr @.str.621)
+  %_113 = call ptr @rockit_string_new(ptr @.str.625)
   store ptr %_113, ptr %t78
   %_114 = load i64, ptr %t77
   %_115 = load ptr, ptr %t78
@@ -53894,25 +54107,25 @@ while_body_1:
   store i64 %_191, ptr %t119
   %_192 = load i64, ptr %t18
   store i64 %_192, ptr %t124
-  %_193 = call ptr @rockit_string_new(ptr @.str.583)
+  %_193 = call ptr @rockit_string_new(ptr @.str.584)
   store ptr %_193, ptr %t125
   %_194 = load i64, ptr %t107
   store i64 %_194, ptr %t126
   %_195 = load i64, ptr %t126
   %_196 = call ptr @toString(i64 %_195)
   store ptr %_196, ptr %t127
-  %_197 = call ptr @rockit_string_new(ptr @.str.619)
+  %_197 = call ptr @rockit_string_new(ptr @.str.623)
   store ptr %_197, ptr %t128
   %_198 = load i64, ptr %t119
   store i64 %_198, ptr %t129
   %_199 = load i64, ptr %t129
   %_200 = call ptr @toString(i64 %_199)
   store ptr %_200, ptr %t130
-  %_201 = call ptr @rockit_string_new(ptr @.str.620)
+  %_201 = call ptr @rockit_string_new(ptr @.str.624)
   store ptr %_201, ptr %t131
   %_202 = load i64, ptr %t116
   store i64 %_202, ptr %t132
-  %_203 = call ptr @rockit_string_new(ptr @.str.621)
+  %_203 = call ptr @rockit_string_new(ptr @.str.625)
   store ptr %_203, ptr %t133
   %_204 = load i64, ptr %t132
   %_205 = load ptr, ptr %t133
@@ -54117,7 +54330,7 @@ while_exit_3:
   store i64 %_316, ptr %t200
   %_317 = load i64, ptr %t18
   store i64 %_317, ptr %t201
-  %_318 = call ptr @rockit_string_new(ptr @.str.622)
+  %_318 = call ptr @rockit_string_new(ptr @.str.626)
   store ptr %_318, ptr %t202
   %_319 = load i64, ptr %t201
   %_320 = load ptr, ptr %t202
@@ -54272,7 +54485,7 @@ while_body_5:
 if_then_4:
   %_405 = load i64, ptr %t245
   store i64 %_405, ptr %t257
-  %_406 = call ptr @rockit_string_new(ptr @.str.531)
+  %_406 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_406, ptr %t258
   %_407 = load i64, ptr %t257
   %_408 = load ptr, ptr %t258
@@ -54316,11 +54529,11 @@ if_merge_4:
 while_exit_5:
   %_428 = load i64, ptr %t18
   store i64 %_428, ptr %t270
-  %_429 = call ptr @rockit_string_new(ptr @.str.623)
+  %_429 = call ptr @rockit_string_new(ptr @.str.627)
   store ptr %_429, ptr %t271
   %_430 = load i64, ptr %t240
   store i64 %_430, ptr %t272
-  %_431 = call ptr @rockit_string_new(ptr @.str.624)
+  %_431 = call ptr @rockit_string_new(ptr @.str.628)
   store ptr %_431, ptr %t273
   %_432 = load i64, ptr %t213
   store i64 %_432, ptr %t274
@@ -54379,7 +54592,7 @@ if_merge_2:
 while_exit_4:
   %_462 = load i64, ptr %t18
   store i64 %_462, ptr %t290
-  %_463 = call ptr @rockit_string_new(ptr @.str.625)
+  %_463 = call ptr @rockit_string_new(ptr @.str.629)
   store ptr %_463, ptr %t291
   %_464 = load i64, ptr %t290
   %_465 = load ptr, ptr %t291
@@ -54395,7 +54608,7 @@ while_exit_4:
   store i64 %_471, ptr %t295
   %_472 = load i64, ptr %t18
   store i64 %_472, ptr %t296
-  %_473 = call ptr @rockit_string_new(ptr @.str.626)
+  %_473 = call ptr @rockit_string_new(ptr @.str.630)
   store ptr %_473, ptr %t297
   %_474 = load i64, ptr %t296
   %_475 = load ptr, ptr %t297
@@ -55006,7 +55219,7 @@ entry:
   store i64 %_8, ptr %t5
   %_9 = load i64, ptr %t0
   store i64 %_9, ptr %t6
-  %_10 = call ptr @rockit_string_new(ptr @.str.627)
+  %_10 = call ptr @rockit_string_new(ptr @.str.631)
   store ptr %_10, ptr %t7
   %_11 = call ptr @mapCreate()
   store ptr %_11, ptr %t8
@@ -55039,7 +55252,7 @@ entry:
   store i64 %_29, ptr %t17
   %_30 = load i64, ptr %t0
   store i64 %_30, ptr %t18
-  %_31 = call ptr @rockit_string_new(ptr @.str.628)
+  %_31 = call ptr @rockit_string_new(ptr @.str.632)
   store ptr %_31, ptr %t19
   %_32 = call ptr @mapCreate()
   store ptr %_32, ptr %t20
@@ -55050,7 +55263,7 @@ entry:
   store i64 %_36, ptr %t21
   %_37 = load i64, ptr %t0
   store i64 %_37, ptr %t22
-  %_38 = call ptr @rockit_string_new(ptr @.str.629)
+  %_38 = call ptr @rockit_string_new(ptr @.str.633)
   store ptr %_38, ptr %t23
   %_39 = call ptr @mapCreate()
   store ptr %_39, ptr %t24
@@ -55061,7 +55274,7 @@ entry:
   store i64 %_43, ptr %t25
   %_44 = load i64, ptr %t0
   store i64 %_44, ptr %t26
-  %_45 = call ptr @rockit_string_new(ptr @.str.630)
+  %_45 = call ptr @rockit_string_new(ptr @.str.634)
   store ptr %_45, ptr %t27
   %_46 = call ptr @mapCreate()
   store ptr %_46, ptr %t28
@@ -55072,7 +55285,7 @@ entry:
   store i64 %_50, ptr %t29
   %_51 = load i64, ptr %t0
   store i64 %_51, ptr %t30
-  %_52 = call ptr @rockit_string_new(ptr @.str.631)
+  %_52 = call ptr @rockit_string_new(ptr @.str.635)
   store ptr %_52, ptr %t31
   %_53 = call ptr @mapCreate()
   store ptr %_53, ptr %t32
@@ -55083,7 +55296,7 @@ entry:
   store i64 %_57, ptr %t33
   %_58 = load i64, ptr %t0
   store i64 %_58, ptr %t34
-  %_59 = call ptr @rockit_string_new(ptr @.str.632)
+  %_59 = call ptr @rockit_string_new(ptr @.str.636)
   store ptr %_59, ptr %t35
   %_60 = call ptr @mapCreate()
   store ptr %_60, ptr %t36
@@ -55094,7 +55307,7 @@ entry:
   store i64 %_64, ptr %t37
   %_65 = load i64, ptr %t0
   store i64 %_65, ptr %t38
-  %_66 = call ptr @rockit_string_new(ptr @.str.633)
+  %_66 = call ptr @rockit_string_new(ptr @.str.637)
   store ptr %_66, ptr %t39
   %_67 = call ptr @mapCreate()
   store ptr %_67, ptr %t40
@@ -55105,7 +55318,7 @@ entry:
   store i64 %_71, ptr %t41
   %_72 = load i64, ptr %t0
   store i64 %_72, ptr %t42
-  %_73 = call ptr @rockit_string_new(ptr @.str.634)
+  %_73 = call ptr @rockit_string_new(ptr @.str.638)
   store ptr %_73, ptr %t43
   %_74 = call ptr @mapCreate()
   store ptr %_74, ptr %t44
@@ -55116,7 +55329,7 @@ entry:
   store i64 %_78, ptr %t45
   %_79 = load i64, ptr %t0
   store i64 %_79, ptr %t46
-  %_80 = call ptr @rockit_string_new(ptr @.str.635)
+  %_80 = call ptr @rockit_string_new(ptr @.str.639)
   store ptr %_80, ptr %t47
   %_81 = call ptr @mapCreate()
   store ptr %_81, ptr %t48
@@ -55127,7 +55340,7 @@ entry:
   store i64 %_85, ptr %t49
   %_86 = load i64, ptr %t0
   store i64 %_86, ptr %t50
-  %_87 = call ptr @rockit_string_new(ptr @.str.636)
+  %_87 = call ptr @rockit_string_new(ptr @.str.640)
   store ptr %_87, ptr %t51
   store i64 0, ptr %t52
   %_88 = load i64, ptr %t50
@@ -55246,7 +55459,7 @@ entry:
   store ptr %_17, ptr %t6
   %_18 = load i64, ptr %t0
   store i64 %_18, ptr %t14
-  %_19 = call ptr @rockit_string_new(ptr @.str.627)
+  %_19 = call ptr @rockit_string_new(ptr @.str.631)
   store ptr %_19, ptr %t15
   %_20 = load i64, ptr %t14
   %_21 = load ptr, ptr %t15
@@ -55335,7 +55548,7 @@ if_merge_0:
   store i64 %_69, ptr %t45
   %_70 = load i64, ptr %t0
   store i64 %_70, ptr %t46
-  %_71 = call ptr @rockit_string_new(ptr @.str.627)
+  %_71 = call ptr @rockit_string_new(ptr @.str.631)
   store ptr %_71, ptr %t47
   %_72 = load i64, ptr %t46
   %_73 = load ptr, ptr %t47
@@ -55665,7 +55878,7 @@ entry:
   store ptr %_7, ptr %t6
   %_8 = load i64, ptr %t6
   store i64 %_8, ptr %t8
-  %_9 = call ptr @rockit_string_new(ptr @.str.637)
+  %_9 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_9, ptr %t9
   %_10 = load i64, ptr %t0
   store i64 %_10, ptr %t10
@@ -55698,7 +55911,7 @@ entry:
   store i64 %_28, ptr %t19
   %_29 = load i64, ptr %t6
   store i64 %_29, ptr %t20
-  %_30 = call ptr @rockit_string_new(ptr @.str.527)
+  %_30 = call ptr @rockit_string_new(ptr @.str.528)
   store ptr %_30, ptr %t21
   %_31 = load i64, ptr %t4
   store i64 %_31, ptr %t22
@@ -55712,7 +55925,7 @@ entry:
   store i64 %_37, ptr %t24
   %_38 = load i64, ptr %t6
   store i64 %_38, ptr %t25
-  %_39 = call ptr @rockit_string_new(ptr @.str.638)
+  %_39 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_39, ptr %t26
   %_40 = call ptr @mapCreate()
   store ptr %_40, ptr %t27
@@ -55734,7 +55947,7 @@ entry:
   store i64 %_51, ptr %t32
   %_52 = load i64, ptr %t6
   store i64 %_52, ptr %t33
-  %_53 = call ptr @rockit_string_new(ptr @.str.639)
+  %_53 = call ptr @rockit_string_new(ptr @.str.643)
   store ptr %_53, ptr %t34
   %_54 = call ptr @listCreate()
   store ptr %_54, ptr %t35
@@ -55745,7 +55958,7 @@ entry:
   store i64 %_58, ptr %t36
   %_59 = load i64, ptr %t6
   store i64 %_59, ptr %t37
-  %_60 = call ptr @rockit_string_new(ptr @.str.640)
+  %_60 = call ptr @rockit_string_new(ptr @.str.644)
   store ptr %_60, ptr %t38
   %_61 = call ptr @mapCreate()
   store ptr %_61, ptr %t39
@@ -55756,7 +55969,7 @@ entry:
   store i64 %_65, ptr %t40
   %_66 = load i64, ptr %t6
   store i64 %_66, ptr %t41
-  %_67 = call ptr @rockit_string_new(ptr @.str.641)
+  %_67 = call ptr @rockit_string_new(ptr @.str.645)
   store ptr %_67, ptr %t42
   store i64 0, ptr %t43
   %_68 = load i64, ptr %t41
@@ -55766,7 +55979,7 @@ entry:
   store i64 %_71, ptr %t44
   %_72 = load i64, ptr %t6
   store i64 %_72, ptr %t45
-  %_73 = call ptr @rockit_string_new(ptr @.str.642)
+  %_73 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_73, ptr %t46
   %_74 = call ptr @listCreate()
   store ptr %_74, ptr %t47
@@ -55777,7 +55990,7 @@ entry:
   store i64 %_78, ptr %t48
   %_79 = load i64, ptr %t6
   store i64 %_79, ptr %t49
-  %_80 = call ptr @rockit_string_new(ptr @.str.643)
+  %_80 = call ptr @rockit_string_new(ptr @.str.647)
   store ptr %_80, ptr %t50
   %_81 = call ptr @mapCreate()
   store ptr %_81, ptr %t51
@@ -55788,7 +56001,7 @@ entry:
   store i64 %_85, ptr %t52
   %_86 = load i64, ptr %t6
   store i64 %_86, ptr %t53
-  %_87 = call ptr @rockit_string_new(ptr @.str.644)
+  %_87 = call ptr @rockit_string_new(ptr @.str.648)
   store ptr %_87, ptr %t54
   %_88 = call ptr @listCreate()
   store ptr %_88, ptr %t55
@@ -55799,7 +56012,7 @@ entry:
   store i64 %_92, ptr %t56
   %_93 = load i64, ptr %t6
   store i64 %_93, ptr %t57
-  %_94 = call ptr @rockit_string_new(ptr @.str.645)
+  %_94 = call ptr @rockit_string_new(ptr @.str.649)
   store ptr %_94, ptr %t58
   store i64 0, ptr %t59
   %_95 = load i64, ptr %t57
@@ -55851,7 +56064,7 @@ while_body_0:
   store ptr %_121, ptr %t71
   %_122 = load i64, ptr %t6
   store i64 %_122, ptr %t76
-  %_123 = call ptr @rockit_string_new(ptr @.str.638)
+  %_123 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_123, ptr %t77
   %_124 = load i64, ptr %t76
   %_125 = load ptr, ptr %t77
@@ -55909,7 +56122,7 @@ entry:
   store i64 %_1, ptr %t0
   %_2 = load i64, ptr %t0
   store i64 %_2, ptr %t3
-  %_3 = call ptr @rockit_string_new(ptr @.str.527)
+  %_3 = call ptr @rockit_string_new(ptr @.str.528)
   store ptr %_3, ptr %t4
   %_4 = load i64, ptr %t3
   %_5 = load ptr, ptr %t4
@@ -55922,7 +56135,7 @@ entry:
   store i64 %_9, ptr %t2
   %_10 = load i64, ptr %t0
   store i64 %_10, ptr %t7
-  %_11 = call ptr @rockit_string_new(ptr @.str.527)
+  %_11 = call ptr @rockit_string_new(ptr @.str.528)
   store ptr %_11, ptr %t8
   %_12 = load i64, ptr %t2
   store i64 %_12, ptr %t9
@@ -55971,7 +56184,7 @@ entry:
   store i64 %_1, ptr %t0
   %_2 = load i64, ptr %t0
   store i64 %_2, ptr %t3
-  %_3 = call ptr @rockit_string_new(ptr @.str.641)
+  %_3 = call ptr @rockit_string_new(ptr @.str.645)
   store ptr %_3, ptr %t4
   %_4 = load i64, ptr %t3
   %_5 = load ptr, ptr %t4
@@ -55984,7 +56197,7 @@ entry:
   store i64 %_9, ptr %t2
   %_10 = load i64, ptr %t0
   store i64 %_10, ptr %t7
-  %_11 = call ptr @rockit_string_new(ptr @.str.641)
+  %_11 = call ptr @rockit_string_new(ptr @.str.645)
   store ptr %_11, ptr %t8
   %_12 = load i64, ptr %t2
   store i64 %_12, ptr %t9
@@ -55998,7 +56211,7 @@ entry:
   %_18 = load i64, ptr %t11
   %_19 = call i64 @mapPut(i64 %_16, ptr %_17, i64 %_18)
   store i64 %_19, ptr %t12
-  %_20 = call ptr @rockit_string_new(ptr @.str.646)
+  %_20 = call ptr @rockit_string_new(ptr @.str.650)
   store ptr %_20, ptr %t13
   %_21 = load i64, ptr %t2
   store i64 %_21, ptr %t14
@@ -56059,7 +56272,7 @@ entry:
   store i64 %_11, ptr %t4
   %_12 = load i64, ptr %t0
   store i64 %_12, ptr %t9
-  %_13 = call ptr @rockit_string_new(ptr @.str.640)
+  %_13 = call ptr @rockit_string_new(ptr @.str.644)
   store ptr %_13, ptr %t10
   %_14 = load i64, ptr %t9
   %_15 = load ptr, ptr %t10
@@ -56189,7 +56402,7 @@ entry:
 if_then_0:
   %_17 = load i64, ptr %t0
   store i64 %_17, ptr %t14
-  %_18 = call ptr @rockit_string_new(ptr @.str.645)
+  %_18 = call ptr @rockit_string_new(ptr @.str.649)
   store ptr %_18, ptr %t15
   %_19 = load i64, ptr %t14
   %_20 = load ptr, ptr %t15
@@ -56217,7 +56430,7 @@ if_then_1:
   store ptr %_32, ptr %t22
   %_33 = load i64, ptr %t22
   store i64 %_33, ptr %t24
-  %_34 = call ptr @rockit_string_new(ptr @.str.647)
+  %_34 = call ptr @rockit_string_new(ptr @.str.651)
   store ptr %_34, ptr %t25
   %_35 = load i64, ptr %t0
   store i64 %_35, ptr %t26
@@ -56242,7 +56455,7 @@ if_then_1:
   store i64 %_48, ptr %t32
   %_49 = load i64, ptr %t0
   store i64 %_49, ptr %t33
-  %_50 = call ptr @rockit_string_new(ptr @.str.644)
+  %_50 = call ptr @rockit_string_new(ptr @.str.648)
   store ptr %_50, ptr %t34
   %_51 = load i64, ptr %t33
   %_52 = load ptr, ptr %t34
@@ -56256,7 +56469,7 @@ if_then_1:
   store i64 %_57, ptr %t37
   %_58 = load i64, ptr %t0
   store i64 %_58, ptr %t38
-  %_59 = call ptr @rockit_string_new(ptr @.str.645)
+  %_59 = call ptr @rockit_string_new(ptr @.str.649)
   store ptr %_59, ptr %t39
   %_60 = load i64, ptr %t4
   store i64 %_60, ptr %t40
@@ -56873,7 +57086,7 @@ entry:
   store i64 %_5, ptr %t4
   %_6 = load i64, ptr %t0
   store i64 %_6, ptr %t7
-  %_7 = call ptr @rockit_string_new(ptr @.str.637)
+  %_7 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_7, ptr %t8
   %_8 = load i64, ptr %t7
   %_9 = load ptr, ptr %t8
@@ -57313,7 +57526,7 @@ entry:
   store i64 %_7, ptr %t6
   %_8 = load i64, ptr %t0
   store i64 %_8, ptr %t9
-  %_9 = call ptr @rockit_string_new(ptr @.str.637)
+  %_9 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_9, ptr %t10
   %_10 = load i64, ptr %t9
   %_11 = load ptr, ptr %t10
@@ -58262,7 +58475,7 @@ entry:
   store ptr %_31, ptr %t22
   %_32 = load i64, ptr %t22
   store i64 %_32, ptr %t24
-  %_33 = call ptr @rockit_string_new(ptr @.str.648)
+  %_33 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_33, ptr %t25
   %_34 = load i64, ptr %t10
   store i64 %_34, ptr %t26
@@ -58273,7 +58486,7 @@ entry:
   store i64 %_38, ptr %t27
   %_39 = load i64, ptr %t22
   store i64 %_39, ptr %t28
-  %_40 = call ptr @rockit_string_new(ptr @.str.649)
+  %_40 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_40, ptr %t29
   %_41 = load i64, ptr %t16
   store i64 %_41, ptr %t30
@@ -58402,7 +58615,7 @@ entry:
   store i64 %_7, ptr %t6
   %_8 = load i64, ptr %t0
   store i64 %_8, ptr %t9
-  %_9 = call ptr @rockit_string_new(ptr @.str.637)
+  %_9 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_9, ptr %t10
   %_10 = load i64, ptr %t9
   %_11 = load ptr, ptr %t10
@@ -58557,7 +58770,7 @@ entry:
   store i64 %_7, ptr %t6
   %_8 = load i64, ptr %t0
   store i64 %_8, ptr %t9
-  %_9 = call ptr @rockit_string_new(ptr @.str.637)
+  %_9 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_9, ptr %t10
   %_10 = load i64, ptr %t9
   %_11 = load ptr, ptr %t10
@@ -58662,7 +58875,7 @@ entry:
   store i64 %_7, ptr %t6
   %_8 = load i64, ptr %t0
   store i64 %_8, ptr %t9
-  %_9 = call ptr @rockit_string_new(ptr @.str.637)
+  %_9 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_9, ptr %t10
   %_10 = load i64, ptr %t9
   %_11 = load ptr, ptr %t10
@@ -58794,7 +59007,7 @@ entry:
   store i64 %_9, ptr %t8
   %_10 = load i64, ptr %t0
   store i64 %_10, ptr %t11
-  %_11 = call ptr @rockit_string_new(ptr @.str.637)
+  %_11 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_11, ptr %t12
   %_12 = load i64, ptr %t11
   %_13 = load ptr, ptr %t12
@@ -59085,7 +59298,7 @@ entry:
   store i64 %_7, ptr %t6
   %_8 = load i64, ptr %t0
   store i64 %_8, ptr %t9
-  %_9 = call ptr @rockit_string_new(ptr @.str.637)
+  %_9 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_9, ptr %t10
   %_10 = load i64, ptr %t9
   %_11 = load ptr, ptr %t10
@@ -59190,7 +59403,7 @@ entry:
   store i64 %_7, ptr %t6
   %_8 = load i64, ptr %t0
   store i64 %_8, ptr %t9
-  %_9 = call ptr @rockit_string_new(ptr @.str.637)
+  %_9 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_9, ptr %t10
   %_10 = load i64, ptr %t9
   %_11 = load ptr, ptr %t10
@@ -59792,7 +60005,7 @@ if_then_2:
   store i64 %_68, ptr %t47
   %_69 = call ptr @rockit_string_new(ptr @.str.0)
   store ptr %_69, ptr %t48
-  %_70 = call ptr @rockit_string_new(ptr @.str.650)
+  %_70 = call ptr @rockit_string_new(ptr @.str.654)
   store ptr %_70, ptr %t49
   %_71 = load i64, ptr %t47
   %_72 = load ptr, ptr %t48
@@ -60018,7 +60231,7 @@ if_then_6:
   store i64 %_186, ptr %t125
   %_187 = call ptr @rockit_string_new(ptr @.str.0)
   store ptr %_187, ptr %t126
-  %_188 = call ptr @rockit_string_new(ptr @.str.650)
+  %_188 = call ptr @rockit_string_new(ptr @.str.654)
   store ptr %_188, ptr %t127
   %_189 = load i64, ptr %t125
   %_190 = load ptr, ptr %t126
@@ -60208,7 +60421,7 @@ if_then_8:
   store i64 %_286, ptr %t189
   %_287 = call ptr @rockit_string_new(ptr @.str.0)
   store ptr %_287, ptr %t190
-  %_288 = call ptr @rockit_string_new(ptr @.str.650)
+  %_288 = call ptr @rockit_string_new(ptr @.str.654)
   store ptr %_288, ptr %t191
   %_289 = load i64, ptr %t189
   %_290 = load ptr, ptr %t190
@@ -60301,7 +60514,7 @@ while_body_3:
   store i64 %_337, ptr %t224
   %_338 = load i64, ptr %t214
   store i64 %_338, ptr %t226
-  %_339 = call ptr @rockit_string_new(ptr @.str.650)
+  %_339 = call ptr @rockit_string_new(ptr @.str.654)
   store ptr %_339, ptr %t227
   %_340 = load i64, ptr %t226
   %_343 = load ptr, ptr %t227
@@ -62118,7 +62331,7 @@ if_then_8:
   store ptr %_182, ptr %t116
   %_183 = load i64, ptr %t0
   store i64 %_183, ptr %t122
-  %_184 = call ptr @rockit_string_new(ptr @.str.638)
+  %_184 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_184, ptr %t123
   %_185 = load i64, ptr %t122
   %_186 = load ptr, ptr %t123
@@ -62178,7 +62391,7 @@ if_else_9:
 if_merge_9:
   %_217 = load i64, ptr %t0
   store i64 %_217, ptr %t144
-  %_218 = call ptr @rockit_string_new(ptr @.str.651)
+  %_218 = call ptr @rockit_string_new(ptr @.str.655)
   store ptr %_218, ptr %t145
   %_219 = load i64, ptr %t144
   %_220 = load ptr, ptr %t145
@@ -62200,7 +62413,7 @@ if_merge_9:
 if_then_10:
   %_230 = load i64, ptr %t0
   store i64 %_230, ptr %t152
-  %_231 = call ptr @rockit_string_new(ptr @.str.652)
+  %_231 = call ptr @rockit_string_new(ptr @.str.656)
   store ptr %_231, ptr %t153
   %_232 = load i64, ptr %t152
   %_233 = load ptr, ptr %t153
@@ -62221,7 +62434,7 @@ if_then_10:
 if_then_11:
   %_242 = load i64, ptr %t0
   store i64 %_242, ptr %t160
-  %_243 = call ptr @rockit_string_new(ptr @.str.638)
+  %_243 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_243, ptr %t161
   %_244 = load i64, ptr %t160
   %_245 = load ptr, ptr %t161
@@ -62388,13 +62601,13 @@ if_then_13:
   store ptr %_336, ptr %t215
   %_337 = load i64, ptr %t0
   store i64 %_337, ptr %t221
-  %_338 = call ptr @rockit_string_new(ptr @.str.637)
+  %_338 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_338, ptr %t222
   %_339 = load i64, ptr %t221
   %_340 = load ptr, ptr %t222
   %_341 = call i64 @mapGet(i64 %_339, ptr %_340)
   store i64 %_341, ptr %t223
-  %_342 = call ptr @rockit_string_new(ptr @.str.629)
+  %_342 = call ptr @rockit_string_new(ptr @.str.633)
   store ptr %_342, ptr %t224
   %_343 = load i64, ptr %t223
   %_344 = load ptr, ptr %t224
@@ -62427,7 +62640,7 @@ if_then_14:
   store i64 %_360, ptr %t234
   %_361 = load i64, ptr %t234
   store i64 %_361, ptr %t232
-  %_362 = call ptr @rockit_string_new(ptr @.str.653)
+  %_362 = call ptr @rockit_string_new(ptr @.str.657)
   store ptr %_362, ptr %t236
   %_363 = load i64, ptr %t215
   store i64 %_363, ptr %t237
@@ -62596,7 +62809,7 @@ if_then_15:
   store i64 %_456, ptr %t296
   %_457 = load i64, ptr %t292
   store i64 %_457, ptr %t297
-  %_458 = call ptr @rockit_string_new(ptr @.str.648)
+  %_458 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_458, ptr %t298
   %_459 = load i64, ptr %t297
   %_460 = load ptr, ptr %t298
@@ -62628,7 +62841,7 @@ if_then_15:
   store i64 %_476, ptr %t308
   %_477 = load i64, ptr %t292
   store i64 %_477, ptr %t309
-  %_478 = call ptr @rockit_string_new(ptr @.str.649)
+  %_478 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_478, ptr %t310
   %_479 = load i64, ptr %t309
   %_480 = load ptr, ptr %t310
@@ -63007,7 +63220,7 @@ if_then_20:
   store i64 %_698, ptr %t448
   %_699 = load i64, ptr %t444
   store i64 %_699, ptr %t449
-  %_700 = call ptr @rockit_string_new(ptr @.str.648)
+  %_700 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_700, ptr %t450
   %_701 = load i64, ptr %t449
   %_702 = load ptr, ptr %t450
@@ -63045,7 +63258,7 @@ if_then_20:
   store i64 %_722, ptr %t462
   %_723 = load i64, ptr %t444
   store i64 %_723, ptr %t463
-  %_724 = call ptr @rockit_string_new(ptr @.str.649)
+  %_724 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_724, ptr %t464
   %_725 = load i64, ptr %t463
   %_726 = load ptr, ptr %t464
@@ -63181,7 +63394,7 @@ if_then_22:
   store i64 %_802, ptr %t512
   %_803 = load i64, ptr %t508
   store i64 %_803, ptr %t513
-  %_804 = call ptr @rockit_string_new(ptr @.str.648)
+  %_804 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_804, ptr %t514
   %_805 = load i64, ptr %t513
   %_806 = load ptr, ptr %t514
@@ -63232,7 +63445,7 @@ if_then_22:
   store i64 %_834, ptr %t531
   %_835 = load i64, ptr %t508
   store i64 %_835, ptr %t532
-  %_836 = call ptr @rockit_string_new(ptr @.str.649)
+  %_836 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_836, ptr %t533
   %_837 = load i64, ptr %t532
   %_838 = load ptr, ptr %t533
@@ -63317,7 +63530,7 @@ if_then_23:
   store i64 %_884, ptr %t562
   %_885 = load i64, ptr %t558
   store i64 %_885, ptr %t563
-  %_886 = call ptr @rockit_string_new(ptr @.str.648)
+  %_886 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_886, ptr %t564
   %_887 = load i64, ptr %t563
   %_888 = load ptr, ptr %t564
@@ -63349,7 +63562,7 @@ if_then_23:
   store i64 %_904, ptr %t574
   %_905 = load i64, ptr %t558
   store i64 %_905, ptr %t575
-  %_906 = call ptr @rockit_string_new(ptr @.str.649)
+  %_906 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_906, ptr %t576
   %_907 = load i64, ptr %t575
   %_908 = load ptr, ptr %t576
@@ -63471,7 +63684,7 @@ if_then_24:
   store i64 %_977, ptr %t619
   %_978 = load i64, ptr %t615
   store i64 %_978, ptr %t620
-  %_979 = call ptr @rockit_string_new(ptr @.str.648)
+  %_979 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_979, ptr %t621
   %_980 = load i64, ptr %t620
   %_981 = load ptr, ptr %t621
@@ -63522,7 +63735,7 @@ if_then_24:
   store i64 %_1009, ptr %t638
   %_1010 = load i64, ptr %t615
   store i64 %_1010, ptr %t639
-  %_1011 = call ptr @rockit_string_new(ptr @.str.649)
+  %_1011 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_1011, ptr %t640
   %_1012 = load i64, ptr %t639
   %_1013 = load ptr, ptr %t640
@@ -63831,13 +64044,13 @@ if_then_29:
   store ptr %_1187, ptr %t745
   %_1188 = load i64, ptr %t0
   store i64 %_1188, ptr %t751
-  %_1189 = call ptr @rockit_string_new(ptr @.str.637)
+  %_1189 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_1189, ptr %t752
   %_1190 = load i64, ptr %t751
   %_1191 = load ptr, ptr %t752
   %_1192 = call i64 @mapGet(i64 %_1190, ptr %_1191)
   store i64 %_1192, ptr %t753
-  %_1193 = call ptr @rockit_string_new(ptr @.str.628)
+  %_1193 = call ptr @rockit_string_new(ptr @.str.632)
   store ptr %_1193, ptr %t754
   %_1194 = load i64, ptr %t753
   %_1195 = load ptr, ptr %t754
@@ -64004,7 +64217,7 @@ if_else_30:
 if_merge_30:
   %_1285 = load i64, ptr %t0
   store i64 %_1285, ptr %t812
-  %_1286 = call ptr @rockit_string_new(ptr @.str.638)
+  %_1286 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_1286, ptr %t813
   %_1287 = load i64, ptr %t812
   %_1288 = load ptr, ptr %t813
@@ -64188,7 +64401,7 @@ if_else_32:
 if_merge_32:
   %_1389 = load i64, ptr %t0
   store i64 %_1389, ptr %t877
-  %_1390 = call ptr @rockit_string_new(ptr @.str.643)
+  %_1390 = call ptr @rockit_string_new(ptr @.str.647)
   store ptr %_1390, ptr %t878
   %_1391 = load i64, ptr %t877
   %_1392 = load ptr, ptr %t878
@@ -64227,13 +64440,13 @@ if_else_34:
 if_merge_34:
   %_1410 = load i64, ptr %t0
   store i64 %_1410, ptr %t890
-  %_1411 = call ptr @rockit_string_new(ptr @.str.637)
+  %_1411 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_1411, ptr %t891
   %_1412 = load i64, ptr %t890
   %_1413 = load ptr, ptr %t891
   %_1414 = call i64 @mapGet(i64 %_1412, ptr %_1413)
   store i64 %_1414, ptr %t892
-  %_1415 = call ptr @rockit_string_new(ptr @.str.633)
+  %_1415 = call ptr @rockit_string_new(ptr @.str.637)
   store ptr %_1415, ptr %t893
   %_1416 = load i64, ptr %t892
   %_1417 = load ptr, ptr %t893
@@ -64853,13 +65066,13 @@ if_then_44:
   store ptr %_1746, ptr %t1100
   %_1747 = load i64, ptr %t0
   store i64 %_1747, ptr %t1106
-  %_1748 = call ptr @rockit_string_new(ptr @.str.637)
+  %_1748 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_1748, ptr %t1107
   %_1749 = load i64, ptr %t1106
   %_1750 = load ptr, ptr %t1107
   %_1751 = call i64 @mapGet(i64 %_1749, ptr %_1750)
   store i64 %_1751, ptr %t1108
-  %_1752 = call ptr @rockit_string_new(ptr @.str.630)
+  %_1752 = call ptr @rockit_string_new(ptr @.str.634)
   store ptr %_1752, ptr %t1109
   %_1753 = load i64, ptr %t1108
   %_1754 = load ptr, ptr %t1109
@@ -64875,13 +65088,13 @@ if_then_44:
   store i64 %_1760, ptr %t1105
   %_1761 = load i64, ptr %t0
   store i64 %_1761, ptr %t1114
-  %_1762 = call ptr @rockit_string_new(ptr @.str.637)
+  %_1762 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_1762, ptr %t1115
   %_1763 = load i64, ptr %t1114
   %_1764 = load ptr, ptr %t1115
   %_1765 = call i64 @mapGet(i64 %_1763, ptr %_1764)
   store i64 %_1765, ptr %t1116
-  %_1766 = call ptr @rockit_string_new(ptr @.str.628)
+  %_1766 = call ptr @rockit_string_new(ptr @.str.632)
   store ptr %_1766, ptr %t1117
   %_1767 = load i64, ptr %t1116
   %_1768 = load ptr, ptr %t1117
@@ -65194,13 +65407,13 @@ if_merge_47:
 while_exit_8:
   %_1940 = load i64, ptr %t0
   store i64 %_1940, ptr %t1225
-  %_1941 = call ptr @rockit_string_new(ptr @.str.637)
+  %_1941 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_1941, ptr %t1226
   %_1942 = load i64, ptr %t1225
   %_1943 = load ptr, ptr %t1226
   %_1944 = call i64 @mapGet(i64 %_1942, ptr %_1943)
   store i64 %_1944, ptr %t1227
-  %_1945 = call ptr @rockit_string_new(ptr @.str.635)
+  %_1945 = call ptr @rockit_string_new(ptr @.str.639)
   store ptr %_1945, ptr %t1228
   %_1946 = load i64, ptr %t1227
   %_1947 = load ptr, ptr %t1228
@@ -65493,7 +65706,7 @@ while_exit_11:
   store i64 %_2100, ptr %t1328
   %_2101 = load i64, ptr %t1325
   store i64 %_2101, ptr %t1329
-  %_2102 = call ptr @rockit_string_new(ptr @.str.654)
+  %_2102 = call ptr @rockit_string_new(ptr @.str.658)
   store ptr %_2102, ptr %t1330
   %_2103 = load i64, ptr %t1307
   store i64 %_2103, ptr %t1331
@@ -66051,7 +66264,7 @@ if_else_6:
 if_then_7:
   %_160 = load i64, ptr %t0
   store i64 %_160, ptr %t98
-  %_161 = call ptr @rockit_string_new(ptr @.str.655)
+  %_161 = call ptr @rockit_string_new(ptr @.str.659)
   store ptr %_161, ptr %t99
   %_162 = load i64, ptr %t98
   %_163 = load ptr, ptr %t99
@@ -66524,7 +66737,7 @@ if_merge_0:
   store ptr %_18, ptr %t9
   %_19 = load i64, ptr %t9
   store i64 %_19, ptr %t14
-  %_20 = call ptr @rockit_string_new(ptr @.str.656)
+  %_20 = call ptr @rockit_string_new(ptr @.str.660)
   store ptr %_20, ptr %t15
   %_21 = load i64, ptr %t14
   %_24 = load ptr, ptr %t15
@@ -67530,7 +67743,7 @@ entry:
   store i64 %_3, ptr %t2
   %_4 = load i64, ptr %t0
   store i64 %_4, ptr %t5
-  %_5 = call ptr @rockit_string_new(ptr @.str.637)
+  %_5 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_5, ptr %t6
   %_6 = load i64, ptr %t5
   %_7 = load ptr, ptr %t6
@@ -67540,7 +67753,7 @@ entry:
   store i64 %_9, ptr %t4
   %_10 = load i64, ptr %t4
   store i64 %_10, ptr %t9
-  %_11 = call ptr @rockit_string_new(ptr @.str.636)
+  %_11 = call ptr @rockit_string_new(ptr @.str.640)
   store ptr %_11, ptr %t10
   %_12 = load i64, ptr %t9
   %_13 = load ptr, ptr %t10
@@ -67553,7 +67766,7 @@ entry:
   store i64 %_17, ptr %t8
   %_18 = load i64, ptr %t4
   store i64 %_18, ptr %t13
-  %_19 = call ptr @rockit_string_new(ptr @.str.636)
+  %_19 = call ptr @rockit_string_new(ptr @.str.640)
   store ptr %_19, ptr %t14
   %_20 = load i64, ptr %t8
   store i64 %_20, ptr %t15
@@ -67567,7 +67780,7 @@ entry:
   %_26 = load i64, ptr %t17
   %_27 = call i64 @mapPut(i64 %_24, ptr %_25, i64 %_26)
   store i64 %_27, ptr %t18
-  %_28 = call ptr @rockit_string_new(ptr @.str.657)
+  %_28 = call ptr @rockit_string_new(ptr @.str.661)
   store ptr %_28, ptr %t20
   %_29 = load i64, ptr %t8
   store i64 %_29, ptr %t21
@@ -67767,7 +67980,7 @@ if_else_1:
 if_merge_1:
   %_134 = load i64, ptr %t0
   store i64 %_134, ptr %t90
-  %_135 = call ptr @rockit_string_new(ptr @.str.638)
+  %_135 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_135, ptr %t91
   %_136 = load i64, ptr %t90
   %_137 = load ptr, ptr %t91
@@ -68594,7 +68807,7 @@ entry:
   store i64 %_20, ptr %t14
   %_21 = load i64, ptr %t10
   store i64 %_21, ptr %t15
-  %_22 = call ptr @rockit_string_new(ptr @.str.648)
+  %_22 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_22, ptr %t16
   %_23 = load i64, ptr %t15
   %_24 = load ptr, ptr %t16
@@ -68632,7 +68845,7 @@ entry:
   store i64 %_44, ptr %t28
   %_45 = load i64, ptr %t10
   store i64 %_45, ptr %t29
-  %_46 = call ptr @rockit_string_new(ptr @.str.649)
+  %_46 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_46, ptr %t30
   %_47 = load i64, ptr %t29
   %_48 = load ptr, ptr %t30
@@ -69624,13 +69837,13 @@ if_then_8:
   store ptr %_244, ptr %t155
   %_245 = load i64, ptr %t0
   store i64 %_245, ptr %t161
-  %_246 = call ptr @rockit_string_new(ptr @.str.637)
+  %_246 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_246, ptr %t162
   %_247 = load i64, ptr %t161
   %_248 = load ptr, ptr %t162
   %_249 = call i64 @mapGet(i64 %_247, ptr %_248)
   store i64 %_249, ptr %t163
-  %_250 = call ptr @rockit_string_new(ptr @.str.629)
+  %_250 = call ptr @rockit_string_new(ptr @.str.633)
   store ptr %_250, ptr %t164
   %_251 = load i64, ptr %t163
   %_252 = load ptr, ptr %t164
@@ -69697,7 +69910,7 @@ if_then_10:
   store i64 %_274, ptr %t184
   %_275 = load i64, ptr %t8
   store i64 %_275, ptr %t185
-  %_276 = call ptr @rockit_string_new(ptr @.str.658)
+  %_276 = call ptr @rockit_string_new(ptr @.str.662)
   store ptr %_276, ptr %t186
   %_277 = load i64, ptr %t183
   %_278 = load i64, ptr %t184
@@ -69728,7 +69941,7 @@ if_then_10:
   store i64 %_293, ptr %t196
   %_294 = load i64, ptr %t188
   store i64 %_294, ptr %t197
-  %_295 = call ptr @rockit_string_new(ptr @.str.658)
+  %_295 = call ptr @rockit_string_new(ptr @.str.662)
   store ptr %_295, ptr %t198
   %_296 = load i64, ptr %t195
   %_297 = load i64, ptr %t196
@@ -69830,7 +70043,7 @@ while_exit_1:
   store i64 %_351, ptr %t232
   %_352 = load i64, ptr %t228
   store i64 %_352, ptr %t233
-  %_353 = call ptr @rockit_string_new(ptr @.str.648)
+  %_353 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_353, ptr %t234
   %_354 = load i64, ptr %t233
   %_355 = load ptr, ptr %t234
@@ -69926,7 +70139,7 @@ if_merge_11:
   store i64 %_408, ptr %t267
   %_409 = load i64, ptr %t228
   store i64 %_409, ptr %t268
-  %_410 = call ptr @rockit_string_new(ptr @.str.649)
+  %_410 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_410, ptr %t269
   %_411 = load i64, ptr %t268
   %_412 = load ptr, ptr %t269
@@ -69954,13 +70167,13 @@ if_merge_1:
 while_exit_0:
   %_424 = load i64, ptr %t0
   store i64 %_424, ptr %t278
-  %_425 = call ptr @rockit_string_new(ptr @.str.637)
+  %_425 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_425, ptr %t279
   %_426 = load i64, ptr %t278
   %_427 = load ptr, ptr %t279
   %_428 = call i64 @mapGet(i64 %_426, ptr %_427)
   store i64 %_428, ptr %t280
-  %_429 = call ptr @rockit_string_new(ptr @.str.632)
+  %_429 = call ptr @rockit_string_new(ptr @.str.636)
   store ptr %_429, ptr %t281
   %_430 = load i64, ptr %t280
   %_431 = load ptr, ptr %t281
@@ -70331,11 +70544,11 @@ while_body_5:
   %_621 = load i1, ptr %t411
   br i1 %_621, label %if_then_20, label %if_else_20
 if_then_20:
-  %_622 = call ptr @rockit_string_new(ptr @.str.659)
+  %_622 = call ptr @rockit_string_new(ptr @.str.663)
   store ptr %_622, ptr %t414
   %_623 = load i64, ptr %t357
   store i64 %_623, ptr %t415
-  %_624 = call ptr @rockit_string_new(ptr @.str.660)
+  %_624 = call ptr @rockit_string_new(ptr @.str.664)
   store ptr %_624, ptr %t416
   %_625 = load i64, ptr %t403
   store i64 %_625, ptr %t417
@@ -71931,7 +72144,7 @@ if_then_1:
   store i64 %_55, ptr %t32
   %_56 = load i64, ptr %t0
   store i64 %_56, ptr %t35
-  %_57 = call ptr @rockit_string_new(ptr @.str.638)
+  %_57 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_57, ptr %t36
   %_58 = load i64, ptr %t35
   %_59 = load ptr, ptr %t36
@@ -72076,7 +72289,7 @@ while_body_0:
   store i64 %_136, ptr %t84
   %_137 = load i64, ptr %t0
   store i64 %_137, ptr %t87
-  %_138 = call ptr @rockit_string_new(ptr @.str.638)
+  %_138 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_138, ptr %t88
   %_139 = load i64, ptr %t87
   %_140 = load ptr, ptr %t88
@@ -72238,7 +72451,7 @@ if_then_5:
   store ptr %_231, ptr %t141
   %_232 = load i64, ptr %t0
   store i64 %_232, ptr %t147
-  %_233 = call ptr @rockit_string_new(ptr @.str.638)
+  %_233 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_233, ptr %t148
   %_234 = load i64, ptr %t147
   %_235 = load ptr, ptr %t148
@@ -72298,7 +72511,7 @@ if_then_6:
 if_else_6:
   %_268 = load i64, ptr %t0
   store i64 %_268, ptr %t168
-  %_269 = call ptr @rockit_string_new(ptr @.str.651)
+  %_269 = call ptr @rockit_string_new(ptr @.str.655)
   store ptr %_269, ptr %t169
   %_270 = load i64, ptr %t168
   %_271 = load ptr, ptr %t169
@@ -72320,7 +72533,7 @@ if_else_6:
 if_then_7:
   %_281 = load i64, ptr %t0
   store i64 %_281, ptr %t176
-  %_282 = call ptr @rockit_string_new(ptr @.str.652)
+  %_282 = call ptr @rockit_string_new(ptr @.str.656)
   store ptr %_282, ptr %t177
   %_283 = load i64, ptr %t176
   %_284 = load ptr, ptr %t177
@@ -72341,7 +72554,7 @@ if_then_7:
 if_then_8:
   %_293 = load i64, ptr %t0
   store i64 %_293, ptr %t184
-  %_294 = call ptr @rockit_string_new(ptr @.str.638)
+  %_294 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_294, ptr %t185
   %_295 = load i64, ptr %t184
   %_296 = load ptr, ptr %t185
@@ -72674,7 +72887,7 @@ if_then_12:
   store ptr %_481, ptr %t299
   %_482 = load i64, ptr %t0
   store i64 %_482, ptr %t305
-  %_483 = call ptr @rockit_string_new(ptr @.str.638)
+  %_483 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_483, ptr %t306
   %_484 = load i64, ptr %t305
   %_485 = load ptr, ptr %t306
@@ -73081,7 +73294,7 @@ if_then_23:
   store ptr %_694, ptr %t444
   %_695 = load i64, ptr %t444
   store i64 %_695, ptr %t446
-  %_696 = call ptr @rockit_string_new(ptr @.str.661)
+  %_696 = call ptr @rockit_string_new(ptr @.str.665)
   store ptr %_696, ptr %t447
   %_697 = load i64, ptr %t438
   store i64 %_697, ptr %t448
@@ -73092,7 +73305,7 @@ if_then_23:
   store i64 %_701, ptr %t449
   %_702 = load i64, ptr %t444
   store i64 %_702, ptr %t450
-  %_703 = call ptr @rockit_string_new(ptr @.str.662)
+  %_703 = call ptr @rockit_string_new(ptr @.str.666)
   store ptr %_703, ptr %t451
   %_704 = load i64, ptr %t441
   store i64 %_704, ptr %t452
@@ -73103,7 +73316,7 @@ if_then_23:
   store i64 %_708, ptr %t453
   %_709 = load i64, ptr %t0
   store i64 %_709, ptr %t454
-  %_710 = call ptr @rockit_string_new(ptr @.str.642)
+  %_710 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_710, ptr %t455
   %_711 = load i64, ptr %t454
   %_712 = load ptr, ptr %t455
@@ -73153,7 +73366,7 @@ if_then_23:
   store i64 %_739, ptr %t472
   %_740 = load i64, ptr %t468
   store i64 %_740, ptr %t473
-  %_741 = call ptr @rockit_string_new(ptr @.str.648)
+  %_741 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_741, ptr %t474
   %_742 = load i64, ptr %t473
   %_743 = load ptr, ptr %t474
@@ -73200,7 +73413,7 @@ if_then_23:
   store i64 %_769, ptr %t489
   %_770 = load i64, ptr %t468
   store i64 %_770, ptr %t490
-  %_771 = call ptr @rockit_string_new(ptr @.str.649)
+  %_771 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_771, ptr %t491
   %_772 = load i64, ptr %t490
   %_773 = load ptr, ptr %t491
@@ -73223,7 +73436,7 @@ if_then_23:
   store i64 %_784, ptr %t497
   %_785 = load i64, ptr %t0
   store i64 %_785, ptr %t499
-  %_786 = call ptr @rockit_string_new(ptr @.str.642)
+  %_786 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_786, ptr %t500
   %_787 = load i64, ptr %t499
   %_788 = load ptr, ptr %t500
@@ -73510,7 +73723,7 @@ if_merge_28:
   store ptr %_945, ptr %t602
   %_946 = load i64, ptr %t602
   store i64 %_946, ptr %t604
-  %_947 = call ptr @rockit_string_new(ptr @.str.661)
+  %_947 = call ptr @rockit_string_new(ptr @.str.665)
   store ptr %_947, ptr %t605
   %_948 = load i64, ptr %t596
   store i64 %_948, ptr %t606
@@ -73521,7 +73734,7 @@ if_merge_28:
   store i64 %_952, ptr %t607
   %_953 = load i64, ptr %t602
   store i64 %_953, ptr %t608
-  %_954 = call ptr @rockit_string_new(ptr @.str.662)
+  %_954 = call ptr @rockit_string_new(ptr @.str.666)
   store ptr %_954, ptr %t609
   %_955 = load i64, ptr %t599
   store i64 %_955, ptr %t610
@@ -73532,7 +73745,7 @@ if_merge_28:
   store i64 %_959, ptr %t611
   %_960 = load i64, ptr %t0
   store i64 %_960, ptr %t612
-  %_961 = call ptr @rockit_string_new(ptr @.str.642)
+  %_961 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_961, ptr %t613
   %_962 = load i64, ptr %t612
   %_963 = load ptr, ptr %t613
@@ -73608,7 +73821,7 @@ if_merge_28:
   store i64 %_1006, ptr %t640
   %_1007 = load i64, ptr %t636
   store i64 %_1007, ptr %t641
-  %_1008 = call ptr @rockit_string_new(ptr @.str.648)
+  %_1008 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_1008, ptr %t642
   %_1009 = load i64, ptr %t641
   %_1010 = load ptr, ptr %t642
@@ -73659,7 +73872,7 @@ if_merge_28:
   store i64 %_1038, ptr %t659
   %_1039 = load i64, ptr %t0
   store i64 %_1039, ptr %t660
-  %_1040 = call ptr @rockit_string_new(ptr @.str.638)
+  %_1040 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_1040, ptr %t661
   %_1041 = load i64, ptr %t660
   %_1042 = load ptr, ptr %t661
@@ -73778,7 +73991,7 @@ if_merge_28:
   store i64 %_1112, ptr %t704
   %_1113 = load i64, ptr %t636
   store i64 %_1113, ptr %t705
-  %_1114 = call ptr @rockit_string_new(ptr @.str.649)
+  %_1114 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_1114, ptr %t706
   %_1115 = load i64, ptr %t705
   %_1116 = load ptr, ptr %t706
@@ -73801,7 +74014,7 @@ if_merge_28:
   store i64 %_1127, ptr %t712
   %_1128 = load i64, ptr %t0
   store i64 %_1128, ptr %t713
-  %_1129 = call ptr @rockit_string_new(ptr @.str.642)
+  %_1129 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_1129, ptr %t714
   %_1130 = load i64, ptr %t713
   %_1131 = load ptr, ptr %t714
@@ -73809,7 +74022,7 @@ if_merge_28:
   store i64 %_1132, ptr %t715
   %_1133 = load i64, ptr %t0
   store i64 %_1133, ptr %t716
-  %_1134 = call ptr @rockit_string_new(ptr @.str.642)
+  %_1134 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_1134, ptr %t717
   %_1135 = load i64, ptr %t716
   %_1136 = load ptr, ptr %t717
@@ -73936,7 +74149,7 @@ if_merge_27:
   store ptr %_1206, ptr %t764
   %_1207 = load i64, ptr %t764
   store i64 %_1207, ptr %t766
-  %_1208 = call ptr @rockit_string_new(ptr @.str.661)
+  %_1208 = call ptr @rockit_string_new(ptr @.str.665)
   store ptr %_1208, ptr %t767
   %_1209 = load i64, ptr %t758
   store i64 %_1209, ptr %t768
@@ -73947,7 +74160,7 @@ if_merge_27:
   store i64 %_1213, ptr %t769
   %_1214 = load i64, ptr %t764
   store i64 %_1214, ptr %t770
-  %_1215 = call ptr @rockit_string_new(ptr @.str.662)
+  %_1215 = call ptr @rockit_string_new(ptr @.str.666)
   store ptr %_1215, ptr %t771
   %_1216 = load i64, ptr %t761
   store i64 %_1216, ptr %t772
@@ -73958,7 +74171,7 @@ if_merge_27:
   store i64 %_1220, ptr %t773
   %_1221 = load i64, ptr %t0
   store i64 %_1221, ptr %t774
-  %_1222 = call ptr @rockit_string_new(ptr @.str.642)
+  %_1222 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_1222, ptr %t775
   %_1223 = load i64, ptr %t774
   %_1224 = load ptr, ptr %t775
@@ -74034,7 +74247,7 @@ if_merge_27:
   store i64 %_1267, ptr %t802
   %_1268 = load i64, ptr %t798
   store i64 %_1268, ptr %t803
-  %_1269 = call ptr @rockit_string_new(ptr @.str.648)
+  %_1269 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_1269, ptr %t804
   %_1270 = load i64, ptr %t803
   %_1271 = load ptr, ptr %t804
@@ -74126,7 +74339,7 @@ if_merge_27:
   store i64 %_1324, ptr %t837
   %_1325 = load i64, ptr %t0
   store i64 %_1325, ptr %t838
-  %_1326 = call ptr @rockit_string_new(ptr @.str.638)
+  %_1326 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_1326, ptr %t839
   %_1327 = load i64, ptr %t838
   %_1328 = load ptr, ptr %t839
@@ -74245,7 +74458,7 @@ if_merge_27:
   store i64 %_1398, ptr %t882
   %_1399 = load i64, ptr %t798
   store i64 %_1399, ptr %t883
-  %_1400 = call ptr @rockit_string_new(ptr @.str.649)
+  %_1400 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_1400, ptr %t884
   %_1401 = load i64, ptr %t883
   %_1402 = load ptr, ptr %t884
@@ -74268,7 +74481,7 @@ if_merge_27:
   store i64 %_1413, ptr %t890
   %_1414 = load i64, ptr %t0
   store i64 %_1414, ptr %t892
-  %_1415 = call ptr @rockit_string_new(ptr @.str.642)
+  %_1415 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_1415, ptr %t893
   %_1416 = load i64, ptr %t892
   %_1417 = load ptr, ptr %t893
@@ -74466,7 +74679,7 @@ if_then_29:
   store ptr %_1529, ptr %t967
   %_1530 = load i64, ptr %t967
   store i64 %_1530, ptr %t969
-  %_1531 = call ptr @rockit_string_new(ptr @.str.661)
+  %_1531 = call ptr @rockit_string_new(ptr @.str.665)
   store ptr %_1531, ptr %t970
   %_1532 = load i64, ptr %t961
   store i64 %_1532, ptr %t971
@@ -74477,7 +74690,7 @@ if_then_29:
   store i64 %_1536, ptr %t972
   %_1537 = load i64, ptr %t967
   store i64 %_1537, ptr %t973
-  %_1538 = call ptr @rockit_string_new(ptr @.str.662)
+  %_1538 = call ptr @rockit_string_new(ptr @.str.666)
   store ptr %_1538, ptr %t974
   %_1539 = load i64, ptr %t964
   store i64 %_1539, ptr %t975
@@ -74488,7 +74701,7 @@ if_then_29:
   store i64 %_1543, ptr %t976
   %_1544 = load i64, ptr %t0
   store i64 %_1544, ptr %t977
-  %_1545 = call ptr @rockit_string_new(ptr @.str.642)
+  %_1545 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_1545, ptr %t978
   %_1546 = load i64, ptr %t977
   %_1547 = load ptr, ptr %t978
@@ -74564,7 +74777,7 @@ if_then_29:
   store i64 %_1590, ptr %t1005
   %_1591 = load i64, ptr %t1001
   store i64 %_1591, ptr %t1006
-  %_1592 = call ptr @rockit_string_new(ptr @.str.648)
+  %_1592 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_1592, ptr %t1007
   %_1593 = load i64, ptr %t1006
   %_1594 = load ptr, ptr %t1007
@@ -74656,7 +74869,7 @@ if_then_29:
   store i64 %_1647, ptr %t1040
   %_1648 = load i64, ptr %t0
   store i64 %_1648, ptr %t1041
-  %_1649 = call ptr @rockit_string_new(ptr @.str.638)
+  %_1649 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_1649, ptr %t1042
   %_1650 = load i64, ptr %t1041
   %_1651 = load ptr, ptr %t1042
@@ -74753,7 +74966,7 @@ if_then_30:
   store i64 %_1706, ptr %t1077
   %_1707 = load i64, ptr %t0
   store i64 %_1707, ptr %t1078
-  %_1708 = call ptr @rockit_string_new(ptr @.str.638)
+  %_1708 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_1708, ptr %t1079
   %_1709 = load i64, ptr %t1078
   %_1710 = load ptr, ptr %t1079
@@ -74884,7 +75097,7 @@ if_merge_30:
   store i64 %_1785, ptr %t1126
   %_1786 = load i64, ptr %t1001
   store i64 %_1786, ptr %t1127
-  %_1787 = call ptr @rockit_string_new(ptr @.str.649)
+  %_1787 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_1787, ptr %t1128
   %_1788 = load i64, ptr %t1127
   %_1789 = load ptr, ptr %t1128
@@ -74907,7 +75120,7 @@ if_merge_30:
   store i64 %_1800, ptr %t1134
   %_1801 = load i64, ptr %t0
   store i64 %_1801, ptr %t1136
-  %_1802 = call ptr @rockit_string_new(ptr @.str.642)
+  %_1802 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_1802, ptr %t1137
   %_1803 = load i64, ptr %t1136
   %_1804 = load ptr, ptr %t1137
@@ -74949,7 +75162,7 @@ if_merge_29:
 if_then_31:
   %_1824 = load i64, ptr %t0
   store i64 %_1824, ptr %t1151
-  %_1825 = call ptr @rockit_string_new(ptr @.str.642)
+  %_1825 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_1825, ptr %t1152
   %_1826 = load i64, ptr %t1151
   %_1827 = load ptr, ptr %t1152
@@ -74990,7 +75203,7 @@ if_then_32:
   store i64 %_1847, ptr %t1159
   %_1848 = load i64, ptr %t1159
   store i64 %_1848, ptr %t1167
-  %_1849 = call ptr @rockit_string_new(ptr @.str.661)
+  %_1849 = call ptr @rockit_string_new(ptr @.str.665)
   store ptr %_1849, ptr %t1168
   %_1850 = load i64, ptr %t1167
   %_1851 = load ptr, ptr %t1168
@@ -75003,7 +75216,7 @@ if_then_32:
   store ptr %_1855, ptr %t1166
   %_1856 = load i64, ptr %t0
   store i64 %_1856, ptr %t1172
-  %_1857 = call ptr @rockit_string_new(ptr @.str.640)
+  %_1857 = call ptr @rockit_string_new(ptr @.str.644)
   store ptr %_1857, ptr %t1173
   %_1858 = load i64, ptr %t1172
   %_1859 = load ptr, ptr %t1173
@@ -75078,7 +75291,7 @@ if_else_33:
   store ptr %_1899, ptr %t1197
   %_1900 = load i64, ptr %t1197
   store i64 %_1900, ptr %t1199
-  %_1901 = call ptr @rockit_string_new(ptr @.str.647)
+  %_1901 = call ptr @rockit_string_new(ptr @.str.651)
   store ptr %_1901, ptr %t1200
   %_1902 = load i64, ptr %t1191
   store i64 %_1902, ptr %t1201
@@ -75089,7 +75302,7 @@ if_else_33:
   store i64 %_1906, ptr %t1202
   %_1907 = load i64, ptr %t1197
   store i64 %_1907, ptr %t1203
-  %_1908 = call ptr @rockit_string_new(ptr @.str.663)
+  %_1908 = call ptr @rockit_string_new(ptr @.str.667)
   store ptr %_1908, ptr %t1204
   %_1909 = load i64, ptr %t1166
   store i64 %_1909, ptr %t1205
@@ -75100,7 +75313,7 @@ if_else_33:
   store i64 %_1913, ptr %t1206
   %_1914 = load i64, ptr %t0
   store i64 %_1914, ptr %t1207
-  %_1915 = call ptr @rockit_string_new(ptr @.str.639)
+  %_1915 = call ptr @rockit_string_new(ptr @.str.643)
   store ptr %_1915, ptr %t1208
   %_1916 = load i64, ptr %t1207
   %_1917 = load ptr, ptr %t1208
@@ -75136,7 +75349,7 @@ if_merge_31:
 if_then_34:
   %_1930 = load i64, ptr %t0
   store i64 %_1930, ptr %t1220
-  %_1931 = call ptr @rockit_string_new(ptr @.str.642)
+  %_1931 = call ptr @rockit_string_new(ptr @.str.646)
   store ptr %_1931, ptr %t1221
   %_1932 = load i64, ptr %t1220
   %_1933 = load ptr, ptr %t1221
@@ -75177,7 +75390,7 @@ if_then_35:
   store i64 %_1953, ptr %t1228
   %_1954 = load i64, ptr %t1228
   store i64 %_1954, ptr %t1236
-  %_1955 = call ptr @rockit_string_new(ptr @.str.662)
+  %_1955 = call ptr @rockit_string_new(ptr @.str.666)
   store ptr %_1955, ptr %t1237
   %_1956 = load i64, ptr %t1236
   %_1957 = load ptr, ptr %t1237
@@ -75190,7 +75403,7 @@ if_then_35:
   store ptr %_1961, ptr %t1235
   %_1962 = load i64, ptr %t0
   store i64 %_1962, ptr %t1241
-  %_1963 = call ptr @rockit_string_new(ptr @.str.640)
+  %_1963 = call ptr @rockit_string_new(ptr @.str.644)
   store ptr %_1963, ptr %t1242
   %_1964 = load i64, ptr %t1241
   %_1965 = load ptr, ptr %t1242
@@ -75265,7 +75478,7 @@ if_else_36:
   store ptr %_2005, ptr %t1266
   %_2006 = load i64, ptr %t1266
   store i64 %_2006, ptr %t1268
-  %_2007 = call ptr @rockit_string_new(ptr @.str.647)
+  %_2007 = call ptr @rockit_string_new(ptr @.str.651)
   store ptr %_2007, ptr %t1269
   %_2008 = load i64, ptr %t1260
   store i64 %_2008, ptr %t1270
@@ -75276,7 +75489,7 @@ if_else_36:
   store i64 %_2012, ptr %t1271
   %_2013 = load i64, ptr %t1266
   store i64 %_2013, ptr %t1272
-  %_2014 = call ptr @rockit_string_new(ptr @.str.663)
+  %_2014 = call ptr @rockit_string_new(ptr @.str.667)
   store ptr %_2014, ptr %t1273
   %_2015 = load i64, ptr %t1235
   store i64 %_2015, ptr %t1274
@@ -75287,7 +75500,7 @@ if_else_36:
   store i64 %_2019, ptr %t1275
   %_2020 = load i64, ptr %t0
   store i64 %_2020, ptr %t1276
-  %_2021 = call ptr @rockit_string_new(ptr @.str.639)
+  %_2021 = call ptr @rockit_string_new(ptr @.str.643)
   store ptr %_2021, ptr %t1277
   %_2022 = load i64, ptr %t1276
   %_2023 = load ptr, ptr %t1277
@@ -75453,7 +75666,7 @@ if_merge_38:
 if_then_39:
   %_2112 = load i64, ptr %t0
   store i64 %_2112, ptr %t1337
-  %_2113 = call ptr @rockit_string_new(ptr @.str.638)
+  %_2113 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_2113, ptr %t1338
   %_2114 = load i64, ptr %t1337
   %_2115 = load ptr, ptr %t1338
@@ -75702,7 +75915,7 @@ if_then_43:
   store i64 %_2253, ptr %t1424
   %_2254 = load i64, ptr %t0
   store i64 %_2254, ptr %t1426
-  %_2255 = call ptr @rockit_string_new(ptr @.str.637)
+  %_2255 = call ptr @rockit_string_new(ptr @.str.641)
   store ptr %_2255, ptr %t1427
   %_2256 = load i64, ptr %t1426
   %_2257 = load ptr, ptr %t1427
@@ -75720,7 +75933,7 @@ if_then_43:
   store i64 %_2264, ptr %t1431
   %_2265 = load i64, ptr %t0
   store i64 %_2265, ptr %t1432
-  %_2266 = call ptr @rockit_string_new(ptr @.str.643)
+  %_2266 = call ptr @rockit_string_new(ptr @.str.647)
   store ptr %_2266, ptr %t1433
   %_2267 = load i64, ptr %t1432
   %_2268 = load ptr, ptr %t1433
@@ -75759,7 +75972,7 @@ if_then_43:
 if_then_44:
   %_2289 = load i64, ptr %t1425
   store i64 %_2289, ptr %t1446
-  %_2290 = call ptr @rockit_string_new(ptr @.str.633)
+  %_2290 = call ptr @rockit_string_new(ptr @.str.637)
   store ptr %_2290, ptr %t1447
   %_2291 = load i64, ptr %t1446
   %_2292 = load ptr, ptr %t1447
@@ -76493,7 +76706,7 @@ while_exit_0:
   store ptr %_97, ptr %t60
   %_98 = load i64, ptr %t2
   store i64 %_98, ptr %t66
-  %_99 = call ptr @rockit_string_new(ptr @.str.664)
+  %_99 = call ptr @rockit_string_new(ptr @.str.668)
   store ptr %_99, ptr %t67
   %_100 = load i64, ptr %t66
   %_101 = load ptr, ptr %t67
@@ -76515,7 +76728,7 @@ while_exit_0:
 if_then_2:
   %_111 = load i64, ptr %t60
   store i64 %_111, ptr %t73
-  %_112 = call ptr @rockit_string_new(ptr @.str.651)
+  %_112 = call ptr @rockit_string_new(ptr @.str.655)
   store ptr %_112, ptr %t74
   %_113 = load i64, ptr %t65
   store i64 %_113, ptr %t75
@@ -76529,11 +76742,11 @@ if_then_2:
   store i64 %_119, ptr %t77
   %_120 = load i64, ptr %t60
   store i64 %_120, ptr %t78
-  %_121 = call ptr @rockit_string_new(ptr @.str.652)
+  %_121 = call ptr @rockit_string_new(ptr @.str.656)
   store ptr %_121, ptr %t79
   %_122 = load i64, ptr %t2
   store i64 %_122, ptr %t80
-  %_123 = call ptr @rockit_string_new(ptr @.str.665)
+  %_123 = call ptr @rockit_string_new(ptr @.str.669)
   store ptr %_123, ptr %t81
   %_124 = load i64, ptr %t80
   %_125 = load ptr, ptr %t81
@@ -76546,11 +76759,11 @@ if_then_2:
   store i64 %_130, ptr %t83
   %_131 = load i64, ptr %t60
   store i64 %_131, ptr %t84
-  %_132 = call ptr @rockit_string_new(ptr @.str.666)
+  %_132 = call ptr @rockit_string_new(ptr @.str.670)
   store ptr %_132, ptr %t85
   %_133 = load i64, ptr %t2
   store i64 %_133, ptr %t86
-  %_134 = call ptr @rockit_string_new(ptr @.str.667)
+  %_134 = call ptr @rockit_string_new(ptr @.str.671)
   store ptr %_134, ptr %t87
   %_135 = load i64, ptr %t86
   %_136 = load ptr, ptr %t87
@@ -76641,7 +76854,7 @@ while_body_1:
   store i64 %_184, ptr %t117
   %_185 = load i64, ptr %t60
   store i64 %_185, ptr %t118
-  %_186 = call ptr @rockit_string_new(ptr @.str.638)
+  %_186 = call ptr @rockit_string_new(ptr @.str.642)
   store ptr %_186, ptr %t119
   %_187 = load i64, ptr %t118
   %_188 = load ptr, ptr %t119
@@ -76738,7 +76951,7 @@ if_then_3:
   store i64 %_243, ptr %t154
   %_244 = load i64, ptr %t150
   store i64 %_244, ptr %t155
-  %_245 = call ptr @rockit_string_new(ptr @.str.648)
+  %_245 = call ptr @rockit_string_new(ptr @.str.652)
   store ptr %_245, ptr %t156
   %_246 = load i64, ptr %t155
   %_247 = load ptr, ptr %t156
@@ -76776,7 +76989,7 @@ if_then_3:
   store i64 %_267, ptr %t168
   %_268 = load i64, ptr %t150
   store i64 %_268, ptr %t169
-  %_269 = call ptr @rockit_string_new(ptr @.str.649)
+  %_269 = call ptr @rockit_string_new(ptr @.str.653)
   store ptr %_269, ptr %t170
   %_270 = load i64, ptr %t169
   %_271 = load ptr, ptr %t170
@@ -76806,7 +77019,7 @@ if_merge_3:
 while_exit_1:
   %_283 = load i64, ptr %t0
   store i64 %_283, ptr %t178
-  %_284 = call ptr @rockit_string_new(ptr @.str.633)
+  %_284 = call ptr @rockit_string_new(ptr @.str.637)
   store ptr %_284, ptr %t179
   %_285 = load i64, ptr %t178
   %_286 = load ptr, ptr %t179
@@ -77027,7 +77240,7 @@ if_else_5:
 if_merge_5:
   %_394 = load i64, ptr %t60
   store i64 %_394, ptr %t259
-  %_395 = call ptr @rockit_string_new(ptr @.str.639)
+  %_395 = call ptr @rockit_string_new(ptr @.str.643)
   store ptr %_395, ptr %t260
   %_396 = load i64, ptr %t259
   %_397 = load ptr, ptr %t260
@@ -77066,7 +77279,7 @@ while_body_2:
   store i64 %_414, ptr %t268
   %_415 = load i64, ptr %t268
   store i64 %_415, ptr %t273
-  %_416 = call ptr @rockit_string_new(ptr @.str.647)
+  %_416 = call ptr @rockit_string_new(ptr @.str.651)
   store ptr %_416, ptr %t274
   %_417 = load i64, ptr %t273
   %_418 = load ptr, ptr %t274
@@ -77079,7 +77292,7 @@ while_body_2:
   store i64 %_422, ptr %t272
   %_423 = load i64, ptr %t268
   store i64 %_423, ptr %t278
-  %_424 = call ptr @rockit_string_new(ptr @.str.663)
+  %_424 = call ptr @rockit_string_new(ptr @.str.667)
   store ptr %_424, ptr %t279
   %_425 = load i64, ptr %t278
   %_426 = load ptr, ptr %t279
@@ -77092,7 +77305,7 @@ while_body_2:
   store ptr %_430, ptr %t277
   %_431 = load i64, ptr %t60
   store i64 %_431, ptr %t283
-  %_432 = call ptr @rockit_string_new(ptr @.str.640)
+  %_432 = call ptr @rockit_string_new(ptr @.str.644)
   store ptr %_432, ptr %t284
   %_433 = load i64, ptr %t283
   %_434 = load ptr, ptr %t284
@@ -77164,7 +77377,7 @@ while_exit_2:
   store i64 %_470, ptr %t306
   %_471 = load i64, ptr %t301
   store i64 %_471, ptr %t307
-  %_472 = call ptr @rockit_string_new(ptr @.str.526)
+  %_472 = call ptr @rockit_string_new(ptr @.str.527)
   store ptr %_472, ptr %t308
   %_473 = load i64, ptr %t22
   store i64 %_473, ptr %t309
@@ -77178,11 +77391,11 @@ while_exit_2:
   store i64 %_479, ptr %t311
   %_480 = load i64, ptr %t301
   store i64 %_480, ptr %t312
-  %_481 = call ptr @rockit_string_new(ptr @.str.527)
+  %_481 = call ptr @rockit_string_new(ptr @.str.528)
   store ptr %_481, ptr %t313
   %_482 = load i64, ptr %t60
   store i64 %_482, ptr %t314
-  %_483 = call ptr @rockit_string_new(ptr @.str.527)
+  %_483 = call ptr @rockit_string_new(ptr @.str.528)
   store ptr %_483, ptr %t315
   %_484 = load i64, ptr %t314
   %_485 = load ptr, ptr %t315
@@ -77220,11 +77433,11 @@ while_exit_2:
   store i64 %_506, ptr %t326
   %_507 = load i64, ptr %t301
   store i64 %_507, ptr %t327
-  %_508 = call ptr @rockit_string_new(ptr @.str.644)
+  %_508 = call ptr @rockit_string_new(ptr @.str.648)
   store ptr %_508, ptr %t328
   %_509 = load i64, ptr %t60
   store i64 %_509, ptr %t329
-  %_510 = call ptr @rockit_string_new(ptr @.str.644)
+  %_510 = call ptr @rockit_string_new(ptr @.str.648)
   store ptr %_510, ptr %t330
   %_511 = load i64, ptr %t329
   %_512 = load ptr, ptr %t330
@@ -77284,7 +77497,7 @@ if_then_12:
 if_then_13:
   %_546 = load i64, ptr %t301
   store i64 %_546, ptr %t350
-  %_547 = call ptr @rockit_string_new(ptr @.str.668)
+  %_547 = call ptr @rockit_string_new(ptr @.str.672)
   store ptr %_547, ptr %t351
   %_548 = call i64 @TT_UNIT()
   store i64 %_548, ptr %t352
@@ -77309,7 +77522,7 @@ if_else_13:
 if_then_14:
   %_560 = load i64, ptr %t301
   store i64 %_560, ptr %t358
-  %_561 = call ptr @rockit_string_new(ptr @.str.668)
+  %_561 = call ptr @rockit_string_new(ptr @.str.672)
   store ptr %_561, ptr %t359
   %_562 = call i64 @TT_INT()
   store i64 %_562, ptr %t360
@@ -77334,7 +77547,7 @@ if_else_14:
 if_then_15:
   %_574 = load i64, ptr %t301
   store i64 %_574, ptr %t366
-  %_575 = call ptr @rockit_string_new(ptr @.str.668)
+  %_575 = call ptr @rockit_string_new(ptr @.str.672)
   store ptr %_575, ptr %t367
   %_576 = call i64 @TT_STRING()
   store i64 %_576, ptr %t368
@@ -77359,7 +77572,7 @@ if_else_15:
 if_then_16:
   %_588 = load i64, ptr %t301
   store i64 %_588, ptr %t374
-  %_589 = call ptr @rockit_string_new(ptr @.str.668)
+  %_589 = call ptr @rockit_string_new(ptr @.str.672)
   store ptr %_589, ptr %t375
   %_590 = call i64 @TT_BOOL()
   store i64 %_590, ptr %t376
@@ -77372,7 +77585,7 @@ if_then_16:
 if_else_16:
   %_595 = load i64, ptr %t341
   store i64 %_595, ptr %t378
-  %_596 = call ptr @rockit_string_new(ptr @.str.669)
+  %_596 = call ptr @rockit_string_new(ptr @.str.673)
   store ptr %_596, ptr %t379
   %_597 = load i64, ptr %t378
   %_600 = load ptr, ptr %t379
@@ -77384,7 +77597,7 @@ if_else_16:
 if_then_17:
   %_602 = load i64, ptr %t301
   store i64 %_602, ptr %t382
-  %_603 = call ptr @rockit_string_new(ptr @.str.668)
+  %_603 = call ptr @rockit_string_new(ptr @.str.672)
   store ptr %_603, ptr %t383
   %_604 = call i64 @TT_FLOAT64()
   store i64 %_604, ptr %t384
@@ -77397,7 +77610,7 @@ if_then_17:
 if_else_17:
   %_609 = load i64, ptr %t301
   store i64 %_609, ptr %t386
-  %_610 = call ptr @rockit_string_new(ptr @.str.668)
+  %_610 = call ptr @rockit_string_new(ptr @.str.672)
   store ptr %_610, ptr %t387
   %_611 = call i64 @TT_UNIT()
   store i64 %_611, ptr %t388
@@ -77420,7 +77633,7 @@ if_merge_13:
 if_else_12:
   %_616 = load i64, ptr %t301
   store i64 %_616, ptr %t395
-  %_617 = call ptr @rockit_string_new(ptr @.str.668)
+  %_617 = call ptr @rockit_string_new(ptr @.str.672)
   store ptr %_617, ptr %t396
   %_618 = call i64 @TT_UNIT()
   store i64 %_618, ptr %t397
@@ -78512,7 +78725,7 @@ while_body_0:
 if_then_1:
   %_70 = load i64, ptr %t29
   store i64 %_70, ptr %t46
-  %_71 = call ptr @rockit_string_new(ptr @.str.670)
+  %_71 = call ptr @rockit_string_new(ptr @.str.674)
   store ptr %_71, ptr %t47
   %_72 = load i64, ptr %t38
   store i64 %_72, ptr %t48
@@ -78534,7 +78747,7 @@ if_then_1:
 if_else_1:
   %_83 = load i64, ptr %t29
   store i64 %_83, ptr %t53
-  %_84 = call ptr @rockit_string_new(ptr @.str.670)
+  %_84 = call ptr @rockit_string_new(ptr @.str.674)
   store ptr %_84, ptr %t54
   %_85 = call ptr @rockit_string_new(ptr @.str.362)
   store ptr %_85, ptr %t55
@@ -78727,7 +78940,7 @@ if_then_4:
 if_then_5:
   %_193 = load i64, ptr %t104
   store i64 %_193, ptr %t121
-  %_194 = call ptr @rockit_string_new(ptr @.str.670)
+  %_194 = call ptr @rockit_string_new(ptr @.str.674)
   store ptr %_194, ptr %t122
   %_195 = load i64, ptr %t113
   store i64 %_195, ptr %t123
@@ -78749,7 +78962,7 @@ if_then_5:
 if_else_5:
   %_206 = load i64, ptr %t104
   store i64 %_206, ptr %t128
-  %_207 = call ptr @rockit_string_new(ptr @.str.670)
+  %_207 = call ptr @rockit_string_new(ptr @.str.674)
   store ptr %_207, ptr %t129
   %_208 = call ptr @rockit_string_new(ptr @.str.362)
   store ptr %_208, ptr %t130
@@ -79274,7 +79487,7 @@ if_merge_12:
   store i64 %_491, ptr %t309
   %_492 = load i64, ptr %t280
   store i64 %_492, ptr %t310
-  %_493 = call ptr @rockit_string_new(ptr @.str.664)
+  %_493 = call ptr @rockit_string_new(ptr @.str.668)
   store ptr %_493, ptr %t311
   %_494 = load i64, ptr %t4
   store i64 %_494, ptr %t312
@@ -79285,7 +79498,7 @@ if_merge_12:
   store i64 %_498, ptr %t313
   %_499 = load i64, ptr %t280
   store i64 %_499, ptr %t314
-  %_500 = call ptr @rockit_string_new(ptr @.str.665)
+  %_500 = call ptr @rockit_string_new(ptr @.str.669)
   store ptr %_500, ptr %t315
   %_501 = load i64, ptr %t142
   store i64 %_501, ptr %t316
@@ -79296,7 +79509,7 @@ if_merge_12:
   store i64 %_505, ptr %t317
   %_506 = load i64, ptr %t280
   store i64 %_506, ptr %t318
-  %_507 = call ptr @rockit_string_new(ptr @.str.667)
+  %_507 = call ptr @rockit_string_new(ptr @.str.671)
   store ptr %_507, ptr %t319
   %_508 = load i64, ptr %t161
   store i64 %_508, ptr %t320
@@ -79637,7 +79850,7 @@ if_then_18:
   store i64 %_690, ptr %t436
   %_691 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_691, ptr %t437
-  %_692 = call ptr @rockit_string_new(ptr @.str.671)
+  %_692 = call ptr @rockit_string_new(ptr @.str.675)
   store ptr %_692, ptr %t438
   %_693 = load i64, ptr %t436
   %_694 = load ptr, ptr %t437
@@ -79737,7 +79950,7 @@ while_body_7:
   store i64 %_749, ptr %t473
   %_750 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_750, ptr %t474
-  %_751 = call ptr @rockit_string_new(ptr @.str.671)
+  %_751 = call ptr @rockit_string_new(ptr @.str.675)
   store ptr %_751, ptr %t475
   %_752 = load i64, ptr %t473
   %_753 = load ptr, ptr %t474
@@ -79806,7 +80019,7 @@ while_body_7:
   store i64 %_791, ptr %t500
   %_792 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_792, ptr %t501
-  %_793 = call ptr @rockit_string_new(ptr @.str.671)
+  %_793 = call ptr @rockit_string_new(ptr @.str.675)
   store ptr %_793, ptr %t502
   %_794 = load i64, ptr %t500
   %_795 = load ptr, ptr %t501
@@ -79852,7 +80065,7 @@ if_then_19:
   store i64 %_818, ptr %t518
   %_819 = call ptr @rockit_string_new(ptr @.str.1)
   store ptr %_819, ptr %t519
-  %_820 = call ptr @rockit_string_new(ptr @.str.531)
+  %_820 = call ptr @rockit_string_new(ptr @.str.532)
   store ptr %_820, ptr %t520
   %_821 = load i64, ptr %t507
   store i64 %_821, ptr %t521
@@ -79951,7 +80164,7 @@ if_merge_19:
   store i64 %_877, ptr %t555
   %_878 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_878, ptr %t556
-  %_879 = call ptr @rockit_string_new(ptr @.str.671)
+  %_879 = call ptr @rockit_string_new(ptr @.str.675)
   store ptr %_879, ptr %t557
   %_880 = load i64, ptr %t555
   %_881 = load ptr, ptr %t556
@@ -80020,7 +80233,7 @@ if_merge_19:
   store i64 %_919, ptr %t582
   %_920 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_920, ptr %t583
-  %_921 = call ptr @rockit_string_new(ptr @.str.671)
+  %_921 = call ptr @rockit_string_new(ptr @.str.675)
   store ptr %_921, ptr %t584
   %_922 = load i64, ptr %t582
   %_923 = load ptr, ptr %t583
@@ -80179,7 +80392,7 @@ while_exit_7:
   store i64 %_1015, ptr %t642
   %_1016 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_1016, ptr %t643
-  %_1017 = call ptr @rockit_string_new(ptr @.str.671)
+  %_1017 = call ptr @rockit_string_new(ptr @.str.675)
   store ptr %_1017, ptr %t644
   %_1018 = load i64, ptr %t642
   %_1019 = load ptr, ptr %t643
@@ -80248,7 +80461,7 @@ while_exit_7:
   store i64 %_1057, ptr %t669
   %_1058 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_1058, ptr %t670
-  %_1059 = call ptr @rockit_string_new(ptr @.str.671)
+  %_1059 = call ptr @rockit_string_new(ptr @.str.675)
   store ptr %_1059, ptr %t671
   %_1060 = load i64, ptr %t669
   %_1061 = load ptr, ptr %t670
@@ -80337,7 +80550,7 @@ while_exit_7:
   store i64 %_1112, ptr %t703
   %_1113 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_1113, ptr %t704
-  %_1114 = call ptr @rockit_string_new(ptr @.str.671)
+  %_1114 = call ptr @rockit_string_new(ptr @.str.675)
   store ptr %_1114, ptr %t705
   %_1115 = load i64, ptr %t703
   %_1116 = load ptr, ptr %t704
@@ -80402,7 +80615,7 @@ while_exit_7:
   store ptr %_1152, ptr %t728
   %_1153 = load i64, ptr %t4
   store i64 %_1153, ptr %t729
-  %_1154 = call ptr @rockit_string_new(ptr @.str.672)
+  %_1154 = call ptr @rockit_string_new(ptr @.str.676)
   store ptr %_1154, ptr %t730
   %_1155 = load i64, ptr %t729
   %_1156 = load ptr, ptr %t730
@@ -80475,7 +80688,7 @@ while_exit_7:
   store i64 %_1198, ptr %t755
   %_1199 = load i64, ptr %t721
   store i64 %_1199, ptr %t756
-  %_1200 = call ptr @rockit_string_new(ptr @.str.664)
+  %_1200 = call ptr @rockit_string_new(ptr @.str.668)
   store ptr %_1200, ptr %t757
   %_1201 = load i64, ptr %t4
   store i64 %_1201, ptr %t758
@@ -80486,7 +80699,7 @@ while_exit_7:
   store i64 %_1205, ptr %t759
   %_1206 = load i64, ptr %t721
   store i64 %_1206, ptr %t760
-  %_1207 = call ptr @rockit_string_new(ptr @.str.665)
+  %_1207 = call ptr @rockit_string_new(ptr @.str.669)
   store ptr %_1207, ptr %t761
   %_1208 = load i64, ptr %t142
   store i64 %_1208, ptr %t762
@@ -80497,7 +80710,7 @@ while_exit_7:
   store i64 %_1212, ptr %t763
   %_1213 = load i64, ptr %t721
   store i64 %_1213, ptr %t764
-  %_1214 = call ptr @rockit_string_new(ptr @.str.667)
+  %_1214 = call ptr @rockit_string_new(ptr @.str.671)
   store ptr %_1214, ptr %t765
   %_1215 = load i64, ptr %t161
   store i64 %_1215, ptr %t766
@@ -80520,7 +80733,7 @@ if_else_18:
 if_merge_18:
   %_1225 = load i64, ptr %t161
   store i64 %_1225, ptr %t772
-  %_1226 = call ptr @rockit_string_new(ptr @.str.673)
+  %_1226 = call ptr @rockit_string_new(ptr @.str.677)
   store ptr %_1226, ptr %t773
   %_1227 = load i64, ptr %t772
   %_1228 = load ptr, ptr %t773
@@ -80534,7 +80747,7 @@ if_merge_18:
 if_then_20:
   %_1233 = load i64, ptr %t161
   store i64 %_1233, ptr %t777
-  %_1234 = call ptr @rockit_string_new(ptr @.str.673)
+  %_1234 = call ptr @rockit_string_new(ptr @.str.677)
   store ptr %_1234, ptr %t778
   %_1235 = load i64, ptr %t777
   %_1236 = load ptr, ptr %t778
@@ -80629,7 +80842,7 @@ while_body_8:
   store i64 %_1286, ptr %t813
   %_1287 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_1287, ptr %t814
-  %_1288 = call ptr @rockit_string_new(ptr @.str.674)
+  %_1288 = call ptr @rockit_string_new(ptr @.str.678)
   store ptr %_1288, ptr %t815
   %_1289 = load i64, ptr %t813
   %_1290 = load ptr, ptr %t814
@@ -80836,7 +81049,7 @@ while_exit_8:
   store ptr %_1408, ptr %t889
   %_1409 = load i64, ptr %t4
   store i64 %_1409, ptr %t890
-  %_1410 = call ptr @rockit_string_new(ptr @.str.675)
+  %_1410 = call ptr @rockit_string_new(ptr @.str.679)
   store ptr %_1410, ptr %t891
   %_1411 = load i64, ptr %t890
   %_1412 = load ptr, ptr %t891
@@ -80904,7 +81117,7 @@ while_exit_8:
   store i64 %_1450, ptr %t915
   %_1451 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_1451, ptr %t916
-  %_1452 = call ptr @rockit_string_new(ptr @.str.674)
+  %_1452 = call ptr @rockit_string_new(ptr @.str.678)
   store ptr %_1452, ptr %t917
   %_1453 = load i64, ptr %t915
   %_1454 = load ptr, ptr %t916
@@ -80943,7 +81156,7 @@ while_exit_8:
   store i64 %_1475, ptr %t929
   %_1476 = load i64, ptr %t882
   store i64 %_1476, ptr %t930
-  %_1477 = call ptr @rockit_string_new(ptr @.str.664)
+  %_1477 = call ptr @rockit_string_new(ptr @.str.668)
   store ptr %_1477, ptr %t931
   %_1478 = load i64, ptr %t4
   store i64 %_1478, ptr %t932
@@ -80954,7 +81167,7 @@ while_exit_8:
   store i64 %_1482, ptr %t933
   %_1483 = load i64, ptr %t882
   store i64 %_1483, ptr %t934
-  %_1484 = call ptr @rockit_string_new(ptr @.str.665)
+  %_1484 = call ptr @rockit_string_new(ptr @.str.669)
   store ptr %_1484, ptr %t935
   %_1485 = load i64, ptr %t142
   store i64 %_1485, ptr %t936
@@ -80965,7 +81178,7 @@ while_exit_8:
   store i64 %_1489, ptr %t937
   %_1490 = load i64, ptr %t882
   store i64 %_1490, ptr %t938
-  %_1491 = call ptr @rockit_string_new(ptr @.str.667)
+  %_1491 = call ptr @rockit_string_new(ptr @.str.671)
   store ptr %_1491, ptr %t939
   %_1492 = load i64, ptr %t161
   store i64 %_1492, ptr %t940
@@ -81053,7 +81266,7 @@ if_merge_17:
   store i64 %_1539, ptr %t969
   %_1540 = load i64, ptr %t0
   store i64 %_1540, ptr %t970
-  %_1541 = call ptr @rockit_string_new(ptr @.str.628)
+  %_1541 = call ptr @rockit_string_new(ptr @.str.632)
   store ptr %_1541, ptr %t971
   %_1542 = load i64, ptr %t970
   %_1543 = load ptr, ptr %t971
@@ -81515,7 +81728,7 @@ if_else_0:
 if_merge_0:
   %_58 = load i64, ptr %t0
   store i64 %_58, ptr %t39
-  %_59 = call ptr @rockit_string_new(ptr @.str.629)
+  %_59 = call ptr @rockit_string_new(ptr @.str.633)
   store ptr %_59, ptr %t40
   %_60 = load i64, ptr %t39
   %_61 = load ptr, ptr %t40
@@ -81542,7 +81755,7 @@ if_merge_0:
   store i64 %_73, ptr %t49
   %_74 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_74, ptr %t50
-  %_75 = call ptr @rockit_string_new(ptr @.str.658)
+  %_75 = call ptr @rockit_string_new(ptr @.str.662)
   store ptr %_75, ptr %t51
   %_76 = load i64, ptr %t49
   %_77 = load ptr, ptr %t50
@@ -81551,7 +81764,7 @@ if_merge_0:
   store i64 %_79, ptr %t52
   %_80 = load i64, ptr %t47
   store i64 %_80, ptr %t53
-  %_81 = call ptr @rockit_string_new(ptr @.str.670)
+  %_81 = call ptr @rockit_string_new(ptr @.str.674)
   store ptr %_81, ptr %t54
   %_82 = call ptr @rockit_string_new(ptr @.str.365)
   store ptr %_82, ptr %t55
@@ -81635,7 +81848,7 @@ if_merge_0:
   store i64 %_131, ptr %t84
   %_132 = load i64, ptr %t0
   store i64 %_132, ptr %t85
-  %_133 = call ptr @rockit_string_new(ptr @.str.628)
+  %_133 = call ptr @rockit_string_new(ptr @.str.632)
   store ptr %_133, ptr %t86
   %_134 = load i64, ptr %t85
   %_135 = load ptr, ptr %t86
@@ -81682,7 +81895,7 @@ while_body_1:
   store ptr %_158, ptr %t101
   %_159 = load ptr, ptr %t101
   store ptr %_159, ptr %t97
-  %_160 = call ptr @rockit_string_new(ptr @.str.653)
+  %_160 = call ptr @rockit_string_new(ptr @.str.657)
   store ptr %_160, ptr %t103
   %_161 = load i64, ptr %t4
   store i64 %_161, ptr %t104
@@ -81719,7 +81932,7 @@ while_body_1:
   store i64 %_180, ptr %t115
   %_181 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_181, ptr %t116
-  %_182 = call ptr @rockit_string_new(ptr @.str.676)
+  %_182 = call ptr @rockit_string_new(ptr @.str.680)
   store ptr %_182, ptr %t117
   %_183 = load i64, ptr %t115
   %_184 = load ptr, ptr %t116
@@ -81811,7 +82024,7 @@ while_body_1:
   store i64 %_236, ptr %t151
   %_237 = call ptr @rockit_string_new(ptr @.str.255)
   store ptr %_237, ptr %t152
-  %_238 = call ptr @rockit_string_new(ptr @.str.677)
+  %_238 = call ptr @rockit_string_new(ptr @.str.681)
   store ptr %_238, ptr %t153
   %_239 = load i64, ptr %t151
   %_240 = load ptr, ptr %t152
@@ -81829,7 +82042,7 @@ while_body_1:
   store i64 %_247, ptr %t158
   %_248 = call ptr @rockit_string_new(ptr @.str.261)
   store ptr %_248, ptr %t159
-  %_249 = call ptr @rockit_string_new(ptr @.str.676)
+  %_249 = call ptr @rockit_string_new(ptr @.str.680)
   store ptr %_249, ptr %t160
   %_250 = load i64, ptr %t158
   %_251 = load ptr, ptr %t159
@@ -82502,7 +82715,7 @@ entry:
   store ptr %_13, ptr %t9
   %_14 = load i64, ptr %t0
   store i64 %_14, ptr %t11
-  %_15 = call ptr @rockit_string_new(ptr @.str.631)
+  %_15 = call ptr @rockit_string_new(ptr @.str.635)
   store ptr %_15, ptr %t12
   %_16 = load i64, ptr %t11
   %_17 = load ptr, ptr %t12
@@ -83009,7 +83222,7 @@ entry:
   store ptr %_11, ptr %t4
   %_12 = load i64, ptr %t0
   store i64 %_12, ptr %t9
-  %_13 = call ptr @rockit_string_new(ptr @.str.630)
+  %_13 = call ptr @rockit_string_new(ptr @.str.634)
   store ptr %_13, ptr %t10
   %_14 = load i64, ptr %t9
   %_15 = load ptr, ptr %t10
@@ -84023,7 +84236,7 @@ while_body_3:
   store i64 %_220, ptr %t142
   %_221 = load i64, ptr %t127
   store i64 %_221, ptr %t144
-  %_222 = call ptr @rockit_string_new(ptr @.str.670)
+  %_222 = call ptr @rockit_string_new(ptr @.str.674)
   store ptr %_222, ptr %t145
   %_223 = load i64, ptr %t144
   %_224 = load ptr, ptr %t145
@@ -84102,7 +84315,7 @@ if_then_2:
 if_else_2:
   %_265 = load i64, ptr %t143
   store i64 %_265, ptr %t169
-  %_266 = call ptr @rockit_string_new(ptr @.str.669)
+  %_266 = call ptr @rockit_string_new(ptr @.str.673)
   store ptr %_266, ptr %t170
   %_267 = load i64, ptr %t169
   %_270 = load ptr, ptr %t170
@@ -84290,7 +84503,7 @@ while_body_5:
   store i64 %_363, ptr %t233
   %_364 = load i64, ptr %t224
   store i64 %_364, ptr %t235
-  %_365 = call ptr @rockit_string_new(ptr @.str.526)
+  %_365 = call ptr @rockit_string_new(ptr @.str.527)
   store ptr %_365, ptr %t236
   %_366 = load i64, ptr %t235
   %_367 = load ptr, ptr %t236
@@ -84313,7 +84526,7 @@ while_body_5:
   store i64 %_377, ptr %t242
   %_378 = load i64, ptr %t224
   store i64 %_378, ptr %t243
-  %_379 = call ptr @rockit_string_new(ptr @.str.527)
+  %_379 = call ptr @rockit_string_new(ptr @.str.528)
   store ptr %_379, ptr %t244
   %_380 = load i64, ptr %t243
   %_381 = load ptr, ptr %t244
@@ -84330,7 +84543,7 @@ while_body_5:
   store i64 %_388, ptr %t248
   %_389 = load i64, ptr %t224
   store i64 %_389, ptr %t249
-  %_390 = call ptr @rockit_string_new(ptr @.str.668)
+  %_390 = call ptr @rockit_string_new(ptr @.str.672)
   store ptr %_390, ptr %t250
   %_391 = load i64, ptr %t249
   %_392 = load ptr, ptr %t250
@@ -84620,7 +84833,7 @@ while_body_7:
 while_exit_7:
   %_548 = load i64, ptr %t224
   store i64 %_548, ptr %t351
-  %_549 = call ptr @rockit_string_new(ptr @.str.644)
+  %_549 = call ptr @rockit_string_new(ptr @.str.648)
   store ptr %_549, ptr %t352
   %_550 = load i64, ptr %t351
   %_551 = load ptr, ptr %t352
@@ -84684,7 +84897,7 @@ while_body_8:
   store i64 %_583, ptr %t372
   %_584 = load i64, ptr %t368
   store i64 %_584, ptr %t373
-  %_585 = call ptr @rockit_string_new(ptr @.str.647)
+  %_585 = call ptr @rockit_string_new(ptr @.str.651)
   store ptr %_585, ptr %t374
   %_586 = load i64, ptr %t373
   %_587 = load ptr, ptr %t374
@@ -85352,7 +85565,7 @@ if_then_0:
   store ptr %_47, ptr %t27
   %_48 = load i64, ptr %t2
   store i64 %_48, ptr %t32
-  %_49 = call ptr @rockit_string_new(ptr @.str.628)
+  %_49 = call ptr @rockit_string_new(ptr @.str.632)
   store ptr %_49, ptr %t33
   %_50 = load i64, ptr %t32
   %_51 = load ptr, ptr %t33
@@ -85384,7 +85597,7 @@ if_then_0:
 if_then_1:
   %_67 = load i64, ptr %t2
   store i64 %_67, ptr %t44
-  %_68 = call ptr @rockit_string_new(ptr @.str.632)
+  %_68 = call ptr @rockit_string_new(ptr @.str.636)
   store ptr %_68, ptr %t45
   %_69 = load i64, ptr %t44
   %_70 = load ptr, ptr %t45
@@ -85529,7 +85742,7 @@ if_then_5:
   store ptr %_142, ptr %t89
   %_143 = load i64, ptr %t2
   store i64 %_143, ptr %t94
-  %_144 = call ptr @rockit_string_new(ptr @.str.634)
+  %_144 = call ptr @rockit_string_new(ptr @.str.638)
   store ptr %_144, ptr %t95
   %_145 = load i64, ptr %t94
   %_146 = load ptr, ptr %t95
@@ -85692,7 +85905,7 @@ while_body_2:
   store ptr %_232, ptr %t145
   %_233 = load i64, ptr %t2
   store i64 %_233, ptr %t151
-  %_234 = call ptr @rockit_string_new(ptr @.str.632)
+  %_234 = call ptr @rockit_string_new(ptr @.str.636)
   store ptr %_234, ptr %t152
   %_235 = load i64, ptr %t151
   %_236 = load ptr, ptr %t152
@@ -85851,7 +86064,7 @@ if_then_9:
 if_then_10:
   %_316 = load i64, ptr %t2
   store i64 %_316, ptr %t203
-  %_317 = call ptr @rockit_string_new(ptr @.str.633)
+  %_317 = call ptr @rockit_string_new(ptr @.str.637)
   store ptr %_317, ptr %t204
   %_318 = load i64, ptr %t203
   %_319 = load ptr, ptr %t204
@@ -85894,7 +86107,7 @@ if_merge_10:
 if_then_11:
   %_340 = load i64, ptr %t2
   store i64 %_340, ptr %t218
-  %_341 = call ptr @rockit_string_new(ptr @.str.635)
+  %_341 = call ptr @rockit_string_new(ptr @.str.639)
   store ptr %_341, ptr %t219
   %_342 = load i64, ptr %t218
   %_343 = load ptr, ptr %t219
@@ -86319,7 +86532,7 @@ while_exit_0:
   store ptr %_50, ptr %t36
   %_51 = load i64, ptr %t6
   store i64 %_51, ptr %t37
-  %_52 = call ptr @rockit_string_new(ptr @.str.678)
+  %_52 = call ptr @rockit_string_new(ptr @.str.682)
   store ptr %_52, ptr %t38
   %_53 = load i64, ptr %t37
   %_54 = load ptr, ptr %t38
@@ -86369,7 +86582,7 @@ if_then_2:
   store ptr %_77, ptr %t54
   %_78 = load i64, ptr %t6
   store i64 %_78, ptr %t55
-  %_79 = call ptr @rockit_string_new(ptr @.str.678)
+  %_79 = call ptr @rockit_string_new(ptr @.str.682)
   store ptr %_79, ptr %t56
   %_80 = load i64, ptr %t55
   %_81 = load ptr, ptr %t56
@@ -87173,11 +87386,11 @@ prologue:
   %t99 = alloca i64
   br label %entry
 entry:
-  %_0 = call ptr @rockit_string_new(ptr @.str.679)
+  %_0 = call ptr @rockit_string_new(ptr @.str.683)
   store ptr %_0, ptr %t0
   %_1 = load ptr, ptr %t0
   call void @rockit_println_string(ptr %_1)
-  %_2 = call ptr @rockit_string_new(ptr @.str.680)
+  %_2 = call ptr @rockit_string_new(ptr @.str.684)
   store ptr %_2, ptr %t2
   %_3 = load ptr, ptr %t2
   call void @rockit_println_string(ptr %_3)
@@ -87193,7 +87406,7 @@ entry:
 while_header_0:
   br label %while_body_0
 while_body_0:
-  %_8 = call ptr @rockit_string_new(ptr @.str.681)
+  %_8 = call ptr @rockit_string_new(ptr @.str.685)
   store ptr %_8, ptr %t9
   %_9 = load ptr, ptr %t9
   call void @rockit_print_string(ptr %_9)
@@ -87246,7 +87459,7 @@ if_else_1:
 if_merge_1:
   %_32 = load i64, ptr %t18
   store i64 %_32, ptr %t28
-  %_33 = call ptr @rockit_string_new(ptr @.str.682)
+  %_33 = call ptr @rockit_string_new(ptr @.str.686)
   store ptr %_33, ptr %t29
   %_34 = load i64, ptr %t28
   %_37 = load ptr, ptr %t29
@@ -87262,7 +87475,7 @@ if_else_2:
 if_merge_2:
   %_39 = load i64, ptr %t18
   store i64 %_39, ptr %t33
-  %_40 = call ptr @rockit_string_new(ptr @.str.683)
+  %_40 = call ptr @rockit_string_new(ptr @.str.687)
   store ptr %_40, ptr %t34
   %_41 = load i64, ptr %t33
   %_44 = load ptr, ptr %t34
@@ -87278,7 +87491,7 @@ if_else_3:
 if_merge_3:
   %_46 = load i64, ptr %t18
   store i64 %_46, ptr %t38
-  %_47 = call ptr @rockit_string_new(ptr @.str.684)
+  %_47 = call ptr @rockit_string_new(ptr @.str.688)
   store ptr %_47, ptr %t39
   %_48 = load i64, ptr %t38
   %_51 = load ptr, ptr %t39
@@ -87296,7 +87509,7 @@ if_then_4:
   store ptr %_55, ptr %t43
   %_56 = load ptr, ptr %t43
   store ptr %_56, ptr %t6
-  %_57 = call ptr @rockit_string_new(ptr @.str.685)
+  %_57 = call ptr @rockit_string_new(ptr @.str.689)
   store ptr %_57, ptr %t44
   %_58 = load ptr, ptr %t44
   call void @rockit_println_string(ptr %_58)
@@ -87416,7 +87629,7 @@ while_header_2:
   %_112 = load i1, ptr %t83
   br i1 %_112, label %while_body_2, label %while_exit_2
 while_body_2:
-  %_113 = call ptr @rockit_string_new(ptr @.str.686)
+  %_113 = call ptr @rockit_string_new(ptr @.str.690)
   store ptr %_113, ptr %t84
   %_114 = load ptr, ptr %t84
   call void @rockit_print_string(ptr %_114)
@@ -87560,7 +87773,7 @@ while_exit_3:
 while_exit_2:
   %_184 = load i64, ptr %t18
   store i64 %_184, ptr %t132
-  %_185 = call ptr @rockit_string_new(ptr @.str.687)
+  %_185 = call ptr @rockit_string_new(ptr @.str.691)
   store ptr %_185, ptr %t133
   %_186 = load i64, ptr %t132
   %_187 = load ptr, ptr %t133
@@ -87568,7 +87781,7 @@ while_exit_2:
   store i1 %_188, ptr %t134
   %_189 = load i64, ptr %t18
   store i64 %_189, ptr %t135
-  %_190 = call ptr @rockit_string_new(ptr @.str.688)
+  %_190 = call ptr @rockit_string_new(ptr @.str.692)
   store ptr %_190, ptr %t136
   %_191 = load i64, ptr %t135
   %_192 = load ptr, ptr %t136
@@ -87580,7 +87793,7 @@ while_exit_2:
   store i1 %_196, ptr %t138
   %_197 = load i64, ptr %t18
   store i64 %_197, ptr %t139
-  %_198 = call ptr @rockit_string_new(ptr @.str.689)
+  %_198 = call ptr @rockit_string_new(ptr @.str.693)
   store ptr %_198, ptr %t140
   %_199 = load i64, ptr %t139
   %_200 = load ptr, ptr %t140
@@ -87592,7 +87805,7 @@ while_exit_2:
   store i1 %_204, ptr %t142
   %_205 = load i64, ptr %t18
   store i64 %_205, ptr %t143
-  %_206 = call ptr @rockit_string_new(ptr @.str.690)
+  %_206 = call ptr @rockit_string_new(ptr @.str.694)
   store ptr %_206, ptr %t144
   %_207 = load i64, ptr %t143
   %_208 = load ptr, ptr %t144
@@ -87604,7 +87817,7 @@ while_exit_2:
   store i1 %_212, ptr %t146
   %_213 = load i64, ptr %t18
   store i64 %_213, ptr %t147
-  %_214 = call ptr @rockit_string_new(ptr @.str.691)
+  %_214 = call ptr @rockit_string_new(ptr @.str.695)
   store ptr %_214, ptr %t148
   %_215 = load i64, ptr %t147
   %_216 = load ptr, ptr %t148
@@ -87616,7 +87829,7 @@ while_exit_2:
   store i1 %_220, ptr %t150
   %_221 = load i64, ptr %t18
   store i64 %_221, ptr %t151
-  %_222 = call ptr @rockit_string_new(ptr @.str.692)
+  %_222 = call ptr @rockit_string_new(ptr @.str.696)
   store ptr %_222, ptr %t152
   %_223 = load i64, ptr %t151
   %_224 = load ptr, ptr %t152
@@ -87628,7 +87841,7 @@ while_exit_2:
   store i1 %_228, ptr %t154
   %_229 = load i64, ptr %t18
   store i64 %_229, ptr %t155
-  %_230 = call ptr @rockit_string_new(ptr @.str.693)
+  %_230 = call ptr @rockit_string_new(ptr @.str.697)
   store ptr %_230, ptr %t156
   %_231 = load i64, ptr %t155
   %_232 = load ptr, ptr %t156
@@ -87642,7 +87855,7 @@ while_exit_2:
   store i1 %_237, ptr %t131
   %_238 = load i64, ptr %t18
   store i64 %_238, ptr %t160
-  %_239 = call ptr @rockit_string_new(ptr @.str.694)
+  %_239 = call ptr @rockit_string_new(ptr @.str.698)
   store ptr %_239, ptr %t161
   %_240 = load i64, ptr %t160
   %_241 = load ptr, ptr %t161
@@ -87650,7 +87863,7 @@ while_exit_2:
   store i1 %_242, ptr %t162
   %_243 = load i64, ptr %t18
   store i64 %_243, ptr %t163
-  %_244 = call ptr @rockit_string_new(ptr @.str.695)
+  %_244 = call ptr @rockit_string_new(ptr @.str.699)
   store ptr %_244, ptr %t164
   %_245 = load i64, ptr %t163
   %_246 = load ptr, ptr %t164
@@ -87672,7 +87885,7 @@ while_exit_2:
   store i1 %_256, ptr %t170
   %_257 = load i64, ptr %t18
   store i64 %_257, ptr %t171
-  %_258 = call ptr @rockit_string_new(ptr @.str.696)
+  %_258 = call ptr @rockit_string_new(ptr @.str.700)
   store ptr %_258, ptr %t172
   %_259 = load i64, ptr %t171
   %_260 = load ptr, ptr %t172
@@ -87684,7 +87897,7 @@ while_exit_2:
   store i1 %_264, ptr %t174
   %_265 = load i64, ptr %t18
   store i64 %_265, ptr %t175
-  %_266 = call ptr @rockit_string_new(ptr @.str.697)
+  %_266 = call ptr @rockit_string_new(ptr @.str.701)
   store ptr %_266, ptr %t176
   %_267 = load i64, ptr %t175
   %_268 = load ptr, ptr %t176
@@ -87696,7 +87909,7 @@ while_exit_2:
   store i1 %_272, ptr %t178
   %_273 = load i64, ptr %t18
   store i64 %_273, ptr %t179
-  %_274 = call ptr @rockit_string_new(ptr @.str.698)
+  %_274 = call ptr @rockit_string_new(ptr @.str.702)
   store ptr %_274, ptr %t180
   %_275 = load i64, ptr %t179
   %_276 = load ptr, ptr %t180
@@ -87708,7 +87921,7 @@ while_exit_2:
   store i1 %_280, ptr %t182
   %_281 = load i64, ptr %t18
   store i64 %_281, ptr %t183
-  %_282 = call ptr @rockit_string_new(ptr @.str.699)
+  %_282 = call ptr @rockit_string_new(ptr @.str.703)
   store ptr %_282, ptr %t184
   %_283 = load i64, ptr %t183
   %_284 = load ptr, ptr %t184
@@ -87720,7 +87933,7 @@ while_exit_2:
   store i1 %_288, ptr %t186
   %_289 = load i64, ptr %t18
   store i64 %_289, ptr %t187
-  %_290 = call ptr @rockit_string_new(ptr @.str.700)
+  %_290 = call ptr @rockit_string_new(ptr @.str.704)
   store ptr %_290, ptr %t188
   %_291 = load i64, ptr %t187
   %_292 = load ptr, ptr %t188
@@ -87732,7 +87945,7 @@ while_exit_2:
   store i1 %_296, ptr %t190
   %_297 = load i64, ptr %t18
   store i64 %_297, ptr %t191
-  %_298 = call ptr @rockit_string_new(ptr @.str.701)
+  %_298 = call ptr @rockit_string_new(ptr @.str.705)
   store ptr %_298, ptr %t192
   %_299 = load i64, ptr %t191
   %_300 = load ptr, ptr %t192
@@ -87744,7 +87957,7 @@ while_exit_2:
   store i1 %_304, ptr %t194
   %_305 = load i64, ptr %t18
   store i64 %_305, ptr %t195
-  %_306 = call ptr @rockit_string_new(ptr @.str.702)
+  %_306 = call ptr @rockit_string_new(ptr @.str.706)
   store ptr %_306, ptr %t196
   %_307 = load i64, ptr %t195
   %_308 = load ptr, ptr %t196
@@ -87756,7 +87969,7 @@ while_exit_2:
   store i1 %_312, ptr %t198
   %_313 = load i64, ptr %t18
   store i64 %_313, ptr %t199
-  %_314 = call ptr @rockit_string_new(ptr @.str.703)
+  %_314 = call ptr @rockit_string_new(ptr @.str.707)
   store ptr %_314, ptr %t200
   %_315 = load i64, ptr %t199
   %_316 = load ptr, ptr %t200
@@ -87777,7 +87990,7 @@ if_then_10:
   store i64 %_324, ptr %t206
   %_325 = load i64, ptr %t47
   store i64 %_325, ptr %t207
-  %_326 = call ptr @rockit_string_new(ptr @.str.704)
+  %_326 = call ptr @rockit_string_new(ptr @.str.708)
   store ptr %_326, ptr %t208
   %_327 = load i64, ptr %t207
   %_328 = load ptr, ptr %t208
@@ -87791,11 +88004,11 @@ if_then_10:
   store ptr %_333, ptr %t205
   %_334 = load i64, ptr %t205
   store i64 %_334, ptr %t212
-  %_335 = call ptr @rockit_string_new(ptr @.str.705)
+  %_335 = call ptr @rockit_string_new(ptr @.str.709)
   store ptr %_335, ptr %t213
   %_336 = load i64, ptr %t6
   store i64 %_336, ptr %t214
-  %_337 = call ptr @rockit_string_new(ptr @.str.706)
+  %_337 = call ptr @rockit_string_new(ptr @.str.710)
   store ptr %_337, ptr %t215
   %_338 = load i64, ptr %t214
   %_339 = load ptr, ptr %t215
@@ -87820,7 +88033,7 @@ if_then_10:
   store i64 %_351, ptr %t219
   %_352 = load i64, ptr %t219
   store i64 %_352, ptr %t222
-  %_353 = call ptr @rockit_string_new(ptr @.str.707)
+  %_353 = call ptr @rockit_string_new(ptr @.str.711)
   store ptr %_353, ptr %t223
   %_354 = load i64, ptr %t222
   %_355 = load ptr, ptr %t223
@@ -87839,7 +88052,7 @@ if_else_11:
   store i64 %_360, ptr %t228
   %_361 = load i64, ptr %t228
   store i64 %_361, ptr %t4
-  %_362 = call ptr @rockit_string_new(ptr @.str.708)
+  %_362 = call ptr @rockit_string_new(ptr @.str.712)
   store ptr %_362, ptr %t229
   %_363 = load ptr, ptr %t229
   call void @rockit_println_string(ptr %_363)
@@ -87854,7 +88067,7 @@ if_else_10:
 if_then_12:
   %_366 = load i64, ptr %t6
   store i64 %_366, ptr %t235
-  %_367 = call ptr @rockit_string_new(ptr @.str.709)
+  %_367 = call ptr @rockit_string_new(ptr @.str.713)
   store ptr %_367, ptr %t236
   %_368 = load i64, ptr %t47
   store i64 %_368, ptr %t237
@@ -87876,11 +88089,11 @@ if_then_12:
   store ptr %_379, ptr %t234
   %_380 = load i64, ptr %t4
   store i64 %_380, ptr %t243
-  %_381 = call ptr @rockit_string_new(ptr @.str.705)
+  %_381 = call ptr @rockit_string_new(ptr @.str.709)
   store ptr %_381, ptr %t244
   %_382 = load i64, ptr %t234
   store i64 %_382, ptr %t245
-  %_383 = call ptr @rockit_string_new(ptr @.str.706)
+  %_383 = call ptr @rockit_string_new(ptr @.str.710)
   store ptr %_383, ptr %t246
   %_384 = load i64, ptr %t245
   %_385 = load ptr, ptr %t246
@@ -87905,7 +88118,7 @@ if_then_12:
   store i64 %_397, ptr %t250
   %_398 = load i64, ptr %t250
   store i64 %_398, ptr %t253
-  %_399 = call ptr @rockit_string_new(ptr @.str.707)
+  %_399 = call ptr @rockit_string_new(ptr @.str.711)
   store ptr %_399, ptr %t254
   %_400 = load i64, ptr %t253
   %_401 = load ptr, ptr %t254
@@ -87935,7 +88148,7 @@ if_else_12:
 if_then_14:
   %_410 = load i64, ptr %t6
   store i64 %_410, ptr %t264
-  %_411 = call ptr @rockit_string_new(ptr @.str.709)
+  %_411 = call ptr @rockit_string_new(ptr @.str.713)
   store ptr %_411, ptr %t265
   %_412 = load i64, ptr %t47
   store i64 %_412, ptr %t266
@@ -87957,11 +88170,11 @@ if_then_14:
   store ptr %_423, ptr %t263
   %_424 = load i64, ptr %t4
   store i64 %_424, ptr %t272
-  %_425 = call ptr @rockit_string_new(ptr @.str.705)
+  %_425 = call ptr @rockit_string_new(ptr @.str.709)
   store ptr %_425, ptr %t273
   %_426 = load i64, ptr %t263
   store i64 %_426, ptr %t274
-  %_427 = call ptr @rockit_string_new(ptr @.str.706)
+  %_427 = call ptr @rockit_string_new(ptr @.str.710)
   store ptr %_427, ptr %t275
   %_428 = load i64, ptr %t274
   %_429 = load ptr, ptr %t275
@@ -87986,7 +88199,7 @@ if_then_14:
   store i64 %_441, ptr %t279
   %_442 = load i64, ptr %t279
   store i64 %_442, ptr %t282
-  %_443 = call ptr @rockit_string_new(ptr @.str.707)
+  %_443 = call ptr @rockit_string_new(ptr @.str.711)
   store ptr %_443, ptr %t283
   %_444 = load i64, ptr %t282
   %_445 = load ptr, ptr %t283
@@ -88015,11 +88228,11 @@ if_merge_15:
 if_else_14:
   %_454 = load i64, ptr %t6
   store i64 %_454, ptr %t293
-  %_455 = call ptr @rockit_string_new(ptr @.str.710)
+  %_455 = call ptr @rockit_string_new(ptr @.str.714)
   store ptr %_455, ptr %t294
   %_456 = load i64, ptr %t47
   store i64 %_456, ptr %t295
-  %_457 = call ptr @rockit_string_new(ptr @.str.711)
+  %_457 = call ptr @rockit_string_new(ptr @.str.715)
   store ptr %_457, ptr %t296
   %_458 = load i64, ptr %t295
   %_459 = load ptr, ptr %t296
@@ -88037,11 +88250,11 @@ if_else_14:
   store ptr %_467, ptr %t292
   %_468 = load i64, ptr %t4
   store i64 %_468, ptr %t301
-  %_469 = call ptr @rockit_string_new(ptr @.str.705)
+  %_469 = call ptr @rockit_string_new(ptr @.str.709)
   store ptr %_469, ptr %t302
   %_470 = load i64, ptr %t292
   store i64 %_470, ptr %t303
-  %_471 = call ptr @rockit_string_new(ptr @.str.706)
+  %_471 = call ptr @rockit_string_new(ptr @.str.710)
   store ptr %_471, ptr %t304
   %_472 = load i64, ptr %t303
   %_473 = load ptr, ptr %t304
@@ -88066,7 +88279,7 @@ if_else_14:
   store i64 %_485, ptr %t308
   %_486 = load i64, ptr %t308
   store i64 %_486, ptr %t311
-  %_487 = call ptr @rockit_string_new(ptr @.str.707)
+  %_487 = call ptr @rockit_string_new(ptr @.str.711)
   store ptr %_487, ptr %t312
   %_488 = load i64, ptr %t311
   %_489 = load ptr, ptr %t312
@@ -88086,7 +88299,7 @@ if_then_16:
 if_else_16:
   %_496 = load i64, ptr %t6
   store i64 %_496, ptr %t319
-  %_497 = call ptr @rockit_string_new(ptr @.str.709)
+  %_497 = call ptr @rockit_string_new(ptr @.str.713)
   store ptr %_497, ptr %t320
   %_498 = load i64, ptr %t47
   store i64 %_498, ptr %t321
@@ -88108,11 +88321,11 @@ if_else_16:
   store ptr %_509, ptr %t318
   %_510 = load i64, ptr %t4
   store i64 %_510, ptr %t327
-  %_511 = call ptr @rockit_string_new(ptr @.str.705)
+  %_511 = call ptr @rockit_string_new(ptr @.str.709)
   store ptr %_511, ptr %t328
   %_512 = load i64, ptr %t318
   store i64 %_512, ptr %t329
-  %_513 = call ptr @rockit_string_new(ptr @.str.706)
+  %_513 = call ptr @rockit_string_new(ptr @.str.710)
   store ptr %_513, ptr %t330
   %_514 = load i64, ptr %t329
   %_515 = load ptr, ptr %t330
@@ -88137,7 +88350,7 @@ if_else_16:
   store i64 %_527, ptr %t334
   %_528 = load i64, ptr %t334
   store i64 %_528, ptr %t337
-  %_529 = call ptr @rockit_string_new(ptr @.str.707)
+  %_529 = call ptr @rockit_string_new(ptr @.str.711)
   store ptr %_529, ptr %t338
   %_530 = load i64, ptr %t337
   %_531 = load ptr, ptr %t338
@@ -88174,292 +88387,401 @@ prologue:
   %t0 = alloca i64
   %t1 = alloca i64
   %t10 = alloca i64
-  %t101 = alloca i1
+  %t100 = alloca i64
+  %t101 = alloca i64
   %t102 = alloca i64
-  %t103 = alloca ptr
-  %t104 = alloca i1
-  %t106 = alloca i1
+  %t103 = alloca i64
+  %t104 = alloca i64
+  %t105 = alloca ptr
   %t107 = alloca i64
   %t108 = alloca ptr
   %t109 = alloca i1
-  %t111 = alloca i1
+  %t11 = alloca ptr
+  %t111 = alloca i64
   %t112 = alloca i64
   %t113 = alloca i64
   %t114 = alloca i64
-  %t115 = alloca i1
-  %t117 = alloca i64
+  %t115 = alloca i64
+  %t116 = alloca i1
+  %t118 = alloca i64
+  %t119 = alloca i64
   %t12 = alloca i64
-  %t124 = alloca i64
-  %t125 = alloca i64
+  %t120 = alloca i64
+  %t121 = alloca i64
+  %t122 = alloca i64
+  %t123 = alloca i64
+  %t124 = alloca ptr
   %t126 = alloca i64
-  %t127 = alloca i64
-  %t128 = alloca i64
-  %t129 = alloca i64
-  %t13 = alloca i64
+  %t127 = alloca ptr
+  %t128 = alloca i1
   %t130 = alloca i1
-  %t132 = alloca i64
-  %t133 = alloca i64
-  %t134 = alloca i64
-  %t135 = alloca i64
+  %t131 = alloca i64
+  %t132 = alloca ptr
+  %t133 = alloca i1
+  %t135 = alloca i1
   %t136 = alloca i64
-  %t137 = alloca i64
+  %t137 = alloca ptr
+  %t138 = alloca i1
   %t14 = alloca i64
-  %t140 = alloca i64
+  %t140 = alloca i1
   %t141 = alloca i64
-  %t142 = alloca ptr
-  %t143 = alloca i1
-  %t145 = alloca i64
+  %t142 = alloca i64
+  %t143 = alloca i64
+  %t144 = alloca i1
   %t146 = alloca i64
-  %t147 = alloca i64
-  %t148 = alloca i64
-  %t149 = alloca i64
   %t15 = alloca i64
-  %t150 = alloca ptr
-  %t151 = alloca i64
-  %t152 = alloca ptr
-  %t153 = alloca i64
   %t154 = alloca i64
-  %t155 = alloca ptr
-  %t158 = alloca i64
-  %t159 = alloca i64
-  %t16 = alloca ptr
-  %t160 = alloca ptr
-  %t161 = alloca ptr
+  %t155 = alloca i64
+  %t156 = alloca i64
+  %t157 = alloca i64
+  %t159 = alloca i1
+  %t16 = alloca i64
+  %t161 = alloca i64
   %t162 = alloca i64
   %t163 = alloca i64
-  %t164 = alloca ptr
-  %t165 = alloca i64
+  %t164 = alloca i1
   %t166 = alloca i64
-  %t167 = alloca ptr
+  %t167 = alloca i64
   %t168 = alloca i64
   %t169 = alloca i64
   %t17 = alloca i64
-  %t170 = alloca ptr
   %t171 = alloca i64
-  %t172 = alloca i64
-  %t173 = alloca ptr
-  %t174 = alloca i64
+  %t172 = alloca ptr
+  %t173 = alloca i1
   %t175 = alloca i64
   %t176 = alloca i64
   %t177 = alloca i64
-  %t178 = alloca i1
+  %t178 = alloca i64
+  %t179 = alloca i64
   %t18 = alloca ptr
-  %t180 = alloca i64
-  %t181 = alloca ptr
-  %t182 = alloca i64
-  %t183 = alloca i64
-  %t184 = alloca ptr
-  %t185 = alloca ptr
-  %t186 = alloca ptr
-  %t187 = alloca ptr
-  %t188 = alloca ptr
-  %t189 = alloca i64
-  %t19 = alloca i1
+  %t180 = alloca ptr
+  %t181 = alloca i64
+  %t182 = alloca ptr
+  %t183 = alloca ptr
+  %t185 = alloca i64
+  %t186 = alloca i64
+  %t187 = alloca i64
+  %t19 = alloca i64
   %t190 = alloca i64
   %t191 = alloca i64
-  %t192 = alloca i64
-  %t193 = alloca i64
-  %t194 = alloca i64
-  %t195 = alloca i1
-  %t196 = alloca ptr
+  %t192 = alloca ptr
+  %t193 = alloca i1
+  %t195 = alloca i64
+  %t196 = alloca i64
   %t197 = alloca i64
   %t198 = alloca i64
   %t199 = alloca i64
   %t2 = alloca i64
+  %t20 = alloca ptr
   %t200 = alloca ptr
-  %t201 = alloca ptr
-  %t202 = alloca i64
+  %t201 = alloca i64
+  %t202 = alloca ptr
   %t203 = alloca i64
   %t204 = alloca i64
-  %t205 = alloca i64
-  %t207 = alloca i64
-  %t208 = alloca i64
-  %t209 = alloca ptr
-  %t21 = alloca i64
+  %t205 = alloca ptr
+  %t209 = alloca i64
+  %t21 = alloca i1
   %t210 = alloca i64
   %t211 = alloca ptr
-  %t212 = alloca i64
+  %t212 = alloca ptr
   %t213 = alloca i64
-  %t214 = alloca ptr
-  %t215 = alloca i64
+  %t214 = alloca i64
+  %t215 = alloca ptr
   %t216 = alloca i64
   %t217 = alloca i64
-  %t218 = alloca i64
+  %t218 = alloca ptr
   %t219 = alloca i64
   %t220 = alloca i64
   %t221 = alloca ptr
   %t222 = alloca i64
-  %t223 = alloca ptr
-  %t224 = alloca i64
+  %t223 = alloca i64
+  %t224 = alloca ptr
   %t225 = alloca i64
   %t226 = alloca i64
-  %t227 = alloca i1
-  %t229 = alloca i64
+  %t227 = alloca i64
+  %t228 = alloca i64
+  %t229 = alloca i1
   %t23 = alloca i64
-  %t230 = alloca i64
   %t231 = alloca i64
   %t232 = alloca ptr
   %t233 = alloca i64
   %t234 = alloca i64
   %t235 = alloca ptr
-  %t236 = alloca i64
-  %t237 = alloca i64
-  %t238 = alloca i64
-  %t239 = alloca i64
-  %t24 = alloca i64
-  %t240 = alloca i1
+  %t236 = alloca ptr
+  %t237 = alloca ptr
+  %t238 = alloca ptr
+  %t239 = alloca ptr
+  %t240 = alloca i64
+  %t241 = alloca i64
   %t242 = alloca i64
   %t243 = alloca i64
   %t244 = alloca i64
   %t245 = alloca i64
-  %t246 = alloca i64
-  %t247 = alloca i1
-  %t248 = alloca ptr
+  %t246 = alloca i1
+  %t247 = alloca ptr
+  %t248 = alloca i64
   %t249 = alloca i64
   %t25 = alloca i64
   %t250 = alloca i64
-  %t251 = alloca i64
+  %t251 = alloca ptr
   %t252 = alloca ptr
-  %t253 = alloca ptr
+  %t253 = alloca i64
   %t254 = alloca i64
   %t255 = alloca i64
   %t256 = alloca i64
-  %t257 = alloca i64
   %t258 = alloca i64
   %t259 = alloca i64
-  %t26 = alloca i1
+  %t26 = alloca i64
   %t260 = alloca ptr
-  %t261 = alloca ptr
+  %t261 = alloca i64
   %t262 = alloca ptr
   %t263 = alloca i64
+  %t264 = alloca i64
+  %t265 = alloca ptr
   %t266 = alloca i64
+  %t267 = alloca i64
   %t268 = alloca i64
-  %t269 = alloca ptr
+  %t269 = alloca i64
+  %t27 = alloca i64
+  %t270 = alloca i64
   %t271 = alloca i64
-  %t272 = alloca i64
-  %t273 = alloca ptr
-  %t274 = alloca i64
+  %t272 = alloca ptr
+  %t273 = alloca i64
+  %t274 = alloca ptr
   %t275 = alloca i64
   %t276 = alloca i64
   %t277 = alloca i64
-  %t278 = alloca ptr
-  %t279 = alloca i64
-  %t28 = alloca ptr
+  %t278 = alloca i1
+  %t28 = alloca i1
   %t280 = alloca i64
   %t281 = alloca i64
-  %t283 = alloca i64
+  %t282 = alloca i64
+  %t283 = alloca ptr
   %t284 = alloca i64
   %t285 = alloca i64
-  %t286 = alloca i64
-  %t287 = alloca ptr
+  %t286 = alloca ptr
+  %t287 = alloca i64
   %t288 = alloca i64
-  %t289 = alloca ptr
-  %t29 = alloca i64
-  %t290 = alloca ptr
-  %t291 = alloca i64
-  %t292 = alloca ptr
+  %t289 = alloca i64
+  %t290 = alloca i64
+  %t291 = alloca i1
   %t293 = alloca i64
-  %t294 = alloca ptr
-  %t295 = alloca ptr
-  %t296 = alloca ptr
-  %t297 = alloca ptr
-  %t298 = alloca i64
-  %t299 = alloca i64
+  %t294 = alloca i64
+  %t295 = alloca i64
+  %t296 = alloca i64
+  %t297 = alloca i64
+  %t298 = alloca i1
+  %t299 = alloca ptr
   %t3 = alloca i64
   %t30 = alloca ptr
   %t300 = alloca i64
-  %t301 = alloca ptr
+  %t301 = alloca i64
   %t302 = alloca i64
-  %t303 = alloca i64
-  %t304 = alloca i64
+  %t303 = alloca ptr
+  %t304 = alloca ptr
   %t305 = alloca i64
   %t306 = alloca i64
   %t307 = alloca i64
   %t308 = alloca i64
-  %t309 = alloca ptr
+  %t309 = alloca i64
   %t31 = alloca i64
   %t310 = alloca i64
   %t311 = alloca ptr
   %t312 = alloca ptr
-  %t313 = alloca i64
-  %t314 = alloca ptr
-  %t315 = alloca i64
-  %t316 = alloca ptr
-  %t317 = alloca ptr
-  %t318 = alloca i64
-  %t319 = alloca ptr
+  %t313 = alloca ptr
+  %t314 = alloca i64
+  %t317 = alloca i64
+  %t319 = alloca i64
+  %t32 = alloca ptr
   %t320 = alloca ptr
-  %t321 = alloca ptr
-  %t322 = alloca ptr
-  %t323 = alloca ptr
+  %t322 = alloca i64
+  %t323 = alloca i64
   %t324 = alloca ptr
   %t325 = alloca i64
+  %t326 = alloca i64
+  %t327 = alloca i64
+  %t328 = alloca i64
+  %t329 = alloca ptr
   %t33 = alloca i64
-  %t34 = alloca i64
+  %t330 = alloca i64
+  %t331 = alloca i64
+  %t332 = alloca i64
+  %t334 = alloca i64
+  %t335 = alloca i64
+  %t336 = alloca ptr
+  %t337 = alloca ptr
+  %t338 = alloca i64
+  %t339 = alloca i64
+  %t34 = alloca ptr
+  %t340 = alloca i64
+  %t341 = alloca i64
+  %t342 = alloca ptr
+  %t343 = alloca i64
+  %t344 = alloca ptr
+  %t345 = alloca ptr
+  %t346 = alloca ptr
+  %t347 = alloca ptr
+  %t348 = alloca i64
+  %t349 = alloca ptr
   %t35 = alloca i64
-  %t36 = alloca i64
-  %t37 = alloca ptr
+  %t350 = alloca i64
+  %t351 = alloca ptr
+  %t352 = alloca ptr
+  %t353 = alloca ptr
+  %t354 = alloca ptr
+  %t355 = alloca i64
+  %t356 = alloca i64
+  %t357 = alloca i64
+  %t358 = alloca i64
+  %t359 = alloca i1
+  %t361 = alloca i64
+  %t362 = alloca i64
+  %t363 = alloca ptr
+  %t364 = alloca ptr
+  %t365 = alloca i64
+  %t366 = alloca i1
+  %t368 = alloca i64
+  %t369 = alloca i64
+  %t37 = alloca i64
+  %t370 = alloca ptr
+  %t371 = alloca i64
+  %t372 = alloca i1
+  %t374 = alloca i64
+  %t375 = alloca ptr
+  %t376 = alloca i64
   %t38 = alloca i64
-  %t39 = alloca ptr
+  %t380 = alloca i64
+  %t381 = alloca ptr
+  %t382 = alloca i64
+  %t383 = alloca ptr
+  %t384 = alloca i64
+  %t385 = alloca ptr
+  %t386 = alloca i64
+  %t387 = alloca ptr
+  %t388 = alloca ptr
+  %t389 = alloca ptr
+  %t39 = alloca i64
+  %t390 = alloca ptr
+  %t391 = alloca ptr
+  %t392 = alloca i64
+  %t393 = alloca i64
+  %t394 = alloca i64
+  %t395 = alloca i64
+  %t396 = alloca i64
+  %t397 = alloca i1
+  %t399 = alloca ptr
   %t4 = alloca i64
   %t40 = alloca i64
+  %t400 = alloca i64
+  %t401 = alloca ptr
+  %t402 = alloca ptr
+  %t403 = alloca ptr
+  %t404 = alloca ptr
+  %t405 = alloca i64
+  %t406 = alloca ptr
+  %t407 = alloca i64
+  %t409 = alloca i64
   %t41 = alloca ptr
+  %t411 = alloca i64
+  %t412 = alloca i64
+  %t413 = alloca i64
+  %t414 = alloca i64
+  %t415 = alloca ptr
+  %t416 = alloca i64
+  %t417 = alloca ptr
+  %t418 = alloca ptr
+  %t419 = alloca i64
   %t42 = alloca i64
-  %t43 = alloca i64
+  %t420 = alloca ptr
+  %t421 = alloca i64
+  %t422 = alloca ptr
+  %t423 = alloca ptr
+  %t424 = alloca ptr
+  %t425 = alloca ptr
+  %t426 = alloca i64
+  %t427 = alloca i64
+  %t428 = alloca i64
+  %t429 = alloca ptr
+  %t43 = alloca ptr
+  %t430 = alloca i64
+  %t431 = alloca i64
+  %t432 = alloca i64
+  %t433 = alloca i64
+  %t434 = alloca i64
+  %t435 = alloca i64
+  %t436 = alloca i64
+  %t437 = alloca ptr
+  %t438 = alloca i64
+  %t439 = alloca ptr
   %t44 = alloca i64
-  %t45 = alloca i1
+  %t440 = alloca ptr
+  %t441 = alloca i64
+  %t442 = alloca ptr
+  %t443 = alloca i64
+  %t444 = alloca ptr
+  %t445 = alloca ptr
+  %t446 = alloca i64
+  %t447 = alloca ptr
+  %t448 = alloca ptr
+  %t449 = alloca ptr
+  %t45 = alloca ptr
+  %t450 = alloca ptr
+  %t451 = alloca ptr
+  %t452 = alloca ptr
+  %t453 = alloca i64
   %t46 = alloca i64
-  %t47 = alloca i1
+  %t47 = alloca ptr
   %t48 = alloca i64
-  %t49 = alloca i1
+  %t49 = alloca i64
   %t5 = alloca i1
   %t50 = alloca i64
-  %t51 = alloca i64
+  %t51 = alloca i1
   %t52 = alloca i64
   %t53 = alloca i1
   %t54 = alloca i64
-  %t55 = alloca i64
+  %t55 = alloca i1
   %t56 = alloca i64
   %t57 = alloca i64
   %t58 = alloca ptr
-  %t59 = alloca i64
-  %t60 = alloca ptr
-  %t61 = alloca i1
-  %t63 = alloca i64
+  %t59 = alloca i1
+  %t60 = alloca i64
+  %t61 = alloca i64
+  %t62 = alloca i64
+  %t63 = alloca i1
   %t64 = alloca i64
   %t65 = alloca i64
   %t66 = alloca i64
   %t67 = alloca i64
-  %t68 = alloca i1
+  %t68 = alloca ptr
+  %t69 = alloca i64
   %t7 = alloca ptr
-  %t70 = alloca i64
-  %t71 = alloca i64
-  %t72 = alloca i64
+  %t70 = alloca ptr
+  %t71 = alloca i1
   %t73 = alloca i64
   %t74 = alloca i64
   %t75 = alloca i64
-  %t76 = alloca ptr
-  %t78 = alloca i64
-  %t79 = alloca ptr
+  %t76 = alloca i64
+  %t77 = alloca i64
+  %t78 = alloca i1
   %t8 = alloca i64
-  %t80 = alloca i1
+  %t80 = alloca i64
+  %t81 = alloca i64
   %t82 = alloca i64
   %t83 = alloca i64
   %t84 = alloca i64
   %t85 = alloca i64
-  %t86 = alloca i64
-  %t87 = alloca i1
-  %t89 = alloca i64
+  %t86 = alloca ptr
+  %t88 = alloca i64
+  %t89 = alloca ptr
   %t9 = alloca ptr
-  %t90 = alloca i64
-  %t91 = alloca i64
+  %t90 = alloca i1
   %t92 = alloca i64
   %t93 = alloca i64
   %t94 = alloca i64
-  %t95 = alloca ptr
-  %t97 = alloca i64
-  %t98 = alloca ptr
-  %t99 = alloca i1
+  %t95 = alloca i64
+  %t96 = alloca i64
+  %t97 = alloca i1
+  %t99 = alloca i64
   call void @rockit_set_args(i32 %argc, ptr %argv)
   br label %entry
 entry:
@@ -88480,888 +88802,1248 @@ entry:
   %_8 = load i1, ptr %t5
   br i1 %_8, label %if_then_0, label %if_else_0
 if_then_0:
-  %_9 = call ptr @rockit_string_new(ptr @.str.712)
+  %_9 = call ptr @rockit_string_new(ptr @.str.716)
   store ptr %_9, ptr %t7
   %_10 = load ptr, ptr %t7
   call void @rockit_println_string(ptr %_10)
-  %_11 = call ptr @rockit_string_new(ptr @.str.713)
+  %_11 = call ptr @rockit_string_new(ptr @.str.717)
   store ptr %_11, ptr %t9
   %_12 = load ptr, ptr %t9
   call void @rockit_println_string(ptr %_12)
+  %_13 = call ptr @rockit_string_new(ptr @.str.718)
+  store ptr %_13, ptr %t11
+  %_14 = load ptr, ptr %t11
+  call void @rockit_println_string(ptr %_14)
   ret i32 0
 if_else_0:
   br label %if_merge_0
 if_merge_0:
-  %_13 = load i64, ptr %t0
-  store i64 %_13, ptr %t13
-  store i64 0, ptr %t14
-  %_14 = load i64, ptr %t13
-  %_15 = load i64, ptr %t14
-  %_16 = call i64 @listGet(i64 %_14, i64 %_15)
-  store i64 %_16, ptr %t15
-  %_17 = load i64, ptr %t15
-  %_18 = call ptr @toString(i64 %_17)
-  store ptr %_18, ptr %t16
-  %_19 = load ptr, ptr %t16
-  store ptr %_19, ptr %t12
-  %_20 = load i64, ptr %t12
-  store i64 %_20, ptr %t17
-  %_21 = call ptr @rockit_string_new(ptr @.str.714)
-  store ptr %_21, ptr %t18
-  %_22 = load i64, ptr %t17
-  %_25 = load ptr, ptr %t18
-  %_23 = ptrtoint ptr %_25 to i64
-  %_24 = call i1 @rockit_string_eq(i64 %_22, i64 %_23)
-  store i1 %_24, ptr %t19
-  %_26 = load i1, ptr %t19
-  br i1 %_26, label %if_then_1, label %if_else_1
+  %_15 = load i64, ptr %t0
+  store i64 %_15, ptr %t15
+  store i64 0, ptr %t16
+  %_16 = load i64, ptr %t15
+  %_17 = load i64, ptr %t16
+  %_18 = call i64 @listGet(i64 %_16, i64 %_17)
+  store i64 %_18, ptr %t17
+  %_19 = load i64, ptr %t17
+  %_20 = call ptr @toString(i64 %_19)
+  store ptr %_20, ptr %t18
+  %_21 = load ptr, ptr %t18
+  store ptr %_21, ptr %t14
+  %_22 = load i64, ptr %t14
+  store i64 %_22, ptr %t19
+  %_23 = call ptr @rockit_string_new(ptr @.str.719)
+  store ptr %_23, ptr %t20
+  %_24 = load i64, ptr %t19
+  %_27 = load ptr, ptr %t20
+  %_25 = ptrtoint ptr %_27 to i64
+  %_26 = call i1 @rockit_string_eq(i64 %_24, i64 %_25)
+  store i1 %_26, ptr %t21
+  %_28 = load i1, ptr %t21
+  br i1 %_28, label %if_then_1, label %if_else_1
 if_then_1:
-  %_27 = call i64 @replMain()
-  store i64 %_27, ptr %t21
+  %_29 = call i64 @replMain()
+  store i64 %_29, ptr %t23
   ret i32 0
 if_else_1:
   br label %if_merge_1
 if_merge_1:
-  %_28 = load i64, ptr %t0
-  store i64 %_28, ptr %t23
-  %_29 = load i64, ptr %t23
-  %_30 = call i64 @listSize(i64 %_29)
-  store i64 %_30, ptr %t24
-  store i64 2, ptr %t25
-  %_31 = load i64, ptr %t24
-  %_32 = load i64, ptr %t25
-  %_33 = icmp slt i64 %_31, %_32
-  store i1 %_33, ptr %t26
-  %_34 = load i1, ptr %t26
-  br i1 %_34, label %if_then_2, label %if_else_2
+  %_30 = load i64, ptr %t0
+  store i64 %_30, ptr %t25
+  %_31 = load i64, ptr %t25
+  %_32 = call i64 @listSize(i64 %_31)
+  store i64 %_32, ptr %t26
+  store i64 2, ptr %t27
+  %_33 = load i64, ptr %t26
+  %_34 = load i64, ptr %t27
+  %_35 = icmp slt i64 %_33, %_34
+  store i1 %_35, ptr %t28
+  %_36 = load i1, ptr %t28
+  br i1 %_36, label %if_then_2, label %if_else_2
 if_then_2:
-  %_35 = call ptr @rockit_string_new(ptr @.str.712)
-  store ptr %_35, ptr %t28
-  %_36 = load ptr, ptr %t28
-  call void @rockit_println_string(ptr %_36)
-  %_37 = call ptr @rockit_string_new(ptr @.str.713)
+  %_37 = call ptr @rockit_string_new(ptr @.str.716)
   store ptr %_37, ptr %t30
   %_38 = load ptr, ptr %t30
   call void @rockit_println_string(ptr %_38)
+  %_39 = call ptr @rockit_string_new(ptr @.str.717)
+  store ptr %_39, ptr %t32
+  %_40 = load ptr, ptr %t32
+  call void @rockit_println_string(ptr %_40)
+  %_41 = call ptr @rockit_string_new(ptr @.str.718)
+  store ptr %_41, ptr %t34
+  %_42 = load ptr, ptr %t34
+  call void @rockit_println_string(ptr %_42)
   ret i32 0
 if_else_2:
   br label %if_merge_2
 if_merge_2:
-  %_39 = load i64, ptr %t0
-  store i64 %_39, ptr %t34
-  store i64 1, ptr %t35
-  %_40 = load i64, ptr %t34
-  %_41 = load i64, ptr %t35
-  %_42 = call i64 @listGet(i64 %_40, i64 %_41)
-  store i64 %_42, ptr %t36
-  %_43 = load i64, ptr %t36
-  %_44 = call ptr @toString(i64 %_43)
-  store ptr %_44, ptr %t37
-  %_45 = load ptr, ptr %t37
-  store ptr %_45, ptr %t33
-  %_46 = call ptr @rockit_string_new(ptr @.str.123)
-  store ptr %_46, ptr %t39
-  %_47 = load ptr, ptr %t39
-  store ptr %_47, ptr %t38
-  %_48 = call ptr @rockit_string_new(ptr @.str.123)
+  %_43 = load i64, ptr %t0
+  store i64 %_43, ptr %t38
+  store i64 1, ptr %t39
+  %_44 = load i64, ptr %t38
+  %_45 = load i64, ptr %t39
+  %_46 = call i64 @listGet(i64 %_44, i64 %_45)
+  store i64 %_46, ptr %t40
+  %_47 = load i64, ptr %t40
+  %_48 = call ptr @toString(i64 %_47)
   store ptr %_48, ptr %t41
   %_49 = load ptr, ptr %t41
-  store ptr %_49, ptr %t40
-  store i64 2, ptr %t43
-  %_50 = load i64, ptr %t43
-  store i64 %_50, ptr %t42
-  store i1 0, ptr %t45
-  %_51 = load i1, ptr %t45
-  store i1 %_51, ptr %t44
-  store i1 0, ptr %t47
-  %_52 = load i1, ptr %t47
-  store i1 %_52, ptr %t46
-  store i1 0, ptr %t49
-  %_53 = load i1, ptr %t49
-  store i1 %_53, ptr %t48
+  store ptr %_49, ptr %t37
+  %_50 = call ptr @rockit_string_new(ptr @.str.123)
+  store ptr %_50, ptr %t43
+  %_51 = load ptr, ptr %t43
+  store ptr %_51, ptr %t42
+  %_52 = call ptr @rockit_string_new(ptr @.str.123)
+  store ptr %_52, ptr %t45
+  %_53 = load ptr, ptr %t45
+  store ptr %_53, ptr %t44
+  %_54 = call ptr @rockit_string_new(ptr @.str.123)
+  store ptr %_54, ptr %t47
+  %_55 = load ptr, ptr %t47
+  store ptr %_55, ptr %t46
+  store i64 2, ptr %t49
+  %_56 = load i64, ptr %t49
+  store i64 %_56, ptr %t48
+  store i1 0, ptr %t51
+  %_57 = load i1, ptr %t51
+  store i1 %_57, ptr %t50
+  store i1 0, ptr %t53
+  %_58 = load i1, ptr %t53
+  store i1 %_58, ptr %t52
+  store i1 0, ptr %t55
+  %_59 = load i1, ptr %t55
+  store i1 %_59, ptr %t54
+  %_60 = load i64, ptr %t14
+  store i64 %_60, ptr %t57
+  %_61 = call ptr @rockit_string_new(ptr @.str.720)
+  store ptr %_61, ptr %t58
+  %_62 = load i64, ptr %t57
+  %_65 = load ptr, ptr %t58
+  %_63 = ptrtoint ptr %_65 to i64
+  %_64 = call i1 @rockit_string_eq(i64 %_62, i64 %_63)
+  store i1 %_64, ptr %t59
+  %_66 = load i1, ptr %t59
+  store i1 %_66, ptr %t56
   br label %while_header_0
 while_header_0:
-  %_54 = load i64, ptr %t42
-  store i64 %_54, ptr %t50
-  %_55 = load i64, ptr %t0
-  store i64 %_55, ptr %t51
-  %_56 = load i64, ptr %t51
-  %_57 = call i64 @listSize(i64 %_56)
-  store i64 %_57, ptr %t52
-  %_58 = load i64, ptr %t50
-  %_59 = load i64, ptr %t52
-  %_60 = icmp slt i64 %_58, %_59
-  store i1 %_60, ptr %t53
-  %_61 = load i1, ptr %t53
-  br i1 %_61, label %while_body_0, label %while_exit_0
+  %_67 = load i64, ptr %t48
+  store i64 %_67, ptr %t60
+  %_68 = load i64, ptr %t0
+  store i64 %_68, ptr %t61
+  %_69 = load i64, ptr %t61
+  %_70 = call i64 @listSize(i64 %_69)
+  store i64 %_70, ptr %t62
+  %_71 = load i64, ptr %t60
+  %_72 = load i64, ptr %t62
+  %_73 = icmp slt i64 %_71, %_72
+  store i1 %_73, ptr %t63
+  %_74 = load i1, ptr %t63
+  br i1 %_74, label %while_body_0, label %while_exit_0
 while_body_0:
-  %_62 = load i64, ptr %t0
-  store i64 %_62, ptr %t55
-  %_63 = load i64, ptr %t42
-  store i64 %_63, ptr %t56
-  %_64 = load i64, ptr %t55
-  %_65 = load i64, ptr %t56
-  %_66 = call i64 @listGet(i64 %_64, i64 %_65)
-  store i64 %_66, ptr %t57
-  %_67 = load i64, ptr %t57
-  %_68 = call ptr @toString(i64 %_67)
-  store ptr %_68, ptr %t58
-  %_69 = load ptr, ptr %t58
-  store ptr %_69, ptr %t54
-  %_70 = load i64, ptr %t54
-  store i64 %_70, ptr %t59
-  %_71 = call ptr @rockit_string_new(ptr @.str.715)
-  store ptr %_71, ptr %t60
-  %_72 = load i64, ptr %t59
-  %_75 = load ptr, ptr %t60
-  %_73 = ptrtoint ptr %_75 to i64
-  %_74 = call i1 @rockit_string_eq(i64 %_72, i64 %_73)
-  store i1 %_74, ptr %t61
-  %_76 = load i1, ptr %t61
-  br i1 %_76, label %if_then_3, label %if_else_3
+  %_75 = load i64, ptr %t0
+  store i64 %_75, ptr %t65
+  %_76 = load i64, ptr %t48
+  store i64 %_76, ptr %t66
+  %_77 = load i64, ptr %t65
+  %_78 = load i64, ptr %t66
+  %_79 = call i64 @listGet(i64 %_77, i64 %_78)
+  store i64 %_79, ptr %t67
+  %_80 = load i64, ptr %t67
+  %_81 = call ptr @toString(i64 %_80)
+  store ptr %_81, ptr %t68
+  %_82 = load ptr, ptr %t68
+  store ptr %_82, ptr %t64
+  %_83 = load i64, ptr %t64
+  store i64 %_83, ptr %t69
+  %_84 = call ptr @rockit_string_new(ptr @.str.721)
+  store ptr %_84, ptr %t70
+  %_85 = load i64, ptr %t69
+  %_88 = load ptr, ptr %t70
+  %_86 = ptrtoint ptr %_88 to i64
+  %_87 = call i1 @rockit_string_eq(i64 %_85, i64 %_86)
+  store i1 %_87, ptr %t71
+  %_89 = load i1, ptr %t71
+  br i1 %_89, label %if_then_3, label %if_else_3
 if_then_3:
-  %_77 = load i64, ptr %t42
-  store i64 %_77, ptr %t63
-  store i64 1, ptr %t64
-  %_78 = load i64, ptr %t63
-  %_79 = load i64, ptr %t64
-  %_80 = add i64 %_78, %_79
-  store i64 %_80, ptr %t65
-  %_81 = load i64, ptr %t0
-  store i64 %_81, ptr %t66
-  %_82 = load i64, ptr %t66
-  %_83 = call i64 @listSize(i64 %_82)
-  store i64 %_83, ptr %t67
-  %_84 = load i64, ptr %t65
-  %_85 = load i64, ptr %t67
-  %_86 = icmp slt i64 %_84, %_85
-  store i1 %_86, ptr %t68
-  %_87 = load i1, ptr %t68
-  br i1 %_87, label %if_then_4, label %if_else_4
+  %_90 = load i64, ptr %t48
+  store i64 %_90, ptr %t73
+  store i64 1, ptr %t74
+  %_91 = load i64, ptr %t73
+  %_92 = load i64, ptr %t74
+  %_93 = add i64 %_91, %_92
+  store i64 %_93, ptr %t75
+  %_94 = load i64, ptr %t0
+  store i64 %_94, ptr %t76
+  %_95 = load i64, ptr %t76
+  %_96 = call i64 @listSize(i64 %_95)
+  store i64 %_96, ptr %t77
+  %_97 = load i64, ptr %t75
+  %_98 = load i64, ptr %t77
+  %_99 = icmp slt i64 %_97, %_98
+  store i1 %_99, ptr %t78
+  %_100 = load i1, ptr %t78
+  br i1 %_100, label %if_then_4, label %if_else_4
 if_then_4:
-  %_88 = load i64, ptr %t42
-  store i64 %_88, ptr %t70
-  store i64 1, ptr %t71
-  %_89 = load i64, ptr %t70
-  %_90 = load i64, ptr %t71
-  %_91 = add i64 %_89, %_90
-  store i64 %_91, ptr %t72
-  %_92 = load i64, ptr %t72
-  store i64 %_92, ptr %t42
-  %_93 = load i64, ptr %t0
-  store i64 %_93, ptr %t73
-  %_94 = load i64, ptr %t42
-  store i64 %_94, ptr %t74
-  %_95 = load i64, ptr %t73
-  %_96 = load i64, ptr %t74
-  %_97 = call i64 @listGet(i64 %_95, i64 %_96)
-  store i64 %_97, ptr %t75
-  %_98 = load i64, ptr %t75
-  %_99 = call ptr @toString(i64 %_98)
-  store ptr %_99, ptr %t76
-  %_100 = load ptr, ptr %t76
-  store ptr %_100, ptr %t40
+  %_101 = load i64, ptr %t48
+  store i64 %_101, ptr %t80
+  store i64 1, ptr %t81
+  %_102 = load i64, ptr %t80
+  %_103 = load i64, ptr %t81
+  %_104 = add i64 %_102, %_103
+  store i64 %_104, ptr %t82
+  %_105 = load i64, ptr %t82
+  store i64 %_105, ptr %t48
+  %_106 = load i64, ptr %t0
+  store i64 %_106, ptr %t83
+  %_107 = load i64, ptr %t48
+  store i64 %_107, ptr %t84
+  %_108 = load i64, ptr %t83
+  %_109 = load i64, ptr %t84
+  %_110 = call i64 @listGet(i64 %_108, i64 %_109)
+  store i64 %_110, ptr %t85
+  %_111 = load i64, ptr %t85
+  %_112 = call ptr @toString(i64 %_111)
+  store ptr %_112, ptr %t86
+  %_113 = load ptr, ptr %t86
+  store ptr %_113, ptr %t44
   br label %if_merge_4
 if_else_4:
   br label %if_merge_4
 if_merge_4:
   br label %if_merge_3
 if_else_3:
-  %_101 = load i64, ptr %t54
-  store i64 %_101, ptr %t78
-  %_102 = call ptr @rockit_string_new(ptr @.str.716)
-  store ptr %_102, ptr %t79
-  %_103 = load i64, ptr %t78
-  %_106 = load ptr, ptr %t79
-  %_104 = ptrtoint ptr %_106 to i64
-  %_105 = call i1 @rockit_string_eq(i64 %_103, i64 %_104)
-  store i1 %_105, ptr %t80
-  %_107 = load i1, ptr %t80
-  br i1 %_107, label %if_then_5, label %if_else_5
+  %_114 = load i64, ptr %t64
+  store i64 %_114, ptr %t88
+  %_115 = call ptr @rockit_string_new(ptr @.str.722)
+  store ptr %_115, ptr %t89
+  %_116 = load i64, ptr %t88
+  %_119 = load ptr, ptr %t89
+  %_117 = ptrtoint ptr %_119 to i64
+  %_118 = call i1 @rockit_string_eq(i64 %_116, i64 %_117)
+  store i1 %_118, ptr %t90
+  %_120 = load i1, ptr %t90
+  br i1 %_120, label %if_then_5, label %if_else_5
 if_then_5:
-  %_108 = load i64, ptr %t42
-  store i64 %_108, ptr %t82
-  store i64 1, ptr %t83
-  %_109 = load i64, ptr %t82
-  %_110 = load i64, ptr %t83
-  %_111 = add i64 %_109, %_110
-  store i64 %_111, ptr %t84
-  %_112 = load i64, ptr %t0
-  store i64 %_112, ptr %t85
-  %_113 = load i64, ptr %t85
-  %_114 = call i64 @listSize(i64 %_113)
-  store i64 %_114, ptr %t86
-  %_115 = load i64, ptr %t84
-  %_116 = load i64, ptr %t86
-  %_117 = icmp slt i64 %_115, %_116
-  store i1 %_117, ptr %t87
-  %_118 = load i1, ptr %t87
-  br i1 %_118, label %if_then_6, label %if_else_6
+  %_121 = load i64, ptr %t48
+  store i64 %_121, ptr %t92
+  store i64 1, ptr %t93
+  %_122 = load i64, ptr %t92
+  %_123 = load i64, ptr %t93
+  %_124 = add i64 %_122, %_123
+  store i64 %_124, ptr %t94
+  %_125 = load i64, ptr %t0
+  store i64 %_125, ptr %t95
+  %_126 = load i64, ptr %t95
+  %_127 = call i64 @listSize(i64 %_126)
+  store i64 %_127, ptr %t96
+  %_128 = load i64, ptr %t94
+  %_129 = load i64, ptr %t96
+  %_130 = icmp slt i64 %_128, %_129
+  store i1 %_130, ptr %t97
+  %_131 = load i1, ptr %t97
+  br i1 %_131, label %if_then_6, label %if_else_6
 if_then_6:
-  %_119 = load i64, ptr %t42
-  store i64 %_119, ptr %t89
-  store i64 1, ptr %t90
-  %_120 = load i64, ptr %t89
-  %_121 = load i64, ptr %t90
-  %_122 = add i64 %_120, %_121
-  store i64 %_122, ptr %t91
-  %_123 = load i64, ptr %t91
-  store i64 %_123, ptr %t42
-  %_124 = load i64, ptr %t0
-  store i64 %_124, ptr %t92
-  %_125 = load i64, ptr %t42
-  store i64 %_125, ptr %t93
-  %_126 = load i64, ptr %t92
-  %_127 = load i64, ptr %t93
-  %_128 = call i64 @listGet(i64 %_126, i64 %_127)
-  store i64 %_128, ptr %t94
-  %_129 = load i64, ptr %t94
-  %_130 = call ptr @toString(i64 %_129)
-  store ptr %_130, ptr %t95
-  %_131 = load ptr, ptr %t95
-  store ptr %_131, ptr %t38
+  %_132 = load i64, ptr %t48
+  store i64 %_132, ptr %t99
+  store i64 1, ptr %t100
+  %_133 = load i64, ptr %t99
+  %_134 = load i64, ptr %t100
+  %_135 = add i64 %_133, %_134
+  store i64 %_135, ptr %t101
+  %_136 = load i64, ptr %t101
+  store i64 %_136, ptr %t48
+  %_137 = load i64, ptr %t0
+  store i64 %_137, ptr %t102
+  %_138 = load i64, ptr %t48
+  store i64 %_138, ptr %t103
+  %_139 = load i64, ptr %t102
+  %_140 = load i64, ptr %t103
+  %_141 = call i64 @listGet(i64 %_139, i64 %_140)
+  store i64 %_141, ptr %t104
+  %_142 = load i64, ptr %t104
+  %_143 = call ptr @toString(i64 %_142)
+  store ptr %_143, ptr %t105
+  %_144 = load ptr, ptr %t105
+  store ptr %_144, ptr %t42
   br label %if_merge_6
 if_else_6:
   br label %if_merge_6
 if_merge_6:
   br label %if_merge_5
 if_else_5:
-  %_132 = load i64, ptr %t54
-  store i64 %_132, ptr %t97
-  %_133 = call ptr @rockit_string_new(ptr @.str.717)
-  store ptr %_133, ptr %t98
-  %_134 = load i64, ptr %t97
-  %_137 = load ptr, ptr %t98
-  %_135 = ptrtoint ptr %_137 to i64
-  %_136 = call i1 @rockit_string_eq(i64 %_134, i64 %_135)
-  store i1 %_136, ptr %t99
-  %_138 = load i1, ptr %t99
-  br i1 %_138, label %if_then_7, label %if_else_7
+  %_145 = load i64, ptr %t64
+  store i64 %_145, ptr %t107
+  %_146 = call ptr @rockit_string_new(ptr @.str.723)
+  store ptr %_146, ptr %t108
+  %_147 = load i64, ptr %t107
+  %_150 = load ptr, ptr %t108
+  %_148 = ptrtoint ptr %_150 to i64
+  %_149 = call i1 @rockit_string_eq(i64 %_147, i64 %_148)
+  store i1 %_149, ptr %t109
+  %_151 = load i1, ptr %t109
+  br i1 %_151, label %if_then_7, label %if_else_7
 if_then_7:
-  store i1 1, ptr %t101
-  %_139 = load i1, ptr %t101
-  store i1 %_139, ptr %t44
-  br label %if_merge_7
-if_else_7:
-  %_140 = load i64, ptr %t54
-  store i64 %_140, ptr %t102
-  %_141 = call ptr @rockit_string_new(ptr @.str.718)
-  store ptr %_141, ptr %t103
-  %_142 = load i64, ptr %t102
-  %_145 = load ptr, ptr %t103
-  %_143 = ptrtoint ptr %_145 to i64
-  %_144 = call i1 @rockit_string_eq(i64 %_142, i64 %_143)
-  store i1 %_144, ptr %t104
-  %_146 = load i1, ptr %t104
-  br i1 %_146, label %if_then_8, label %if_else_8
+  %_152 = load i64, ptr %t48
+  store i64 %_152, ptr %t111
+  store i64 1, ptr %t112
+  %_153 = load i64, ptr %t111
+  %_154 = load i64, ptr %t112
+  %_155 = add i64 %_153, %_154
+  store i64 %_155, ptr %t113
+  %_156 = load i64, ptr %t0
+  store i64 %_156, ptr %t114
+  %_157 = load i64, ptr %t114
+  %_158 = call i64 @listSize(i64 %_157)
+  store i64 %_158, ptr %t115
+  %_159 = load i64, ptr %t113
+  %_160 = load i64, ptr %t115
+  %_161 = icmp slt i64 %_159, %_160
+  store i1 %_161, ptr %t116
+  %_162 = load i1, ptr %t116
+  br i1 %_162, label %if_then_8, label %if_else_8
 if_then_8:
-  store i1 1, ptr %t106
-  %_147 = load i1, ptr %t106
-  store i1 %_147, ptr %t46
+  %_163 = load i64, ptr %t48
+  store i64 %_163, ptr %t118
+  store i64 1, ptr %t119
+  %_164 = load i64, ptr %t118
+  %_165 = load i64, ptr %t119
+  %_166 = add i64 %_164, %_165
+  store i64 %_166, ptr %t120
+  %_167 = load i64, ptr %t120
+  store i64 %_167, ptr %t48
+  %_168 = load i64, ptr %t0
+  store i64 %_168, ptr %t121
+  %_169 = load i64, ptr %t48
+  store i64 %_169, ptr %t122
+  %_170 = load i64, ptr %t121
+  %_171 = load i64, ptr %t122
+  %_172 = call i64 @listGet(i64 %_170, i64 %_171)
+  store i64 %_172, ptr %t123
+  %_173 = load i64, ptr %t123
+  %_174 = call ptr @toString(i64 %_173)
+  store ptr %_174, ptr %t124
+  %_175 = load ptr, ptr %t124
+  store ptr %_175, ptr %t46
   br label %if_merge_8
 if_else_8:
-  %_148 = load i64, ptr %t54
-  store i64 %_148, ptr %t107
-  %_149 = call ptr @rockit_string_new(ptr @.str.719)
-  store ptr %_149, ptr %t108
-  %_150 = load i64, ptr %t107
-  %_153 = load ptr, ptr %t108
-  %_151 = ptrtoint ptr %_153 to i64
-  %_152 = call i1 @rockit_string_eq(i64 %_150, i64 %_151)
-  store i1 %_152, ptr %t109
-  %_154 = load i1, ptr %t109
-  br i1 %_154, label %if_then_9, label %if_else_9
+  br label %if_merge_8
+if_merge_8:
+  br label %if_merge_7
+if_else_7:
+  %_176 = load i64, ptr %t64
+  store i64 %_176, ptr %t126
+  %_177 = call ptr @rockit_string_new(ptr @.str.724)
+  store ptr %_177, ptr %t127
+  %_178 = load i64, ptr %t126
+  %_181 = load ptr, ptr %t127
+  %_179 = ptrtoint ptr %_181 to i64
+  %_180 = call i1 @rockit_string_eq(i64 %_178, i64 %_179)
+  store i1 %_180, ptr %t128
+  %_182 = load i1, ptr %t128
+  br i1 %_182, label %if_then_9, label %if_else_9
 if_then_9:
-  store i1 1, ptr %t111
-  %_155 = load i1, ptr %t111
-  store i1 %_155, ptr %t48
+  store i1 1, ptr %t130
+  %_183 = load i1, ptr %t130
+  store i1 %_183, ptr %t50
   br label %if_merge_9
 if_else_9:
-  %_156 = load i64, ptr %t38
-  store i64 %_156, ptr %t112
-  %_157 = load i64, ptr %t112
-  %_158 = call i64 @stringLength(i64 %_157)
-  store i64 %_158, ptr %t113
-  store i64 0, ptr %t114
-  %_159 = load i64, ptr %t113
-  %_160 = load i64, ptr %t114
-  %_161 = call i1 @rockit_string_eq(i64 %_159, i64 %_160)
-  store i1 %_161, ptr %t115
-  %_162 = load i1, ptr %t115
-  br i1 %_162, label %if_then_10, label %if_else_10
+  %_184 = load i64, ptr %t64
+  store i64 %_184, ptr %t131
+  %_185 = call ptr @rockit_string_new(ptr @.str.725)
+  store ptr %_185, ptr %t132
+  %_186 = load i64, ptr %t131
+  %_189 = load ptr, ptr %t132
+  %_187 = ptrtoint ptr %_189 to i64
+  %_188 = call i1 @rockit_string_eq(i64 %_186, i64 %_187)
+  store i1 %_188, ptr %t133
+  %_190 = load i1, ptr %t133
+  br i1 %_190, label %if_then_10, label %if_else_10
 if_then_10:
-  %_163 = load i64, ptr %t54
-  store i64 %_163, ptr %t117
-  %_164 = load i64, ptr %t117
-  store i64 %_164, ptr %t38
+  store i1 1, ptr %t135
+  %_191 = load i1, ptr %t135
+  store i1 %_191, ptr %t52
   br label %if_merge_10
 if_else_10:
+  %_192 = load i64, ptr %t64
+  store i64 %_192, ptr %t136
+  %_193 = call ptr @rockit_string_new(ptr @.str.726)
+  store ptr %_193, ptr %t137
+  %_194 = load i64, ptr %t136
+  %_197 = load ptr, ptr %t137
+  %_195 = ptrtoint ptr %_197 to i64
+  %_196 = call i1 @rockit_string_eq(i64 %_194, i64 %_195)
+  store i1 %_196, ptr %t138
+  %_198 = load i1, ptr %t138
+  br i1 %_198, label %if_then_11, label %if_else_11
+if_then_11:
+  store i1 1, ptr %t140
+  %_199 = load i1, ptr %t140
+  store i1 %_199, ptr %t54
+  br label %if_merge_11
+if_else_11:
+  %_200 = load i64, ptr %t42
+  store i64 %_200, ptr %t141
+  %_201 = load i64, ptr %t141
+  %_202 = call i64 @stringLength(i64 %_201)
+  store i64 %_202, ptr %t142
+  store i64 0, ptr %t143
+  %_203 = load i64, ptr %t142
+  %_204 = load i64, ptr %t143
+  %_205 = call i1 @rockit_string_eq(i64 %_203, i64 %_204)
+  store i1 %_205, ptr %t144
+  %_206 = load i1, ptr %t144
+  br i1 %_206, label %if_then_12, label %if_else_12
+if_then_12:
+  %_207 = load i64, ptr %t64
+  store i64 %_207, ptr %t146
+  %_208 = load i64, ptr %t146
+  store i64 %_208, ptr %t42
+  br label %if_merge_12
+if_else_12:
+  br label %if_merge_12
+if_merge_12:
+  br label %if_merge_11
+if_merge_11:
   br label %if_merge_10
 if_merge_10:
   br label %if_merge_9
 if_merge_9:
-  br label %if_merge_8
-if_merge_8:
   br label %if_merge_7
 if_merge_7:
   br label %if_merge_5
 if_merge_5:
   br label %if_merge_3
 if_merge_3:
-  %_165 = load i64, ptr %t42
-  store i64 %_165, ptr %t124
-  store i64 1, ptr %t125
-  %_166 = load i64, ptr %t124
-  %_167 = load i64, ptr %t125
-  %_168 = add i64 %_166, %_167
-  store i64 %_168, ptr %t126
-  %_169 = load i64, ptr %t126
-  store i64 %_169, ptr %t42
+  %_209 = load i64, ptr %t48
+  store i64 %_209, ptr %t154
+  store i64 1, ptr %t155
+  %_210 = load i64, ptr %t154
+  %_211 = load i64, ptr %t155
+  %_212 = add i64 %_210, %_211
+  store i64 %_212, ptr %t156
+  %_213 = load i64, ptr %t156
+  store i64 %_213, ptr %t48
   br label %while_header_0
 while_exit_0:
-  %_170 = load i64, ptr %t38
-  store i64 %_170, ptr %t127
-  %_171 = load i64, ptr %t127
-  %_172 = call i64 @stringLength(i64 %_171)
-  store i64 %_172, ptr %t128
-  store i64 0, ptr %t129
-  %_173 = load i64, ptr %t128
-  %_174 = load i64, ptr %t129
-  %_175 = call i1 @rockit_string_eq(i64 %_173, i64 %_174)
-  store i1 %_175, ptr %t130
-  %_176 = load i1, ptr %t130
-  br i1 %_176, label %if_then_11, label %if_else_11
-if_then_11:
-  %_177 = load i64, ptr %t33
-  store i64 %_177, ptr %t133
-  %_178 = load i64, ptr %t133
-  %_179 = call i64 @stringLength(i64 %_178)
-  store i64 %_179, ptr %t134
-  %_180 = load i64, ptr %t134
-  store i64 %_180, ptr %t132
-  %_181 = load i64, ptr %t48
-  store i64 %_181, ptr %t136
-  %_182 = load i1, ptr %t136
-  br i1 %_182, label %if_then_12, label %if_else_12
-if_then_12:
-  br label %if_merge_12
-if_else_12:
-  br label %if_merge_12
-if_merge_12:
-  %_183 = load i64, ptr %t137
-  store i64 %_183, ptr %t140
-  %_184 = load i64, ptr %t140
-  store i64 %_184, ptr %t135
-  %_185 = load i64, ptr %t33
-  store i64 %_185, ptr %t141
-  %_186 = call ptr @rockit_string_new(ptr @.str.678)
-  store ptr %_186, ptr %t142
-  %_187 = load i64, ptr %t141
-  %_188 = load ptr, ptr %t142
-  %_189 = call i1 @endsWith(i64 %_187, ptr %_188)
-  store i1 %_189, ptr %t143
-  %_190 = load i1, ptr %t143
-  br i1 %_190, label %if_then_13, label %if_else_13
+  %_214 = load i64, ptr %t56
+  store i64 %_214, ptr %t157
+  %_215 = load i1, ptr %t157
+  br i1 %_215, label %if_then_13, label %if_else_13
 if_then_13:
-  %_191 = load i64, ptr %t33
-  store i64 %_191, ptr %t145
-  store i64 0, ptr %t146
-  %_192 = load i64, ptr %t132
-  store i64 %_192, ptr %t147
-  store i64 4, ptr %t148
-  %_193 = load i64, ptr %t147
-  %_194 = load i64, ptr %t148
-  %_195 = sub i64 %_193, %_194
-  store i64 %_195, ptr %t149
-  %_196 = load i64, ptr %t145
-  %_197 = load i64, ptr %t146
-  %_198 = load i64, ptr %t149
-  %_199 = call ptr @substring(i64 %_196, i64 %_197, i64 %_198)
-  store ptr %_199, ptr %t150
-  %_200 = load i64, ptr %t135
-  store i64 %_200, ptr %t151
-  %_201 = load ptr, ptr %t150
-  %_202 = load i64, ptr %t151
-  %_203 = call ptr @stringConcat(ptr %_201, i64 %_202)
-  store ptr %_203, ptr %t152
-  %_204 = load ptr, ptr %t152
-  store ptr %_204, ptr %t38
+  store i1 1, ptr %t159
+  %_216 = load i1, ptr %t159
+  store i1 %_216, ptr %t54
   br label %if_merge_13
 if_else_13:
-  %_205 = load i64, ptr %t33
-  store i64 %_205, ptr %t153
-  %_206 = load i64, ptr %t135
-  store i64 %_206, ptr %t154
-  %_207 = load i64, ptr %t153
-  %_208 = load i64, ptr %t154
-  %_209 = call ptr @stringConcat(i64 %_207, i64 %_208)
-  store ptr %_209, ptr %t155
-  %_210 = load ptr, ptr %t155
-  store ptr %_210, ptr %t38
   br label %if_merge_13
 if_merge_13:
-  br label %if_merge_11
-if_else_11:
-  br label %if_merge_11
-if_merge_11:
-  %_211 = load i64, ptr %t33
-  store i64 %_211, ptr %t159
-  %_212 = load i64, ptr %t159
-  %_213 = call ptr @fileRead(i64 %_212)
-  store ptr %_213, ptr %t160
-  %_214 = load ptr, ptr %t160
-  store ptr %_214, ptr %t161
-  %_216 = load ptr, ptr %t161
-  store ptr %_216, ptr %t158
-  %_217 = load i64, ptr %t158
-  store i64 %_217, ptr %t163
-  %_218 = load i64, ptr %t163
-  %_219 = call ptr @tokenize(i64 %_218)
-  store ptr %_219, ptr %t164
-  %_220 = load ptr, ptr %t164
-  store ptr %_220, ptr %t162
-  %_221 = load i64, ptr %t162
-  store i64 %_221, ptr %t166
-  %_222 = load i64, ptr %t166
-  %_223 = call ptr @makeParser(i64 %_222)
-  store ptr %_223, ptr %t167
-  %_224 = load ptr, ptr %t167
-  store ptr %_224, ptr %t165
-  %_225 = load i64, ptr %t165
-  store i64 %_225, ptr %t169
-  %_226 = load i64, ptr %t169
-  %_227 = call ptr @parseProgram(i64 %_226)
-  store ptr %_227, ptr %t170
-  %_228 = load ptr, ptr %t170
-  store ptr %_228, ptr %t168
-  %_229 = load i64, ptr %t165
-  store i64 %_229, ptr %t172
-  %_230 = call ptr @rockit_string_new(ptr @.str.250)
-  store ptr %_230, ptr %t173
-  %_231 = load i64, ptr %t172
-  %_232 = load ptr, ptr %t173
-  %_233 = call i64 @mapGet(i64 %_231, ptr %_232)
-  store i64 %_233, ptr %t174
-  %_234 = load i64, ptr %t174
-  store i64 %_234, ptr %t171
-  %_235 = load i64, ptr %t171
-  store i64 %_235, ptr %t175
-  %_236 = load i64, ptr %t175
-  %_237 = call i64 @listSize(i64 %_236)
-  store i64 %_237, ptr %t176
-  store i64 0, ptr %t177
-  %_238 = load i64, ptr %t176
-  %_239 = load i64, ptr %t177
-  %_240 = icmp sgt i64 %_238, %_239
-  store i1 %_240, ptr %t178
-  %_241 = load i1, ptr %t178
-  br i1 %_241, label %if_then_14, label %if_else_14
+  %_217 = load i64, ptr %t42
+  store i64 %_217, ptr %t161
+  %_218 = load i64, ptr %t161
+  %_219 = call i64 @stringLength(i64 %_218)
+  store i64 %_219, ptr %t162
+  store i64 0, ptr %t163
+  %_220 = load i64, ptr %t162
+  %_221 = load i64, ptr %t163
+  %_222 = call i1 @rockit_string_eq(i64 %_220, i64 %_221)
+  store i1 %_222, ptr %t164
+  %_223 = load i1, ptr %t164
+  br i1 %_223, label %if_then_14, label %if_else_14
 if_then_14:
-  %_242 = load i64, ptr %t33
-  store i64 %_242, ptr %t180
-  %_243 = call ptr @rockit_string_new(ptr @.str.720)
-  store ptr %_243, ptr %t181
-  %_244 = load i64, ptr %t171
-  store i64 %_244, ptr %t182
-  %_245 = load i64, ptr %t182
-  %_246 = call i64 @listSize(i64 %_245)
-  store i64 %_246, ptr %t183
-  %_247 = load i64, ptr %t183
-  %_248 = call ptr @toString(i64 %_247)
-  store ptr %_248, ptr %t184
-  %_249 = call ptr @rockit_string_new(ptr @.str.721)
-  store ptr %_249, ptr %t185
-  %_250 = load ptr, ptr %t184
-  %_251 = load ptr, ptr %t185
-  %_252 = call ptr @stringConcat(ptr %_250, ptr %_251)
-  store ptr %_252, ptr %t186
-  %_253 = load ptr, ptr %t181
-  %_254 = load ptr, ptr %t186
-  %_255 = call ptr @stringConcat(ptr %_253, ptr %_254)
-  store ptr %_255, ptr %t187
-  %_256 = load i64, ptr %t180
-  %_257 = load ptr, ptr %t187
-  %_258 = call ptr @stringConcat(i64 %_256, ptr %_257)
-  store ptr %_258, ptr %t188
-  %_259 = load ptr, ptr %t188
-  call void @rockit_println_string(ptr %_259)
-  store i64 0, ptr %t191
-  %_260 = load i64, ptr %t191
-  store i64 %_260, ptr %t190
-  br label %while_header_1
-while_header_1:
-  %_261 = load i64, ptr %t190
-  store i64 %_261, ptr %t192
-  %_262 = load i64, ptr %t171
-  store i64 %_262, ptr %t193
-  %_263 = load i64, ptr %t193
-  %_264 = call i64 @listSize(i64 %_263)
-  store i64 %_264, ptr %t194
-  %_265 = load i64, ptr %t192
-  %_266 = load i64, ptr %t194
-  %_267 = icmp slt i64 %_265, %_266
-  store i1 %_267, ptr %t195
-  %_268 = load i1, ptr %t195
-  br i1 %_268, label %while_body_1, label %while_exit_1
-while_body_1:
-  %_269 = call ptr @rockit_string_new(ptr @.str.549)
-  store ptr %_269, ptr %t196
-  %_270 = load i64, ptr %t171
-  store i64 %_270, ptr %t197
-  %_271 = load i64, ptr %t190
-  store i64 %_271, ptr %t198
-  %_272 = load i64, ptr %t197
-  %_273 = load i64, ptr %t198
-  %_274 = call i64 @listGet(i64 %_272, i64 %_273)
-  store i64 %_274, ptr %t199
-  %_275 = load i64, ptr %t199
-  %_276 = call ptr @toString(i64 %_275)
-  store ptr %_276, ptr %t200
-  %_277 = load ptr, ptr %t196
-  %_278 = load ptr, ptr %t200
-  %_279 = call ptr @stringConcat(ptr %_277, ptr %_278)
-  store ptr %_279, ptr %t201
-  %_280 = load ptr, ptr %t201
-  call void @rockit_println_string(ptr %_280)
-  %_281 = load i64, ptr %t190
-  store i64 %_281, ptr %t203
-  store i64 1, ptr %t204
-  %_282 = load i64, ptr %t203
-  %_283 = load i64, ptr %t204
-  %_284 = add i64 %_282, %_283
-  store i64 %_284, ptr %t205
-  %_285 = load i64, ptr %t205
-  store i64 %_285, ptr %t190
-  br label %while_header_1
-while_exit_1:
-  ret i32 0
-if_else_14:
-  br label %if_merge_14
-if_merge_14:
-  %_286 = load i64, ptr %t33
-  store i64 %_286, ptr %t208
-  %_287 = load i64, ptr %t208
-  %_288 = call ptr @dirName(i64 %_287)
-  store ptr %_288, ptr %t209
-  %_289 = load ptr, ptr %t209
-  store ptr %_289, ptr %t207
-  %_290 = call ptr @mapCreate()
-  store ptr %_290, ptr %t211
-  %_291 = load ptr, ptr %t211
-  store ptr %_291, ptr %t210
-  %_292 = load i64, ptr %t168
-  store i64 %_292, ptr %t213
-  %_293 = call ptr @rockit_string_new(ptr @.str.349)
-  store ptr %_293, ptr %t214
-  %_294 = load i64, ptr %t213
-  %_295 = load ptr, ptr %t214
-  %_296 = call i64 @mapGet(i64 %_294, ptr %_295)
-  store i64 %_296, ptr %t215
-  %_297 = load i64, ptr %t215
-  store i64 %_297, ptr %t212
-  %_298 = load i64, ptr %t212
-  store i64 %_298, ptr %t217
-  %_299 = load i64, ptr %t207
-  store i64 %_299, ptr %t218
-  %_300 = load i64, ptr %t40
-  store i64 %_300, ptr %t219
-  %_301 = load i64, ptr %t210
-  store i64 %_301, ptr %t220
-  %_302 = load i64, ptr %t217
-  %_303 = load i64, ptr %t218
-  %_304 = load i64, ptr %t219
-  %_305 = load i64, ptr %t220
-  %_306 = call ptr @resolveImports(i64 %_302, i64 %_303, i64 %_304, i64 %_305)
-  store ptr %_306, ptr %t221
-  %_307 = load ptr, ptr %t221
-  store ptr %_307, ptr %t216
-  %_308 = load i64, ptr %t168
-  store i64 %_308, ptr %t222
-  %_309 = call ptr @rockit_string_new(ptr @.str.349)
-  store ptr %_309, ptr %t223
-  %_310 = load i64, ptr %t216
-  store i64 %_310, ptr %t224
-  %_311 = load i64, ptr %t222
-  %_312 = load ptr, ptr %t223
-  %_313 = load i64, ptr %t224
-  %_314 = call i64 @mapPut(i64 %_311, ptr %_312, i64 %_313)
-  store i64 %_314, ptr %t225
-  %_315 = load i64, ptr %t44
-  store i64 %_315, ptr %t226
-  %_316 = load i1, ptr %t226
-  %_317 = xor i1 %_316, 1
-  store i1 %_317, ptr %t227
-  %_318 = load i1, ptr %t227
-  br i1 %_318, label %if_then_15, label %if_else_15
+  %_224 = load i64, ptr %t37
+  store i64 %_224, ptr %t167
+  %_225 = load i64, ptr %t167
+  %_226 = call i64 @stringLength(i64 %_225)
+  store i64 %_226, ptr %t168
+  %_227 = load i64, ptr %t168
+  store i64 %_227, ptr %t166
+  %_228 = load i64, ptr %t56
+  store i64 %_228, ptr %t169
+  %_229 = load i1, ptr %t169
+  br i1 %_229, label %if_then_15, label %if_else_15
 if_then_15:
-  %_319 = load i64, ptr %t168
-  store i64 %_319, ptr %t230
-  %_320 = load i64, ptr %t33
-  store i64 %_320, ptr %t231
-  %_321 = load i64, ptr %t230
-  %_322 = load i64, ptr %t231
-  %_323 = call ptr @typeCheckWithFile(i64 %_321, i64 %_322)
-  store ptr %_323, ptr %t232
-  %_324 = load ptr, ptr %t232
-  store ptr %_324, ptr %t229
-  %_325 = load i64, ptr %t229
-  store i64 %_325, ptr %t234
-  %_326 = call ptr @rockit_string_new(ptr @.str.250)
-  store ptr %_326, ptr %t235
-  %_327 = load i64, ptr %t234
-  %_328 = load ptr, ptr %t235
-  %_329 = call i64 @mapGet(i64 %_327, ptr %_328)
-  store i64 %_329, ptr %t236
-  %_330 = load i64, ptr %t236
-  store i64 %_330, ptr %t233
-  %_331 = load i64, ptr %t233
-  store i64 %_331, ptr %t237
-  %_332 = load i64, ptr %t237
-  %_333 = call i64 @listSize(i64 %_332)
-  store i64 %_333, ptr %t238
-  store i64 0, ptr %t239
-  %_334 = load i64, ptr %t238
-  %_335 = load i64, ptr %t239
-  %_336 = icmp sgt i64 %_334, %_335
-  store i1 %_336, ptr %t240
-  %_337 = load i1, ptr %t240
-  br i1 %_337, label %if_then_16, label %if_else_16
+  %_230 = load i64, ptr %t37
+  store i64 %_230, ptr %t171
+  %_231 = call ptr @rockit_string_new(ptr @.str.682)
+  store ptr %_231, ptr %t172
+  %_232 = load i64, ptr %t171
+  %_233 = load ptr, ptr %t172
+  %_234 = call i1 @endsWith(i64 %_232, ptr %_233)
+  store i1 %_234, ptr %t173
+  %_235 = load i1, ptr %t173
+  br i1 %_235, label %if_then_16, label %if_else_16
 if_then_16:
-  store i64 0, ptr %t243
-  %_338 = load i64, ptr %t243
-  store i64 %_338, ptr %t242
-  br label %while_header_2
-while_header_2:
-  %_339 = load i64, ptr %t242
-  store i64 %_339, ptr %t244
-  %_340 = load i64, ptr %t233
-  store i64 %_340, ptr %t245
-  %_341 = load i64, ptr %t245
-  %_342 = call i64 @listSize(i64 %_341)
-  store i64 %_342, ptr %t246
-  %_343 = load i64, ptr %t244
-  %_344 = load i64, ptr %t246
-  %_345 = icmp slt i64 %_343, %_344
-  store i1 %_345, ptr %t247
-  %_346 = load i1, ptr %t247
-  br i1 %_346, label %while_body_2, label %while_exit_2
-while_body_2:
-  %_347 = call ptr @rockit_string_new(ptr @.str.359)
-  store ptr %_347, ptr %t248
-  %_348 = load i64, ptr %t233
-  store i64 %_348, ptr %t249
-  %_349 = load i64, ptr %t242
-  store i64 %_349, ptr %t250
-  %_350 = load i64, ptr %t249
-  %_351 = load i64, ptr %t250
-  %_352 = call i64 @listGet(i64 %_350, i64 %_351)
-  store i64 %_352, ptr %t251
-  %_353 = load i64, ptr %t251
-  %_354 = call ptr @toString(i64 %_353)
-  store ptr %_354, ptr %t252
-  %_355 = load ptr, ptr %t248
-  %_356 = load ptr, ptr %t252
-  %_357 = call ptr @stringConcat(ptr %_355, ptr %_356)
-  store ptr %_357, ptr %t253
-  %_358 = load ptr, ptr %t253
-  call void @rockit_println_string(ptr %_358)
-  %_359 = load i64, ptr %t242
-  store i64 %_359, ptr %t255
-  store i64 1, ptr %t256
-  %_360 = load i64, ptr %t255
-  %_361 = load i64, ptr %t256
-  %_362 = add i64 %_360, %_361
-  store i64 %_362, ptr %t257
-  %_363 = load i64, ptr %t257
-  store i64 %_363, ptr %t242
-  br label %while_header_2
-while_exit_2:
-  %_364 = load i64, ptr %t233
-  store i64 %_364, ptr %t258
-  %_365 = load i64, ptr %t258
-  %_366 = call i64 @listSize(i64 %_365)
-  store i64 %_366, ptr %t259
-  %_367 = load i64, ptr %t259
-  %_368 = call ptr @toString(i64 %_367)
-  store ptr %_368, ptr %t260
-  %_369 = call ptr @rockit_string_new(ptr @.str.722)
-  store ptr %_369, ptr %t261
-  %_370 = load ptr, ptr %t260
-  %_371 = load ptr, ptr %t261
-  %_372 = call ptr @stringConcat(ptr %_370, ptr %_371)
-  store ptr %_372, ptr %t262
-  %_373 = load ptr, ptr %t262
-  call void @rockit_println_string(ptr %_373)
+  %_236 = load i64, ptr %t37
+  store i64 %_236, ptr %t175
+  store i64 0, ptr %t176
+  %_237 = load i64, ptr %t166
+  store i64 %_237, ptr %t177
+  store i64 4, ptr %t178
+  %_238 = load i64, ptr %t177
+  %_239 = load i64, ptr %t178
+  %_240 = sub i64 %_238, %_239
+  store i64 %_240, ptr %t179
+  %_241 = load i64, ptr %t175
+  %_242 = load i64, ptr %t176
+  %_243 = load i64, ptr %t179
+  %_244 = call ptr @substring(i64 %_241, i64 %_242, i64 %_243)
+  store ptr %_244, ptr %t180
+  %_245 = load ptr, ptr %t180
+  store ptr %_245, ptr %t42
   br label %if_merge_16
 if_else_16:
+  %_246 = load i64, ptr %t37
+  store i64 %_246, ptr %t181
+  %_247 = call ptr @rockit_string_new(ptr @.str.727)
+  store ptr %_247, ptr %t182
+  %_248 = load i64, ptr %t181
+  %_249 = load ptr, ptr %t182
+  %_250 = call ptr @stringConcat(i64 %_248, ptr %_249)
+  store ptr %_250, ptr %t183
+  %_251 = load ptr, ptr %t183
+  store ptr %_251, ptr %t42
   br label %if_merge_16
 if_merge_16:
   br label %if_merge_15
 if_else_15:
-  br label %if_merge_15
-if_merge_15:
-  %_374 = load i64, ptr %t46
-  store i64 %_374, ptr %t266
-  %_375 = load i1, ptr %t266
-  br i1 %_375, label %if_then_17, label %if_else_17
+  %_252 = load i64, ptr %t54
+  store i64 %_252, ptr %t186
+  %_253 = load i1, ptr %t186
+  br i1 %_253, label %if_then_17, label %if_else_17
 if_then_17:
-  %_376 = load i64, ptr %t168
-  store i64 %_376, ptr %t268
-  %_377 = load i64, ptr %t268
-  %_378 = call ptr @foldConstants(i64 %_377)
-  store ptr %_378, ptr %t269
   br label %if_merge_17
 if_else_17:
   br label %if_merge_17
 if_merge_17:
-  %_379 = load i64, ptr %t168
-  store i64 %_379, ptr %t272
-  %_380 = load i64, ptr %t272
-  %_381 = call ptr @compileProgram(i64 %_380)
-  store ptr %_381, ptr %t273
-  %_382 = load ptr, ptr %t273
-  store ptr %_382, ptr %t271
-  %_383 = load i64, ptr %t271
-  store i64 %_383, ptr %t274
-  %_384 = load i64, ptr %t274
-  %_385 = call i64 @eliminateDeadFunctions(i64 %_384)
-  store i64 %_385, ptr %t275
-  %_386 = load i64, ptr %t271
-  store i64 %_386, ptr %t277
-  %_387 = call ptr @rockit_string_new(ptr @.str.352)
-  store ptr %_387, ptr %t278
-  %_388 = load i64, ptr %t277
-  %_389 = load ptr, ptr %t278
-  %_390 = call i64 @mapGet(i64 %_388, ptr %_389)
-  store i64 %_390, ptr %t279
-  %_391 = load i64, ptr %t279
-  %_392 = call i64 @listSize(i64 %_391)
-  store i64 %_392, ptr %t280
-  %_393 = load i64, ptr %t280
-  store i64 %_393, ptr %t276
-  %_394 = load i64, ptr %t48
-  store i64 %_394, ptr %t281
-  %_395 = load i1, ptr %t281
-  br i1 %_395, label %if_then_18, label %if_else_18
+  %_254 = load i64, ptr %t187
+  store i64 %_254, ptr %t190
+  %_255 = load i64, ptr %t190
+  store i64 %_255, ptr %t185
+  %_256 = load i64, ptr %t37
+  store i64 %_256, ptr %t191
+  %_257 = call ptr @rockit_string_new(ptr @.str.682)
+  store ptr %_257, ptr %t192
+  %_258 = load i64, ptr %t191
+  %_259 = load ptr, ptr %t192
+  %_260 = call i1 @endsWith(i64 %_258, ptr %_259)
+  store i1 %_260, ptr %t193
+  %_261 = load i1, ptr %t193
+  br i1 %_261, label %if_then_18, label %if_else_18
 if_then_18:
-  %_396 = load i64, ptr %t271
-  store i64 %_396, ptr %t283
-  %_397 = load i64, ptr %t38
-  store i64 %_397, ptr %t284
-  %_398 = load i64, ptr %t283
-  %_399 = load i64, ptr %t284
-  %_400 = call i64 @emitLLVM(i64 %_398, i64 %_399)
-  store i64 %_400, ptr %t285
-  %_401 = load i64, ptr %t33
-  store i64 %_401, ptr %t286
-  %_402 = call ptr @rockit_string_new(ptr @.str.723)
-  store ptr %_402, ptr %t287
-  %_403 = load i64, ptr %t38
-  store i64 %_403, ptr %t288
-  %_404 = load ptr, ptr %t287
-  %_405 = load i64, ptr %t288
-  %_406 = call ptr @stringConcat(ptr %_404, i64 %_405)
-  store ptr %_406, ptr %t289
-  %_407 = load i64, ptr %t286
-  %_408 = load ptr, ptr %t289
-  %_409 = call ptr @stringConcat(i64 %_407, ptr %_408)
-  store ptr %_409, ptr %t290
-  %_410 = load ptr, ptr %t290
-  call void @rockit_println_string(ptr %_410)
-  %_411 = call ptr @rockit_string_new(ptr @.str.549)
-  store ptr %_411, ptr %t292
-  %_412 = load i64, ptr %t276
-  store i64 %_412, ptr %t293
-  %_413 = load i64, ptr %t293
-  %_414 = call ptr @toString(i64 %_413)
-  store ptr %_414, ptr %t294
-  %_415 = call ptr @rockit_string_new(ptr @.str.724)
-  store ptr %_415, ptr %t295
-  %_416 = load ptr, ptr %t294
-  %_417 = load ptr, ptr %t295
-  %_418 = call ptr @stringConcat(ptr %_416, ptr %_417)
-  store ptr %_418, ptr %t296
-  %_419 = load ptr, ptr %t292
-  %_420 = load ptr, ptr %t296
-  %_421 = call ptr @stringConcat(ptr %_419, ptr %_420)
-  store ptr %_421, ptr %t297
-  %_422 = load ptr, ptr %t297
-  call void @rockit_println_string(ptr %_422)
+  %_262 = load i64, ptr %t37
+  store i64 %_262, ptr %t195
+  store i64 0, ptr %t196
+  %_263 = load i64, ptr %t166
+  store i64 %_263, ptr %t197
+  store i64 4, ptr %t198
+  %_264 = load i64, ptr %t197
+  %_265 = load i64, ptr %t198
+  %_266 = sub i64 %_264, %_265
+  store i64 %_266, ptr %t199
+  %_267 = load i64, ptr %t195
+  %_268 = load i64, ptr %t196
+  %_269 = load i64, ptr %t199
+  %_270 = call ptr @substring(i64 %_267, i64 %_268, i64 %_269)
+  store ptr %_270, ptr %t200
+  %_271 = load i64, ptr %t185
+  store i64 %_271, ptr %t201
+  %_272 = load ptr, ptr %t200
+  %_273 = load i64, ptr %t201
+  %_274 = call ptr @stringConcat(ptr %_272, i64 %_273)
+  store ptr %_274, ptr %t202
+  %_275 = load ptr, ptr %t202
+  store ptr %_275, ptr %t42
   br label %if_merge_18
 if_else_18:
-  %_423 = load i64, ptr %t271
-  store i64 %_423, ptr %t300
-  %_424 = load i64, ptr %t300
-  %_425 = call ptr @serializeModule(i64 %_424)
-  store ptr %_425, ptr %t301
-  %_426 = load ptr, ptr %t301
-  store ptr %_426, ptr %t299
-  %_427 = load i64, ptr %t38
-  store i64 %_427, ptr %t302
-  %_428 = load i64, ptr %t299
-  store i64 %_428, ptr %t303
-  %_429 = load i64, ptr %t302
-  %_430 = load i64, ptr %t303
-  %_431 = call i64 @fileWriteBytes(i64 %_429, i64 %_430)
-  store i64 %_431, ptr %t304
-  %_432 = load i64, ptr %t299
-  store i64 %_432, ptr %t306
-  %_433 = load i64, ptr %t306
-  %_434 = call i64 @listSize(i64 %_433)
-  store i64 %_434, ptr %t307
-  %_435 = load i64, ptr %t307
-  store i64 %_435, ptr %t305
-  %_436 = load i64, ptr %t33
-  store i64 %_436, ptr %t308
-  %_437 = call ptr @rockit_string_new(ptr @.str.723)
-  store ptr %_437, ptr %t309
-  %_438 = load i64, ptr %t38
-  store i64 %_438, ptr %t310
-  %_439 = load ptr, ptr %t309
-  %_440 = load i64, ptr %t310
-  %_441 = call ptr @stringConcat(ptr %_439, i64 %_440)
-  store ptr %_441, ptr %t311
-  %_442 = load i64, ptr %t308
-  %_443 = load ptr, ptr %t311
-  %_444 = call ptr @stringConcat(i64 %_442, ptr %_443)
-  store ptr %_444, ptr %t312
-  %_445 = load ptr, ptr %t312
-  call void @rockit_println_string(ptr %_445)
-  %_446 = call ptr @rockit_string_new(ptr @.str.549)
-  store ptr %_446, ptr %t314
-  %_447 = load i64, ptr %t276
-  store i64 %_447, ptr %t315
-  %_448 = load i64, ptr %t315
-  %_449 = call ptr @toString(i64 %_448)
-  store ptr %_449, ptr %t316
-  %_450 = call ptr @rockit_string_new(ptr @.str.725)
-  store ptr %_450, ptr %t317
-  %_451 = load i64, ptr %t305
-  store i64 %_451, ptr %t318
-  %_452 = load i64, ptr %t318
-  %_453 = call ptr @toString(i64 %_452)
-  store ptr %_453, ptr %t319
-  %_454 = call ptr @rockit_string_new(ptr @.str.726)
-  store ptr %_454, ptr %t320
-  %_455 = load ptr, ptr %t319
-  %_456 = load ptr, ptr %t320
-  %_457 = call ptr @stringConcat(ptr %_455, ptr %_456)
-  store ptr %_457, ptr %t321
-  %_458 = load ptr, ptr %t317
-  %_459 = load ptr, ptr %t321
-  %_460 = call ptr @stringConcat(ptr %_458, ptr %_459)
-  store ptr %_460, ptr %t322
-  %_461 = load ptr, ptr %t316
-  %_462 = load ptr, ptr %t322
-  %_463 = call ptr @stringConcat(ptr %_461, ptr %_462)
-  store ptr %_463, ptr %t323
-  %_464 = load ptr, ptr %t314
-  %_465 = load ptr, ptr %t323
-  %_466 = call ptr @stringConcat(ptr %_464, ptr %_465)
-  store ptr %_466, ptr %t324
-  %_467 = load ptr, ptr %t324
-  call void @rockit_println_string(ptr %_467)
+  %_276 = load i64, ptr %t37
+  store i64 %_276, ptr %t203
+  %_277 = load i64, ptr %t185
+  store i64 %_277, ptr %t204
+  %_278 = load i64, ptr %t203
+  %_279 = load i64, ptr %t204
+  %_280 = call ptr @stringConcat(i64 %_278, i64 %_279)
+  store ptr %_280, ptr %t205
+  %_281 = load ptr, ptr %t205
+  store ptr %_281, ptr %t42
   br label %if_merge_18
 if_merge_18:
+  br label %if_merge_15
+if_merge_15:
+  br label %if_merge_14
+if_else_14:
+  br label %if_merge_14
+if_merge_14:
+  %_282 = load i64, ptr %t37
+  store i64 %_282, ptr %t210
+  %_283 = load i64, ptr %t210
+  %_284 = call ptr @fileRead(i64 %_283)
+  store ptr %_284, ptr %t211
+  %_285 = load ptr, ptr %t211
+  store ptr %_285, ptr %t212
+  %_287 = load ptr, ptr %t212
+  store ptr %_287, ptr %t209
+  %_288 = load i64, ptr %t209
+  store i64 %_288, ptr %t214
+  %_289 = load i64, ptr %t214
+  %_290 = call ptr @tokenize(i64 %_289)
+  store ptr %_290, ptr %t215
+  %_291 = load ptr, ptr %t215
+  store ptr %_291, ptr %t213
+  %_292 = load i64, ptr %t213
+  store i64 %_292, ptr %t217
+  %_293 = load i64, ptr %t217
+  %_294 = call ptr @makeParser(i64 %_293)
+  store ptr %_294, ptr %t218
+  %_295 = load ptr, ptr %t218
+  store ptr %_295, ptr %t216
+  %_296 = load i64, ptr %t216
+  store i64 %_296, ptr %t220
+  %_297 = load i64, ptr %t220
+  %_298 = call ptr @parseProgram(i64 %_297)
+  store ptr %_298, ptr %t221
+  %_299 = load ptr, ptr %t221
+  store ptr %_299, ptr %t219
+  %_300 = load i64, ptr %t216
+  store i64 %_300, ptr %t223
+  %_301 = call ptr @rockit_string_new(ptr @.str.250)
+  store ptr %_301, ptr %t224
+  %_302 = load i64, ptr %t223
+  %_303 = load ptr, ptr %t224
+  %_304 = call i64 @mapGet(i64 %_302, ptr %_303)
+  store i64 %_304, ptr %t225
+  %_305 = load i64, ptr %t225
+  store i64 %_305, ptr %t222
+  %_306 = load i64, ptr %t222
+  store i64 %_306, ptr %t226
+  %_307 = load i64, ptr %t226
+  %_308 = call i64 @listSize(i64 %_307)
+  store i64 %_308, ptr %t227
+  store i64 0, ptr %t228
+  %_309 = load i64, ptr %t227
+  %_310 = load i64, ptr %t228
+  %_311 = icmp sgt i64 %_309, %_310
+  store i1 %_311, ptr %t229
+  %_312 = load i1, ptr %t229
+  br i1 %_312, label %if_then_19, label %if_else_19
+if_then_19:
+  %_313 = load i64, ptr %t37
+  store i64 %_313, ptr %t231
+  %_314 = call ptr @rockit_string_new(ptr @.str.728)
+  store ptr %_314, ptr %t232
+  %_315 = load i64, ptr %t222
+  store i64 %_315, ptr %t233
+  %_316 = load i64, ptr %t233
+  %_317 = call i64 @listSize(i64 %_316)
+  store i64 %_317, ptr %t234
+  %_318 = load i64, ptr %t234
+  %_319 = call ptr @toString(i64 %_318)
+  store ptr %_319, ptr %t235
+  %_320 = call ptr @rockit_string_new(ptr @.str.729)
+  store ptr %_320, ptr %t236
+  %_321 = load ptr, ptr %t235
+  %_322 = load ptr, ptr %t236
+  %_323 = call ptr @stringConcat(ptr %_321, ptr %_322)
+  store ptr %_323, ptr %t237
+  %_324 = load ptr, ptr %t232
+  %_325 = load ptr, ptr %t237
+  %_326 = call ptr @stringConcat(ptr %_324, ptr %_325)
+  store ptr %_326, ptr %t238
+  %_327 = load i64, ptr %t231
+  %_328 = load ptr, ptr %t238
+  %_329 = call ptr @stringConcat(i64 %_327, ptr %_328)
+  store ptr %_329, ptr %t239
+  %_330 = load ptr, ptr %t239
+  call void @rockit_println_string(ptr %_330)
+  store i64 0, ptr %t242
+  %_331 = load i64, ptr %t242
+  store i64 %_331, ptr %t241
+  br label %while_header_1
+while_header_1:
+  %_332 = load i64, ptr %t241
+  store i64 %_332, ptr %t243
+  %_333 = load i64, ptr %t222
+  store i64 %_333, ptr %t244
+  %_334 = load i64, ptr %t244
+  %_335 = call i64 @listSize(i64 %_334)
+  store i64 %_335, ptr %t245
+  %_336 = load i64, ptr %t243
+  %_337 = load i64, ptr %t245
+  %_338 = icmp slt i64 %_336, %_337
+  store i1 %_338, ptr %t246
+  %_339 = load i1, ptr %t246
+  br i1 %_339, label %while_body_1, label %while_exit_1
+while_body_1:
+  %_340 = call ptr @rockit_string_new(ptr @.str.550)
+  store ptr %_340, ptr %t247
+  %_341 = load i64, ptr %t222
+  store i64 %_341, ptr %t248
+  %_342 = load i64, ptr %t241
+  store i64 %_342, ptr %t249
+  %_343 = load i64, ptr %t248
+  %_344 = load i64, ptr %t249
+  %_345 = call i64 @listGet(i64 %_343, i64 %_344)
+  store i64 %_345, ptr %t250
+  %_346 = load i64, ptr %t250
+  %_347 = call ptr @toString(i64 %_346)
+  store ptr %_347, ptr %t251
+  %_348 = load ptr, ptr %t247
+  %_349 = load ptr, ptr %t251
+  %_350 = call ptr @stringConcat(ptr %_348, ptr %_349)
+  store ptr %_350, ptr %t252
+  %_351 = load ptr, ptr %t252
+  call void @rockit_println_string(ptr %_351)
+  %_352 = load i64, ptr %t241
+  store i64 %_352, ptr %t254
+  store i64 1, ptr %t255
+  %_353 = load i64, ptr %t254
+  %_354 = load i64, ptr %t255
+  %_355 = add i64 %_353, %_354
+  store i64 %_355, ptr %t256
+  %_356 = load i64, ptr %t256
+  store i64 %_356, ptr %t241
+  br label %while_header_1
+while_exit_1:
+  ret i32 0
+if_else_19:
+  br label %if_merge_19
+if_merge_19:
+  %_357 = load i64, ptr %t37
+  store i64 %_357, ptr %t259
+  %_358 = load i64, ptr %t259
+  %_359 = call ptr @dirName(i64 %_358)
+  store ptr %_359, ptr %t260
+  %_360 = load ptr, ptr %t260
+  store ptr %_360, ptr %t258
+  %_361 = call ptr @mapCreate()
+  store ptr %_361, ptr %t262
+  %_362 = load ptr, ptr %t262
+  store ptr %_362, ptr %t261
+  %_363 = load i64, ptr %t219
+  store i64 %_363, ptr %t264
+  %_364 = call ptr @rockit_string_new(ptr @.str.349)
+  store ptr %_364, ptr %t265
+  %_365 = load i64, ptr %t264
+  %_366 = load ptr, ptr %t265
+  %_367 = call i64 @mapGet(i64 %_365, ptr %_366)
+  store i64 %_367, ptr %t266
+  %_368 = load i64, ptr %t266
+  store i64 %_368, ptr %t263
+  %_369 = load i64, ptr %t263
+  store i64 %_369, ptr %t268
+  %_370 = load i64, ptr %t258
+  store i64 %_370, ptr %t269
+  %_371 = load i64, ptr %t44
+  store i64 %_371, ptr %t270
+  %_372 = load i64, ptr %t261
+  store i64 %_372, ptr %t271
+  %_373 = load i64, ptr %t268
+  %_374 = load i64, ptr %t269
+  %_375 = load i64, ptr %t270
+  %_376 = load i64, ptr %t271
+  %_377 = call ptr @resolveImports(i64 %_373, i64 %_374, i64 %_375, i64 %_376)
+  store ptr %_377, ptr %t272
+  %_378 = load ptr, ptr %t272
+  store ptr %_378, ptr %t267
+  %_379 = load i64, ptr %t219
+  store i64 %_379, ptr %t273
+  %_380 = call ptr @rockit_string_new(ptr @.str.349)
+  store ptr %_380, ptr %t274
+  %_381 = load i64, ptr %t267
+  store i64 %_381, ptr %t275
+  %_382 = load i64, ptr %t273
+  %_383 = load ptr, ptr %t274
+  %_384 = load i64, ptr %t275
+  %_385 = call i64 @mapPut(i64 %_382, ptr %_383, i64 %_384)
+  store i64 %_385, ptr %t276
+  %_386 = load i64, ptr %t50
+  store i64 %_386, ptr %t277
+  %_387 = load i1, ptr %t277
+  %_388 = xor i1 %_387, 1
+  store i1 %_388, ptr %t278
+  %_389 = load i1, ptr %t278
+  br i1 %_389, label %if_then_20, label %if_else_20
+if_then_20:
+  %_390 = load i64, ptr %t219
+  store i64 %_390, ptr %t281
+  %_391 = load i64, ptr %t37
+  store i64 %_391, ptr %t282
+  %_392 = load i64, ptr %t281
+  %_393 = load i64, ptr %t282
+  %_394 = call ptr @typeCheckWithFile(i64 %_392, i64 %_393)
+  store ptr %_394, ptr %t283
+  %_395 = load ptr, ptr %t283
+  store ptr %_395, ptr %t280
+  %_396 = load i64, ptr %t280
+  store i64 %_396, ptr %t285
+  %_397 = call ptr @rockit_string_new(ptr @.str.250)
+  store ptr %_397, ptr %t286
+  %_398 = load i64, ptr %t285
+  %_399 = load ptr, ptr %t286
+  %_400 = call i64 @mapGet(i64 %_398, ptr %_399)
+  store i64 %_400, ptr %t287
+  %_401 = load i64, ptr %t287
+  store i64 %_401, ptr %t284
+  %_402 = load i64, ptr %t284
+  store i64 %_402, ptr %t288
+  %_403 = load i64, ptr %t288
+  %_404 = call i64 @listSize(i64 %_403)
+  store i64 %_404, ptr %t289
+  store i64 0, ptr %t290
+  %_405 = load i64, ptr %t289
+  %_406 = load i64, ptr %t290
+  %_407 = icmp sgt i64 %_405, %_406
+  store i1 %_407, ptr %t291
+  %_408 = load i1, ptr %t291
+  br i1 %_408, label %if_then_21, label %if_else_21
+if_then_21:
+  store i64 0, ptr %t294
+  %_409 = load i64, ptr %t294
+  store i64 %_409, ptr %t293
+  br label %while_header_2
+while_header_2:
+  %_410 = load i64, ptr %t293
+  store i64 %_410, ptr %t295
+  %_411 = load i64, ptr %t284
+  store i64 %_411, ptr %t296
+  %_412 = load i64, ptr %t296
+  %_413 = call i64 @listSize(i64 %_412)
+  store i64 %_413, ptr %t297
+  %_414 = load i64, ptr %t295
+  %_415 = load i64, ptr %t297
+  %_416 = icmp slt i64 %_414, %_415
+  store i1 %_416, ptr %t298
+  %_417 = load i1, ptr %t298
+  br i1 %_417, label %while_body_2, label %while_exit_2
+while_body_2:
+  %_418 = call ptr @rockit_string_new(ptr @.str.359)
+  store ptr %_418, ptr %t299
+  %_419 = load i64, ptr %t284
+  store i64 %_419, ptr %t300
+  %_420 = load i64, ptr %t293
+  store i64 %_420, ptr %t301
+  %_421 = load i64, ptr %t300
+  %_422 = load i64, ptr %t301
+  %_423 = call i64 @listGet(i64 %_421, i64 %_422)
+  store i64 %_423, ptr %t302
+  %_424 = load i64, ptr %t302
+  %_425 = call ptr @toString(i64 %_424)
+  store ptr %_425, ptr %t303
+  %_426 = load ptr, ptr %t299
+  %_427 = load ptr, ptr %t303
+  %_428 = call ptr @stringConcat(ptr %_426, ptr %_427)
+  store ptr %_428, ptr %t304
+  %_429 = load ptr, ptr %t304
+  call void @rockit_println_string(ptr %_429)
+  %_430 = load i64, ptr %t293
+  store i64 %_430, ptr %t306
+  store i64 1, ptr %t307
+  %_431 = load i64, ptr %t306
+  %_432 = load i64, ptr %t307
+  %_433 = add i64 %_431, %_432
+  store i64 %_433, ptr %t308
+  %_434 = load i64, ptr %t308
+  store i64 %_434, ptr %t293
+  br label %while_header_2
+while_exit_2:
+  %_435 = load i64, ptr %t284
+  store i64 %_435, ptr %t309
+  %_436 = load i64, ptr %t309
+  %_437 = call i64 @listSize(i64 %_436)
+  store i64 %_437, ptr %t310
+  %_438 = load i64, ptr %t310
+  %_439 = call ptr @toString(i64 %_438)
+  store ptr %_439, ptr %t311
+  %_440 = call ptr @rockit_string_new(ptr @.str.730)
+  store ptr %_440, ptr %t312
+  %_441 = load ptr, ptr %t311
+  %_442 = load ptr, ptr %t312
+  %_443 = call ptr @stringConcat(ptr %_441, ptr %_442)
+  store ptr %_443, ptr %t313
+  %_444 = load ptr, ptr %t313
+  call void @rockit_println_string(ptr %_444)
+  br label %if_merge_21
+if_else_21:
+  br label %if_merge_21
+if_merge_21:
+  br label %if_merge_20
+if_else_20:
+  br label %if_merge_20
+if_merge_20:
+  %_445 = load i64, ptr %t52
+  store i64 %_445, ptr %t317
+  %_446 = load i1, ptr %t317
+  br i1 %_446, label %if_then_22, label %if_else_22
+if_then_22:
+  %_447 = load i64, ptr %t219
+  store i64 %_447, ptr %t319
+  %_448 = load i64, ptr %t319
+  %_449 = call ptr @foldConstants(i64 %_448)
+  store ptr %_449, ptr %t320
+  br label %if_merge_22
+if_else_22:
+  br label %if_merge_22
+if_merge_22:
+  %_450 = load i64, ptr %t219
+  store i64 %_450, ptr %t323
+  %_451 = load i64, ptr %t323
+  %_452 = call ptr @compileProgram(i64 %_451)
+  store ptr %_452, ptr %t324
+  %_453 = load ptr, ptr %t324
+  store ptr %_453, ptr %t322
+  %_454 = load i64, ptr %t322
+  store i64 %_454, ptr %t325
+  %_455 = load i64, ptr %t325
+  %_456 = call i64 @eliminateDeadFunctions(i64 %_455)
+  store i64 %_456, ptr %t326
+  %_457 = load i64, ptr %t322
+  store i64 %_457, ptr %t328
+  %_458 = call ptr @rockit_string_new(ptr @.str.352)
+  store ptr %_458, ptr %t329
+  %_459 = load i64, ptr %t328
+  %_460 = load ptr, ptr %t329
+  %_461 = call i64 @mapGet(i64 %_459, ptr %_460)
+  store i64 %_461, ptr %t330
+  %_462 = load i64, ptr %t330
+  %_463 = call i64 @listSize(i64 %_462)
+  store i64 %_463, ptr %t331
+  %_464 = load i64, ptr %t331
+  store i64 %_464, ptr %t327
+  %_465 = load i64, ptr %t56
+  store i64 %_465, ptr %t332
+  %_466 = load i1, ptr %t332
+  br i1 %_466, label %if_then_23, label %if_else_23
+if_then_23:
+  %_467 = load i64, ptr %t42
+  store i64 %_467, ptr %t335
+  %_468 = call ptr @rockit_string_new(ptr @.str.731)
+  store ptr %_468, ptr %t336
+  %_469 = load i64, ptr %t335
+  %_470 = load ptr, ptr %t336
+  %_471 = call ptr @stringConcat(i64 %_469, ptr %_470)
+  store ptr %_471, ptr %t337
+  %_472 = load ptr, ptr %t337
+  store ptr %_472, ptr %t334
+  %_473 = load i64, ptr %t322
+  store i64 %_473, ptr %t338
+  %_474 = load i64, ptr %t334
+  store i64 %_474, ptr %t339
+  %_475 = load i64, ptr %t338
+  %_476 = load i64, ptr %t339
+  %_477 = call i64 @emitLLVM(i64 %_475, i64 %_476)
+  store i64 %_477, ptr %t340
+  %_478 = load i64, ptr %t37
+  store i64 %_478, ptr %t341
+  %_479 = call ptr @rockit_string_new(ptr @.str.732)
+  store ptr %_479, ptr %t342
+  %_480 = load i64, ptr %t42
+  store i64 %_480, ptr %t343
+  %_481 = call ptr @rockit_string_new(ptr @.str.733)
+  store ptr %_481, ptr %t344
+  %_482 = load i64, ptr %t343
+  %_483 = load ptr, ptr %t344
+  %_484 = call ptr @stringConcat(i64 %_482, ptr %_483)
+  store ptr %_484, ptr %t345
+  %_485 = load ptr, ptr %t342
+  %_486 = load ptr, ptr %t345
+  %_487 = call ptr @stringConcat(ptr %_485, ptr %_486)
+  store ptr %_487, ptr %t346
+  %_488 = load i64, ptr %t341
+  %_489 = load ptr, ptr %t346
+  %_490 = call ptr @stringConcat(i64 %_488, ptr %_489)
+  store ptr %_490, ptr %t347
+  %_491 = load ptr, ptr %t347
+  call void @rockit_println_string(ptr %_491)
+  %_492 = call ptr @rockit_string_new(ptr @.str.550)
+  store ptr %_492, ptr %t349
+  %_493 = load i64, ptr %t327
+  store i64 %_493, ptr %t350
+  %_494 = load i64, ptr %t350
+  %_495 = call ptr @toString(i64 %_494)
+  store ptr %_495, ptr %t351
+  %_496 = call ptr @rockit_string_new(ptr @.str.734)
+  store ptr %_496, ptr %t352
+  %_497 = load ptr, ptr %t351
+  %_498 = load ptr, ptr %t352
+  %_499 = call ptr @stringConcat(ptr %_497, ptr %_498)
+  store ptr %_499, ptr %t353
+  %_500 = load ptr, ptr %t349
+  %_501 = load ptr, ptr %t353
+  %_502 = call ptr @stringConcat(ptr %_500, ptr %_501)
+  store ptr %_502, ptr %t354
+  %_503 = load ptr, ptr %t354
+  call void @rockit_println_string(ptr %_503)
+  %_504 = load i64, ptr %t46
+  store i64 %_504, ptr %t356
+  %_505 = load i64, ptr %t356
+  %_506 = call i64 @stringLength(i64 %_505)
+  store i64 %_506, ptr %t357
+  store i64 0, ptr %t358
+  %_507 = load i64, ptr %t357
+  %_508 = load i64, ptr %t358
+  %_509 = call i1 @rockit_string_eq(i64 %_507, i64 %_508)
+  store i1 %_509, ptr %t359
+  %_510 = load i1, ptr %t359
+  br i1 %_510, label %if_then_24, label %if_else_24
+if_then_24:
+  %_511 = load i64, ptr %t258
+  store i64 %_511, ptr %t362
+  %_512 = call ptr @rockit_string_new(ptr @.str.735)
+  store ptr %_512, ptr %t363
+  %_513 = load i64, ptr %t362
+  %_514 = load ptr, ptr %t363
+  %_515 = call ptr @stringConcat(i64 %_513, ptr %_514)
+  store ptr %_515, ptr %t364
+  %_516 = load ptr, ptr %t364
+  store ptr %_516, ptr %t361
+  %_517 = load i64, ptr %t361
+  store i64 %_517, ptr %t365
+  %_518 = load i64, ptr %t365
+  %_519 = call i1 @fileExists(i64 %_518)
+  store i1 %_519, ptr %t366
+  %_520 = load i1, ptr %t366
+  br i1 %_520, label %if_then_25, label %if_else_25
+if_then_25:
+  %_521 = load i64, ptr %t361
+  store i64 %_521, ptr %t368
+  %_522 = load i64, ptr %t368
+  store i64 %_522, ptr %t46
+  br label %if_merge_25
+if_else_25:
+  %_523 = call ptr @rockit_string_new(ptr @.str.736)
+  store ptr %_523, ptr %t370
+  %_524 = load ptr, ptr %t370
+  store ptr %_524, ptr %t369
+  %_525 = load i64, ptr %t369
+  store i64 %_525, ptr %t371
+  %_526 = load i64, ptr %t371
+  %_527 = call i1 @fileExists(i64 %_526)
+  store i1 %_527, ptr %t372
+  %_528 = load i1, ptr %t372
+  br i1 %_528, label %if_then_26, label %if_else_26
+if_then_26:
+  %_529 = load i64, ptr %t369
+  store i64 %_529, ptr %t374
+  %_530 = load i64, ptr %t374
+  store i64 %_530, ptr %t46
+  br label %if_merge_26
+if_else_26:
+  %_531 = call ptr @rockit_string_new(ptr @.str.737)
+  store ptr %_531, ptr %t375
+  %_532 = load ptr, ptr %t375
+  call void @rockit_println_string(ptr %_532)
+  ret i32 0
+if_merge_26:
+  br label %if_merge_25
+if_merge_25:
+  br label %if_merge_24
+if_else_24:
+  br label %if_merge_24
+if_merge_24:
+  %_533 = call ptr @rockit_string_new(ptr @.str.738)
+  store ptr %_533, ptr %t381
+  %_534 = load i64, ptr %t334
+  store i64 %_534, ptr %t382
+  %_535 = call ptr @rockit_string_new(ptr @.str.158)
+  store ptr %_535, ptr %t383
+  %_536 = load i64, ptr %t46
+  store i64 %_536, ptr %t384
+  %_537 = call ptr @rockit_string_new(ptr @.str.739)
+  store ptr %_537, ptr %t385
+  %_538 = load i64, ptr %t42
+  store i64 %_538, ptr %t386
+  %_539 = load ptr, ptr %t385
+  %_540 = load i64, ptr %t386
+  %_541 = call ptr @stringConcat(ptr %_539, i64 %_540)
+  store ptr %_541, ptr %t387
+  %_542 = load i64, ptr %t384
+  %_543 = load ptr, ptr %t387
+  %_544 = call ptr @stringConcat(i64 %_542, ptr %_543)
+  store ptr %_544, ptr %t388
+  %_545 = load ptr, ptr %t383
+  %_546 = load ptr, ptr %t388
+  %_547 = call ptr @stringConcat(ptr %_545, ptr %_546)
+  store ptr %_547, ptr %t389
+  %_548 = load i64, ptr %t382
+  %_549 = load ptr, ptr %t389
+  %_550 = call ptr @stringConcat(i64 %_548, ptr %_549)
+  store ptr %_550, ptr %t390
+  %_551 = load ptr, ptr %t381
+  %_552 = load ptr, ptr %t390
+  %_553 = call ptr @stringConcat(ptr %_551, ptr %_552)
+  store ptr %_553, ptr %t391
+  %_554 = load ptr, ptr %t391
+  store ptr %_554, ptr %t380
+  %_555 = load i64, ptr %t380
+  store i64 %_555, ptr %t393
+  %_556 = load i64, ptr %t393
+  %_557 = call i64 @systemExec(i64 %_556)
+  store i64 %_557, ptr %t394
+  %_558 = load i64, ptr %t394
+  store i64 %_558, ptr %t392
+  %_559 = load i64, ptr %t392
+  store i64 %_559, ptr %t395
+  store i64 0, ptr %t396
+  %_560 = load i64, ptr %t395
+  %_561 = load i64, ptr %t396
+  %_562 = call i1 @rockit_string_neq(i64 %_560, i64 %_561)
+  store i1 %_562, ptr %t397
+  %_563 = load i1, ptr %t397
+  br i1 %_563, label %if_then_27, label %if_else_27
+if_then_27:
+  %_564 = call ptr @rockit_string_new(ptr @.str.740)
+  store ptr %_564, ptr %t399
+  %_565 = load i64, ptr %t392
+  store i64 %_565, ptr %t400
+  %_566 = load i64, ptr %t400
+  %_567 = call ptr @toString(i64 %_566)
+  store ptr %_567, ptr %t401
+  %_568 = call ptr @rockit_string_new(ptr @.str.228)
+  store ptr %_568, ptr %t402
+  %_569 = load ptr, ptr %t401
+  %_570 = load ptr, ptr %t402
+  %_571 = call ptr @stringConcat(ptr %_569, ptr %_570)
+  store ptr %_571, ptr %t403
+  %_572 = load ptr, ptr %t399
+  %_573 = load ptr, ptr %t403
+  %_574 = call ptr @stringConcat(ptr %_572, ptr %_573)
+  store ptr %_574, ptr %t404
+  %_575 = load ptr, ptr %t404
+  call void @rockit_println_string(ptr %_575)
+  br label %if_merge_27
+if_else_27:
+  %_576 = call ptr @rockit_string_new(ptr @.str.712)
+  store ptr %_576, ptr %t406
+  %_577 = load ptr, ptr %t406
+  call void @rockit_println_string(ptr %_577)
+  br label %if_merge_27
+if_merge_27:
+  br label %if_merge_23
+if_else_23:
+  %_578 = load i64, ptr %t54
+  store i64 %_578, ptr %t409
+  %_579 = load i1, ptr %t409
+  br i1 %_579, label %if_then_28, label %if_else_28
+if_then_28:
+  %_580 = load i64, ptr %t322
+  store i64 %_580, ptr %t411
+  %_581 = load i64, ptr %t42
+  store i64 %_581, ptr %t412
+  %_582 = load i64, ptr %t411
+  %_583 = load i64, ptr %t412
+  %_584 = call i64 @emitLLVM(i64 %_582, i64 %_583)
+  store i64 %_584, ptr %t413
+  %_585 = load i64, ptr %t37
+  store i64 %_585, ptr %t414
+  %_586 = call ptr @rockit_string_new(ptr @.str.732)
+  store ptr %_586, ptr %t415
+  %_587 = load i64, ptr %t42
+  store i64 %_587, ptr %t416
+  %_588 = load ptr, ptr %t415
+  %_589 = load i64, ptr %t416
+  %_590 = call ptr @stringConcat(ptr %_588, i64 %_589)
+  store ptr %_590, ptr %t417
+  %_591 = load i64, ptr %t414
+  %_592 = load ptr, ptr %t417
+  %_593 = call ptr @stringConcat(i64 %_591, ptr %_592)
+  store ptr %_593, ptr %t418
+  %_594 = load ptr, ptr %t418
+  call void @rockit_println_string(ptr %_594)
+  %_595 = call ptr @rockit_string_new(ptr @.str.550)
+  store ptr %_595, ptr %t420
+  %_596 = load i64, ptr %t327
+  store i64 %_596, ptr %t421
+  %_597 = load i64, ptr %t421
+  %_598 = call ptr @toString(i64 %_597)
+  store ptr %_598, ptr %t422
+  %_599 = call ptr @rockit_string_new(ptr @.str.741)
+  store ptr %_599, ptr %t423
+  %_600 = load ptr, ptr %t422
+  %_601 = load ptr, ptr %t423
+  %_602 = call ptr @stringConcat(ptr %_600, ptr %_601)
+  store ptr %_602, ptr %t424
+  %_603 = load ptr, ptr %t420
+  %_604 = load ptr, ptr %t424
+  %_605 = call ptr @stringConcat(ptr %_603, ptr %_604)
+  store ptr %_605, ptr %t425
+  %_606 = load ptr, ptr %t425
+  call void @rockit_println_string(ptr %_606)
+  br label %if_merge_28
+if_else_28:
+  %_607 = load i64, ptr %t322
+  store i64 %_607, ptr %t428
+  %_608 = load i64, ptr %t428
+  %_609 = call ptr @serializeModule(i64 %_608)
+  store ptr %_609, ptr %t429
+  %_610 = load ptr, ptr %t429
+  store ptr %_610, ptr %t427
+  %_611 = load i64, ptr %t42
+  store i64 %_611, ptr %t430
+  %_612 = load i64, ptr %t427
+  store i64 %_612, ptr %t431
+  %_613 = load i64, ptr %t430
+  %_614 = load i64, ptr %t431
+  %_615 = call i64 @fileWriteBytes(i64 %_613, i64 %_614)
+  store i64 %_615, ptr %t432
+  %_616 = load i64, ptr %t427
+  store i64 %_616, ptr %t434
+  %_617 = load i64, ptr %t434
+  %_618 = call i64 @listSize(i64 %_617)
+  store i64 %_618, ptr %t435
+  %_619 = load i64, ptr %t435
+  store i64 %_619, ptr %t433
+  %_620 = load i64, ptr %t37
+  store i64 %_620, ptr %t436
+  %_621 = call ptr @rockit_string_new(ptr @.str.732)
+  store ptr %_621, ptr %t437
+  %_622 = load i64, ptr %t42
+  store i64 %_622, ptr %t438
+  %_623 = load ptr, ptr %t437
+  %_624 = load i64, ptr %t438
+  %_625 = call ptr @stringConcat(ptr %_623, i64 %_624)
+  store ptr %_625, ptr %t439
+  %_626 = load i64, ptr %t436
+  %_627 = load ptr, ptr %t439
+  %_628 = call ptr @stringConcat(i64 %_626, ptr %_627)
+  store ptr %_628, ptr %t440
+  %_629 = load ptr, ptr %t440
+  call void @rockit_println_string(ptr %_629)
+  %_630 = call ptr @rockit_string_new(ptr @.str.550)
+  store ptr %_630, ptr %t442
+  %_631 = load i64, ptr %t327
+  store i64 %_631, ptr %t443
+  %_632 = load i64, ptr %t443
+  %_633 = call ptr @toString(i64 %_632)
+  store ptr %_633, ptr %t444
+  %_634 = call ptr @rockit_string_new(ptr @.str.742)
+  store ptr %_634, ptr %t445
+  %_635 = load i64, ptr %t433
+  store i64 %_635, ptr %t446
+  %_636 = load i64, ptr %t446
+  %_637 = call ptr @toString(i64 %_636)
+  store ptr %_637, ptr %t447
+  %_638 = call ptr @rockit_string_new(ptr @.str.743)
+  store ptr %_638, ptr %t448
+  %_639 = load ptr, ptr %t447
+  %_640 = load ptr, ptr %t448
+  %_641 = call ptr @stringConcat(ptr %_639, ptr %_640)
+  store ptr %_641, ptr %t449
+  %_642 = load ptr, ptr %t445
+  %_643 = load ptr, ptr %t449
+  %_644 = call ptr @stringConcat(ptr %_642, ptr %_643)
+  store ptr %_644, ptr %t450
+  %_645 = load ptr, ptr %t444
+  %_646 = load ptr, ptr %t450
+  %_647 = call ptr @stringConcat(ptr %_645, ptr %_646)
+  store ptr %_647, ptr %t451
+  %_648 = load ptr, ptr %t442
+  %_649 = load ptr, ptr %t451
+  %_650 = call ptr @stringConcat(ptr %_648, ptr %_649)
+  store ptr %_650, ptr %t452
+  %_651 = load ptr, ptr %t452
+  call void @rockit_println_string(ptr %_651)
+  br label %if_merge_28
+if_merge_28:
+  br label %if_merge_23
+if_merge_23:
   ret i32 0
 }

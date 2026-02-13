@@ -502,6 +502,22 @@ public final class BuiltinRegistry {
 
             return .string(output)
         }
+
+        register(name: "systemExec") { args in
+            guard case .string(let cmd) = args.first else {
+                throw VMError.typeMismatch(
+                    expected: "String",
+                    actual: args.first?.typeName ?? "nothing",
+                    operation: "systemExec"
+                )
+            }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", cmd]
+            try process.run()
+            process.waitUntilExit()
+            return .int(Int64(process.terminationStatus))
+        }
     }
 
     // MARK: List Builtins

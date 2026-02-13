@@ -765,6 +765,13 @@ int64_t evalRockit(RockitString* source) {
     return 0;
 }
 
+// -- Shell execution (used by Stage 1 build-native) --
+
+int64_t systemExec(RockitString* cmd) {
+    if (!cmd) return -1;
+    return (int64_t)system(cmd->data);
+}
+
 // -- toString wrapper (used by Stage 1) --
 
 RockitString* toString(int64_t value) {
