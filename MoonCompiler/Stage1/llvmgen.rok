@@ -386,7 +386,7 @@ fun llvmResolveFieldIndex(compiler: Map, poolFieldIdx: Int): Int {
 // Emit LLVM IR for one function
 // ---------------------------------------------------------------------------
 
-fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map): String {
+fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: Map): String {
     val buf = llvmBuf()
     val pool = mapGet(compiler, "pool")
     val nameIdx = toInt(mapGet(funcRec, "nameIdx"))
@@ -489,13 +489,21 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map): String {
             val dest = llvmReadU16(bc, ip + 1)
             val poolIdx = llvmReadU16(bc, ip + 3)
             val strVal = llvmPoolString(compiler, poolIdx)
-            val strGlobal = stringConcat("@.str.", toString(poolIdx))
-            val s1 = llvmNextSSA(state)
-            val s2 = llvmNextSSA(state)
-            mapPut(usedExterns, "rockit_string_new", true)
-            llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = call ptr @rockit_string_new(ptr ", stringConcat(strGlobal, ")")))))
-            llvmLine(buf, stringConcat("  ", stringConcat(s2, stringConcat(" = ptrtoint ptr ", stringConcat(s1, " to i64")))))
-            llvmLine(buf, stringConcat("  store i64 ", stringConcat(s2, stringConcat(", ptr %t", toString(dest)))))
+            // Check if this string is a lambda function reference (used for indirect calls)
+            if (startsWith(strVal, "__lambda_") && mapGet(definedFuncs, strVal) != null) {
+                // Emit function pointer instead of string
+                val s1 = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = ptrtoint ptr @", stringConcat(strVal, " to i64")))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(s1, stringConcat(", ptr %t", toString(dest)))))
+            } else {
+                val strGlobal = stringConcat("@.str.", toString(poolIdx))
+                val s1 = llvmNextSSA(state)
+                val s2 = llvmNextSSA(state)
+                mapPut(usedExterns, "rockit_string_new", true)
+                llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = call ptr @rockit_string_new(ptr ", stringConcat(strGlobal, ")")))))
+                llvmLine(buf, stringConcat("  ", stringConcat(s2, stringConcat(" = ptrtoint ptr ", stringConcat(s1, " to i64")))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(s2, stringConcat(", ptr %t", toString(dest)))))
+            }
             ip = ip + 5
         } else if (op == 6) {
             // OP_CONST_NULL
@@ -570,12 +578,12 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map): String {
             llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
             if (op == 48) {
                 mapPut(usedExterns, "rockit_string_eq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i1 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
             } else {
                 mapPut(usedExterns, "rockit_string_neq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i1 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
             }
-            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7
         } else if (op >= 50 && op <= 53) {
@@ -1083,7 +1091,7 @@ fun emitLLVM(compiler: Map, outputFile: String): Unit {
     fi = 0
     while (fi < listSize(functions)) {
         val funcRec = listGet(functions, fi)
-        val funcIR = emitLLVMFunction(compiler, funcRec, sigTable)
+        val funcIR = emitLLVMFunction(compiler, funcRec, sigTable, definedFuncs)
         listAppend(mainBuf, funcIR)
 
         // Collect externs from this function's state

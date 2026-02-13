@@ -2623,12 +2623,9 @@ fun compileEnumDecl(compiler: Map, decl: Map): Unit {
         mapPut(calleeNode, "name", enumName)
         mapPut(ctorCall, "callee", calleeNode)
         val argList = listCreate()
-        val arg1 = mapCreate()
-        mapPut(arg1, "kind", "callArg")
         val argVal = makeNode("ident")
         mapPut(argVal, "name", "__v")
-        mapPut(arg1, "value", argVal)
-        listAppend(argList, arg1)
+        listAppend(argList, argVal)
         mapPut(ctorCall, "args", argList)
 
         val retNode = makeNode("return")
