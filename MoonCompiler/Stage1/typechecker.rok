@@ -853,8 +853,15 @@ fun tcInferExpr(tc: Map, expr: Map): String {
             var i: Int = 0
             while (i < listSize(args)) {
                 val arg = listGet(args, i)
-                val argValue = mapGet(arg, "value")
-                if (argValue != null) { tcInferExpr(tc, argValue) }
+                // Named args have kind="namedArg" with a "value" sub-field;
+                // positional args are the expression node directly.
+                val argKind = toString(mapGet(arg, "kind"))
+                if (argKind == "namedArg") {
+                    val argValue = mapGet(arg, "value")
+                    if (argValue != null) { tcInferExpr(tc, argValue) }
+                } else {
+                    tcInferExpr(tc, arg)
+                }
                 i = i + 1
             }
         }
