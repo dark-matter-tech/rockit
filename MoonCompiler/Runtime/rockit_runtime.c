@@ -288,6 +288,47 @@ void rockit_print_string(RockitString* s) {
     }
 }
 
+// ── Dynamic print (handles both string pointers and integer values) ──────
+
+static int is_likely_string_ptr(int64_t value) {
+    if (value == 0) return 0;
+    uint64_t uval = (uint64_t)value;
+    if (uval > 0x100000000ULL && uval < 0x800000000000ULL) {
+        RockitString* s = (RockitString*)(intptr_t)value;
+        if (s->refCount > 0 && s->refCount < 100000 &&
+            s->length >= 0 && s->length < 10000000) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void rockit_println_any(int64_t value) {
+    if (value == ROCKIT_NULL) {
+        printf("null\n");
+    } else if (value == 0) {
+        printf("0\n");
+    } else if (is_likely_string_ptr(value)) {
+        RockitString* s = (RockitString*)(intptr_t)value;
+        printf("%s\n", s->data);
+    } else {
+        printf("%lld\n", (long long)value);
+    }
+}
+
+void rockit_print_any(int64_t value) {
+    if (value == ROCKIT_NULL) {
+        printf("null");
+    } else if (value == 0) {
+        printf("0");
+    } else if (is_likely_string_ptr(value)) {
+        RockitString* s = (RockitString*)(intptr_t)value;
+        printf("%s", s->data);
+    } else {
+        printf("%lld", (long long)value);
+    }
+}
+
 // ── Conversion ──────────────────────────────────────────────────────────────
 
 RockitString* rockit_int_to_string(int64_t value) {
@@ -352,8 +393,12 @@ void rockit_panic(const char* message) {
 // ── String Comparison ────────────────────────────────────────────────────────
 
 int8_t rockit_string_eq(int64_t a, int64_t b) {
-    if (a == b) return 1;  // Same pointer
-    if (a == 0 || b == 0) return a == b;
+    if (a == b) return 1;  // Same pointer, same integer, or both null sentinel
+    // Null sentinel is only equal to itself (handled above)
+    if (a == ROCKIT_NULL || b == ROCKIT_NULL) return 0;
+    if (a == 0 || b == 0) return 0;
+    // Both must look like valid string pointers for content comparison
+    if (!is_likely_string_ptr(a) || !is_likely_string_ptr(b)) return 0;
     RockitString* sa = (RockitString*)(intptr_t)a;
     RockitString* sb = (RockitString*)(intptr_t)b;
     if (sa->length != sb->length) return 0;
@@ -443,12 +488,14 @@ RockitString* substring(RockitString* s, int64_t start, int64_t end) {
 }
 
 int64_t toInt(int64_t value) {
-    // In the VM, toInt extracts the integer from a tagged value.
-    // In native mode, values are unboxed i64 — just pass through.
-    // If the value is actually a string pointer, parse it.
-    // Use a heuristic: small values (<= 0xFFFF) are likely raw integers;
-    // values in the heap range are likely pointers.
-    // For Stage 1 compatibility, most toInt calls are on raw integers from mapGet.
+    // If the value looks like a string pointer, parse the string as an integer.
+    // Otherwise return the value as-is (it's already an integer).
+    if (value == ROCKIT_NULL) return 0;
+    if (value == 0) return 0;
+    if (is_likely_string_ptr(value)) {
+        RockitString* s = (RockitString*)(intptr_t)value;
+        return strtoll(s->data, NULL, 10);
+    }
     return value;
 }
 
@@ -478,7 +525,7 @@ int8_t isMap(int64_t val) {
     // In the VM, maps are tagged values. In native, we treat non-null as "is a map"
     // when used in Stage 1 context. This is a heuristic — Stage 1 uses isMap to check
     // if an AST node is a map (non-null pointer).
-    return val != 0;
+    return val != 0 && val != ROCKIT_NULL;
 }
 
 // -- List operations (i64 wrapper API) --
@@ -512,13 +559,15 @@ int8_t listContains(int64_t list, int64_t value) {
     return 0;
 }
 
-void listRemoveAt(int64_t list, int64_t index) {
+int64_t listRemoveAt(int64_t list, int64_t index) {
     RockitList* l = (RockitList*)(intptr_t)list;
-    if (!l || index < 0 || index >= l->size) return;
+    if (!l || index < 0 || index >= l->size) return ROCKIT_NULL;
+    int64_t removed = l->data[index];
     for (int64_t i = index; i < l->size - 1; i++) {
         l->data[i] = l->data[i + 1];
     }
     l->size--;
+    return removed;
 }
 
 // -- Map operations (i64 wrapper API) --
@@ -578,6 +627,7 @@ int64_t mapCreate_string(void) {
 
 int64_t mapPut(int64_t mapVal, RockitString* key, int64_t value) {
     StringMap* map = (StringMap*)(intptr_t)mapVal;
+    if (!map || !key || !map->entries) return 0;
     if (map->size * 2 >= map->capacity) {
         smap_grow(map);
     }
@@ -598,7 +648,7 @@ int64_t mapPut(int64_t mapVal, RockitString* key, int64_t value) {
 
 int64_t mapGet(int64_t mapVal, RockitString* key) {
     StringMap* map = (StringMap*)(intptr_t)mapVal;
-    if (!map || map->capacity == 0) return 0;
+    if (!map || !key || !map->entries) return ROCKIT_NULL;
     uint64_t h = string_hash(key) % (uint64_t)map->capacity;
     uint64_t start = h;
     while (map->entries[h].occupied) {
@@ -608,7 +658,7 @@ int64_t mapGet(int64_t mapVal, RockitString* key) {
         h = (h + 1) % (uint64_t)map->capacity;
         if (h == start) break;
     }
-    return 0;  // Not found — return null/0
+    return ROCKIT_NULL;  // Not found — return null sentinel
 }
 
 int64_t mapKeys(int64_t mapVal) {
@@ -721,17 +771,11 @@ RockitString* toString(int64_t value) {
     // In Stage 1, toString is called on various values.
     // If the value looks like a pointer to a RockitString, return it.
     // Otherwise convert the integer to string.
-    if (value == 0) return rockit_string_new("null");
-    // On arm64 macOS, heap pointers are > 0x100000000.
-    // Small values (line numbers, opcodes, etc.) are raw integers.
-    uint64_t uval = (uint64_t)value;
-    if (uval > 0x100000000ULL) {
-        // Likely a pointer — safely check if it looks like a RockitString
+    if (value == ROCKIT_NULL) return rockit_string_new("null");
+    if (value == 0) return rockit_int_to_string(value);  // integer 0, not null
+    if (is_likely_string_ptr(value)) {
         RockitString* s = (RockitString*)(intptr_t)value;
-        if (s->refCount > 0 && s->refCount < 100000 &&
-            s->length >= 0 && s->length < 10000000) {
-            return s;
-        }
+        return s;
     }
     return rockit_int_to_string(value);
 }

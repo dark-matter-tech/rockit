@@ -8,6 +8,12 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// ── Null Sentinel ───────────────────────────────────────────────────────────
+// In native code, null is represented as this non-zero sentinel value
+// so that integer 0 and null are distinguishable (unlike in untagged i64).
+// Value chosen to be: non-zero, below heap pointer range, too large for any index.
+#define ROCKIT_NULL ((int64_t)0xCAFEBABE)
+
 // ── Value Tags ──────────────────────────────────────────────────────────────
 
 #define ROCKIT_TAG_INT     0

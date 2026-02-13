@@ -230,11 +230,13 @@ public final class LLVMCodeGen {
     private func collectExternals(module: MIRModule) {
         // Always declare runtime functions we might use
         externalDecls.insert("declare void @rockit_println_int(i64)")
+        externalDecls.insert("declare void @rockit_println_any(i64)")
         externalDecls.insert("declare void @rockit_println_float(double)")
         externalDecls.insert("declare void @rockit_println_bool(i1)")
         externalDecls.insert("declare void @rockit_println_string(ptr)")
         externalDecls.insert("declare void @rockit_println_null()")
         externalDecls.insert("declare void @rockit_print_int(i64)")
+        externalDecls.insert("declare void @rockit_print_any(i64)")
         externalDecls.insert("declare void @rockit_print_float(double)")
         externalDecls.insert("declare void @rockit_print_bool(i1)")
         externalDecls.insert("declare void @rockit_print_string(ptr)")
@@ -299,7 +301,7 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare void @listSet(i64, i64, i64)")
         externalDecls.insert("declare i64 @listSize(i64)")
         externalDecls.insert("declare i1 @listContains(i64, i64)")
-        externalDecls.insert("declare void @listRemoveAt(i64, i64)")
+        externalDecls.insert("declare i64 @listRemoveAt(i64, i64)")
         // Map operations (string-keyed wrapper API)
         externalDecls.insert("declare i64 @mapCreate()")
         externalDecls.insert("declare i64 @mapPut(i64, ptr, i64)")
@@ -820,7 +822,7 @@ public final class LLVMCodeGen {
         }
 
         // Pass 2: Propagate types through store/load edges
-        // If `store %t0, %t1` and %t1 has type i64, then %t0 should also be i64.
+        // If `store %t0, %t1` and %t1 has no type, inherit from %t0.
         var changed = true
         while changed {
             changed = false
@@ -880,7 +882,18 @@ public final class LLVMCodeGen {
             ]
 
         case .constNull(let dest):
-            return [storeToTemp(dest, value: "null", type: "ptr")]
+            // Use ROCKIT_NULL sentinel (0xCAFEBABE) instead of null pointer.
+            // This ensures null is distinguishable from integer 0 in untagged i64 representation.
+            let destType = typeOf(dest)
+            if destType == "ptr" {
+                let tmp = nextSSA()
+                return [
+                    "\(tmp) = inttoptr i64 3405691582 to ptr",
+                    storeToTemp(dest, value: tmp, type: "ptr")
+                ]
+            } else {
+                return [storeToTemp(dest, value: "3405691582", type: "i64")]
+            }
 
         case .alloc:
             // Allocas are emitted in the entry block; nothing to do here
@@ -1037,14 +1050,17 @@ public final class LLVMCodeGen {
             return emitNewObject(dest: dest, typeName: typeName, args: args)
 
         case .nullCheck(let dest, let operand):
+            // Compare against ROCKIT_NULL sentinel (0xCAFEBABE) instead of null pointer
             let tmp1 = nextSSA()
+            let sentinel = nextSSA()
             let tmp2 = nextSSA()
             let labelOk = "nullcheck.ok.\(ssaCounter)"
             let labelFail = "nullcheck.fail.\(ssaCounter)"
             ssaCounter += 1
             return [
                 "\(tmp1) = load ptr, ptr \(addrOf(operand))",
-                "\(tmp2) = icmp eq ptr \(tmp1), null",
+                "\(sentinel) = inttoptr i64 3405691582 to ptr",
+                "\(tmp2) = icmp eq ptr \(tmp1), \(sentinel)",
                 "br i1 \(tmp2), label %\(labelFail), label %\(labelOk)",
                 "",
                 "\(labelFail):",
@@ -1056,13 +1072,25 @@ public final class LLVMCodeGen {
             ]
 
         case .isNull(let dest, let operand):
+            // Compare against ROCKIT_NULL sentinel (0xCAFEBABE) instead of null pointer
+            let opType = typeOf(operand)
             let tmp1 = nextSSA()
             let tmp2 = nextSSA()
-            return [
-                "\(tmp1) = load ptr, ptr \(addrOf(operand))",
-                "\(tmp2) = icmp eq ptr \(tmp1), null",
-                storeToTemp(dest, value: tmp2, type: "i1")
-            ]
+            if opType == "ptr" {
+                let sentinel = nextSSA()
+                return [
+                    "\(tmp1) = load ptr, ptr \(addrOf(operand))",
+                    "\(sentinel) = inttoptr i64 3405691582 to ptr",
+                    "\(tmp2) = icmp eq ptr \(tmp1), \(sentinel)",
+                    storeToTemp(dest, value: tmp2, type: "i1")
+                ]
+            } else {
+                return [
+                    "\(tmp1) = load i64, ptr \(addrOf(operand))",
+                    "\(tmp2) = icmp eq i64 \(tmp1), 3405691582",
+                    storeToTemp(dest, value: tmp2, type: "i1")
+                ]
+            }
 
         case .typeCheck(let dest, _, _):
             // TODO: Phase 1E
@@ -1187,28 +1215,33 @@ public final class LLVMCodeGen {
         _ intCmp: String, _ floatCmp: String,
         dest: String, lhs: String, rhs: String, type: MIRType
     ) -> [String] {
-        // For string equality/inequality, use content-based comparison
-        let isStringType: Bool
-        if case .string = type {
-            isStringType = true
-        } else {
-            // Also detect string operands by their register type (for Stage 1 where MIR types are .unit)
-            let lhsType = typeOf(lhs)
-            let rhsType = typeOf(rhs)
-            isStringType = (lhsType == "ptr" || rhsType == "ptr") && (intCmp.contains("eq") || intCmp.contains("ne"))
+        // For float comparisons, use fcmp
+        if isFloatType(type) {
+            let lt = llvmArithType(type)
+            let tmp1 = nextSSA()
+            let tmp2 = nextSSA()
+            let tmp3 = nextSSA()
+            return [
+                "\(tmp1) = load \(lt), ptr \(addrOf(lhs))",
+                "\(tmp2) = load \(lt), ptr \(addrOf(rhs))",
+                "\(tmp3) = \(floatCmp) \(lt) \(tmp1), \(tmp2)",
+                storeToTemp(dest, value: tmp3, type: "i1")
+            ]
         }
 
-        if isStringType && (intCmp.contains("eq") || intCmp.contains("ne")) {
+        // For eq/neq on non-float types, use rockit_string_eq/neq which
+        // safely handles both string pointers and integer values.
+        // This is needed because MIR types for string variables can be .unit
+        // when the type info is lost during lowering.
+        let isEqOrNeq = intCmp.contains("eq") || intCmp.contains("ne")
+        if isEqOrNeq {
             let tmp1 = nextSSA()
             let tmp2 = nextSSA()
             let tmp3 = nextSSA()
             let isEq = intCmp == "icmp eq"
             let funcName = isEq ? "@rockit_string_eq" : "@rockit_string_neq"
-            // Load as i64 (string pointers stored as i64 in Stage 1)
             let lhsType = typeOf(lhs)
             let rhsType = typeOf(rhs)
-            let lhsLoad = lhsType == "ptr" ? "ptrtoint ptr" : "i64"
-            let rhsLoad = rhsType == "ptr" ? "ptrtoint ptr" : "i64"
             var lines: [String] = []
             if lhsType == "ptr" {
                 let ptmp = nextSSA()
@@ -1229,15 +1262,15 @@ public final class LLVMCodeGen {
             return lines
         }
 
+        // For lt/lte/gt/gte, use standard icmp
         let lt = llvmArithType(type)
         let tmp1 = nextSSA()
         let tmp2 = nextSSA()
         let tmp3 = nextSSA()
-        let cmp = isFloatType(type) ? floatCmp : intCmp
         return [
             "\(tmp1) = load \(lt), ptr \(addrOf(lhs))",
             "\(tmp2) = load \(lt), ptr \(addrOf(rhs))",
-            "\(tmp3) = \(cmp) \(lt) \(tmp1), \(tmp2)",
+            "\(tmp3) = \(intCmp) \(lt) \(tmp1), \(tmp2)",
             storeToTemp(dest, value: tmp3, type: "i1")
         ]
     }
@@ -1353,9 +1386,10 @@ public final class LLVMCodeGen {
 
         switch argType {
         case "i64":
+            // Use _any variant which auto-detects string pointers vs integers
             return [
                 "\(tmp) = load i64, ptr \(addrOf(arg))",
-                "call void @\(prefix)_int(i64 \(tmp))"
+                "call void @\(prefix)_any(i64 \(tmp))"
             ]
         case "double":
             return [
@@ -1375,7 +1409,7 @@ public final class LLVMCodeGen {
         default:
             return [
                 "\(tmp) = load i64, ptr \(addrOf(arg))",
-                "call void @\(prefix)_int(i64 \(tmp))"
+                "call void @\(prefix)_any(i64 \(tmp))"
             ]
         }
     }
