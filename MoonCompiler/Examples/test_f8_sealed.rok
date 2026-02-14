@@ -1,0 +1,21 @@
+// Test sealed classes
+
+sealed class Shape {
+    data class Circle(val radius: Int)
+    data class Rect(val w: Int, val h: Int)
+}
+
+fun area(s: Shape): Int {
+    return when (s) {
+        is Shape.Circle -> s.radius * s.radius * 3
+        is Shape.Rect -> s.w * s.h
+        else -> 0
+    }
+}
+
+fun main(): Unit {
+    val c = Shape.Circle(5)
+    val r = Shape.Rect(4, 6)
+    println(area(c))
+    println(area(r))
+}

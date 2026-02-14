@@ -1,0 +1,21 @@
+// Test enums
+
+enum class Color {
+    RED,
+    GREEN,
+    BLUE
+}
+
+fun colorName(c: Color): String {
+    return when (c) {
+        Color.RED -> "red"
+        Color.GREEN -> "green"
+        Color.BLUE -> "blue"
+        else -> "unknown"
+    }
+}
+
+fun main(): Unit {
+    val c = Color.GREEN
+    println(colorName(c))
+}

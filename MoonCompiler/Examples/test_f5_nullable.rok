@@ -1,0 +1,14 @@
+// Test nullable types
+
+fun main(): Unit {
+    val s: String? = null
+    if (s == null) {
+        println("null: pass")
+    }
+    val t: String? = "hello"
+    if (t != null) {
+        println("not null: pass")
+    }
+    val result: String = s ?: "default"
+    println(result)
+}

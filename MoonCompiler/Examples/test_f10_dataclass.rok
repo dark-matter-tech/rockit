@@ -1,0 +1,11 @@
+// Test data class basics
+
+data class Point(val x: Int, val y: Int)
+
+fun main(): Unit {
+    val p = Point(3, 4)
+    println(p.x)
+    println(p.y)
+    val q = Point(10, 20)
+    println(q.x + q.y)
+}

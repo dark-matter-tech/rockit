@@ -1,0 +1,16 @@
+// Test when expressions
+
+fun describe(n: Int): String {
+    return when (n) {
+        1 -> "one"
+        2 -> "two"
+        3 -> "three"
+        else -> "other"
+    }
+}
+
+fun main(): Unit {
+    println(describe(1))
+    println(describe(2))
+    println(describe(99))
+}

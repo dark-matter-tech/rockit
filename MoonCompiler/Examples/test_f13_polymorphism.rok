@@ -1,0 +1,31 @@
+// Test: Polymorphic method dispatch via sealed class hierarchy
+sealed class Shape
+class Circle(val radius: Int) : Shape {
+    fun area(): Int {
+        return radius * radius * 3
+    }
+}
+class Rect(val w: Int, val h: Int) : Shape {
+    fun area(): Int {
+        return w * h
+    }
+}
+
+fun printArea(s: Shape): Unit {
+    // This calls s.area() — needs runtime dispatch
+    // to pick Circle.area() or Rect.area() based on runtime type
+    println(s.area())
+}
+
+fun main(): Unit {
+    val c = Circle(5)
+    val r = Rect(3, 4)
+
+    // Direct calls (static dispatch)
+    println(c.area())
+    println(r.area())
+
+    // Polymorphic calls (dynamic dispatch)
+    printArea(c)
+    printArea(r)
+}

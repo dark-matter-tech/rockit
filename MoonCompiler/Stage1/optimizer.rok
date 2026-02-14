@@ -1,0 +1,408 @@
+// Stage 1 Optimizer — AST-level optimization passes
+// Runs between type checking and code generation
+
+// ---------------------------------------------------------------------------
+// Constant folding — evaluate compile-time constant expressions
+// ---------------------------------------------------------------------------
+
+fun foldConstants(ast: Map): Map {
+    val decls = mapGet(ast, "decls")
+    if (decls == null) { return ast }
+    var i: Int = 0
+    while (i < listSize(decls)) {
+        val decl = listGet(decls, i)
+        if (decl != null) {
+            foldDeclConstants(decl)
+        }
+        i = i + 1
+    }
+    return ast
+}
+
+fun foldDeclConstants(decl: Map): Unit {
+    if (decl == null) { return }
+    if (!isMap(decl)) { return }
+    val kind = toString(mapGet(decl, "kind"))
+    if (kind == "funDecl") {
+        val body = mapGet(decl, "body")
+        if (body != null) {
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) {
+                foldStmtList(stmts)
+            }
+        }
+    } else if (kind == "classDecl") {
+        val members = mapGet(decl, "members")
+        if (members != null) {
+            var i: Int = 0
+            while (i < listSize(members)) {
+                foldDeclConstants(listGet(members, i))
+                i = i + 1
+            }
+        }
+    }
+}
+
+fun foldStmtList(stmts: List): Unit {
+    var i: Int = 0
+    while (i < listSize(stmts)) {
+        val stmt = listGet(stmts, i)
+        val folded = foldStmt(stmt)
+        if (folded != stmt) {
+            listSet(stmts, i, folded)
+        }
+        i = i + 1
+    }
+}
+
+fun foldStmt(stmt: Map): Map {
+    if (stmt == null) { return stmt }
+    if (!isMap(stmt)) { return stmt }
+    val kind = toString(mapGet(stmt, "kind"))
+
+    if (kind == "valDecl" || kind == "varDecl") {
+        val initExpr = mapGet(stmt, "init")
+        if (initExpr != null) {
+            mapPut(stmt, "init", foldExpr(initExpr))
+        }
+    } else if (kind == "assign" || kind == "compoundAssign") {
+        val value = mapGet(stmt, "value")
+        if (value != null) {
+            mapPut(stmt, "value", foldExpr(value))
+        }
+    } else if (kind == "return") {
+        val value = mapGet(stmt, "value")
+        if (value != null) {
+            mapPut(stmt, "value", foldExpr(value))
+        }
+    } else if (kind == "if") {
+        val condition = mapGet(stmt, "condition")
+        if (condition != null) {
+            mapPut(stmt, "condition", foldExpr(condition))
+        }
+        val thenBody = mapGet(stmt, "then")
+        if (thenBody != null) {
+            val stmts = mapGet(thenBody, "stmts")
+            if (stmts != null) { foldStmtList(stmts) }
+        }
+        val elseBody = mapGet(stmt, "else")
+        if (elseBody != null) {
+            val eStmts = mapGet(elseBody, "stmts")
+            if (eStmts != null) { foldStmtList(eStmts) }
+        }
+    } else if (kind == "while") {
+        val condition = mapGet(stmt, "condition")
+        if (condition != null) {
+            mapPut(stmt, "condition", foldExpr(condition))
+        }
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) { foldStmtList(stmts) }
+        }
+    } else if (kind == "for") {
+        val iterable = mapGet(stmt, "iterable")
+        if (iterable != null) {
+            mapPut(stmt, "iterable", foldExpr(iterable))
+        }
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) { foldStmtList(stmts) }
+        }
+    } else if (kind == "throw") {
+        val value = mapGet(stmt, "value")
+        if (value != null) {
+            mapPut(stmt, "value", foldExpr(value))
+        }
+    } else if (kind == "forDestructure") {
+        val iterable = mapGet(stmt, "iterable")
+        if (iterable != null) {
+            mapPut(stmt, "iterable", foldExpr(iterable))
+        }
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            if (isMap(body)) {
+                val stmts = mapGet(body, "stmts")
+                if (stmts != null) { foldStmtList(stmts) }
+            }
+        }
+    } else if (kind == "break" || kind == "continue") {
+        // No-op
+    } else if (kind == "tryCatch") {
+        val tryBody = mapGet(stmt, "tryBody")
+        if (tryBody != null) {
+            if (isMap(tryBody)) {
+                val stmts = mapGet(tryBody, "stmts")
+                if (stmts != null) { foldStmtList(stmts) }
+            }
+        }
+        val catchBody = mapGet(stmt, "catchBody")
+        if (catchBody != null) {
+            if (isMap(catchBody)) {
+                val stmts = mapGet(catchBody, "stmts")
+                if (stmts != null) { foldStmtList(stmts) }
+            }
+        }
+    } else if (kind == "when") {
+        val subject = mapGet(stmt, "subject")
+        if (subject != null) {
+            mapPut(stmt, "subject", foldExpr(subject))
+        }
+    } else if (kind == "funDecl") {
+        foldDeclConstants(stmt)
+    } else if (kind == "block") {
+        val stmts = mapGet(stmt, "stmts")
+        if (stmts != null) { foldStmtList(stmts) }
+    } else {
+        // Might be a bare expression
+        return foldExpr(stmt)
+    }
+    return stmt
+}
+
+fun foldExpr(expr: Map): Map {
+    if (expr == null) { return expr }
+    if (!isMap(expr)) { return expr }
+    val kind = toString(mapGet(expr, "kind"))
+
+    if (kind == "binary") {
+        val left = foldExpr(mapGet(expr, "left"))
+        val right = foldExpr(mapGet(expr, "right"))
+        mapPut(expr, "left", left)
+        mapPut(expr, "right", right)
+
+        if (!isMap(left)) { return expr }
+        if (!isMap(right)) { return expr }
+        val op = toString(mapGet(expr, "op"))
+        val lk = toString(mapGet(left, "kind"))
+        val rk = toString(mapGet(right, "kind"))
+
+        // Integer constant folding
+        if (lk == "intLit" && rk == "intLit") {
+            val lv = toInt(mapGet(left, "value"))
+            val rv = toInt(mapGet(right, "value"))
+            if (op == "+") { return makeIntLit(lv + rv, expr) }
+            if (op == "-") { return makeIntLit(lv - rv, expr) }
+            if (op == "*") { return makeIntLit(lv * rv, expr) }
+            if (op == "/" && rv != 0) { return makeIntLit(lv / rv, expr) }
+            if (op == "%"  && rv != 0) { return makeIntLit(lv % rv, expr) }
+            if (op == "==") { return makeBoolLit(lv == rv, expr) }
+            if (op == "!=") { return makeBoolLit(lv != rv, expr) }
+            if (op == "<")  { return makeBoolLit(lv < rv, expr) }
+            if (op == ">")  { return makeBoolLit(lv > rv, expr) }
+            if (op == "<=") { return makeBoolLit(lv <= rv, expr) }
+            if (op == ">=") { return makeBoolLit(lv >= rv, expr) }
+        }
+
+        // Boolean constant folding
+        if (lk == "boolLit" && rk == "boolLit") {
+            val lv = mapGet(left, "value") == true
+            val rv = mapGet(right, "value") == true
+            if (op == "&&") { return makeBoolLit(lv && rv, expr) }
+            if (op == "||") { return makeBoolLit(lv || rv, expr) }
+            if (op == "==") { return makeBoolLit(lv == rv, expr) }
+            if (op == "!=") { return makeBoolLit(lv != rv, expr) }
+        }
+
+        // String constant folding
+        if (lk == "stringLit" && rk == "stringLit" && op == "+") {
+            val lv = toString(mapGet(left, "value"))
+            val rv = toString(mapGet(right, "value"))
+            return makeStringLit(stringConcat(lv, rv), expr)
+        }
+
+        return expr
+    }
+
+    if (kind == "unary") {
+        val operand = foldExpr(mapGet(expr, "operand"))
+        mapPut(expr, "operand", operand)
+        if (!isMap(operand)) { return expr }
+        val op = toString(mapGet(expr, "op"))
+        val ok = toString(mapGet(operand, "kind"))
+
+        if (ok == "intLit" && op == "-") {
+            val v = toInt(mapGet(operand, "value"))
+            return makeIntLit(0 - v, expr)
+        }
+        if (ok == "boolLit" && op == "!") {
+            val v = mapGet(operand, "value") == true
+            return makeBoolLit(!v, expr)
+        }
+        return expr
+    }
+
+    if (kind == "call") {
+        val args = mapGet(expr, "args")
+        if (args != null) {
+            var i: Int = 0
+            while (i < listSize(args)) {
+                val arg = listGet(args, i)
+                if (isMap(arg)) {
+                    val argKind = toString(mapGet(arg, "kind"))
+                    if (argKind == "namedArg") {
+                        val argValue = mapGet(arg, "value")
+                        if (argValue != null) {
+                            mapPut(arg, "value", foldExpr(argValue))
+                        }
+                    } else {
+                        listSet(args, i, foldExpr(arg))
+                    }
+                }
+                i = i + 1
+            }
+        }
+        return expr
+    }
+
+    if (kind == "paren") {
+        val inner = foldExpr(mapGet(expr, "expr"))
+        mapPut(expr, "expr", inner)
+        // If inner is a literal, just return it directly
+        if (!isMap(inner)) { return expr }
+        val ik = toString(mapGet(inner, "kind"))
+        if (ik == "intLit" || ik == "floatLit" || ik == "stringLit" || ik == "boolLit") {
+            return inner
+        }
+        return expr
+    }
+
+    return expr
+}
+
+fun makeIntLit(value: Int, original: Map): Map {
+    val node = mapCreate()
+    mapPut(node, "kind", "intLit")
+    mapPut(node, "value", value)
+    mapPut(node, "line", mapGet(original, "line"))
+    mapPut(node, "col", mapGet(original, "col"))
+    return node
+}
+
+fun makeBoolLit(value: Bool, original: Map): Map {
+    val node = mapCreate()
+    mapPut(node, "kind", "boolLit")
+    mapPut(node, "value", value)
+    mapPut(node, "line", mapGet(original, "line"))
+    mapPut(node, "col", mapGet(original, "col"))
+    return node
+}
+
+fun makeStringLit(value: String, original: Map): Map {
+    val node = mapCreate()
+    mapPut(node, "kind", "stringLit")
+    mapPut(node, "value", value)
+    mapPut(node, "line", mapGet(original, "line"))
+    mapPut(node, "col", mapGet(original, "col"))
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Dead function elimination — remove unreachable functions
+// ---------------------------------------------------------------------------
+
+fun eliminateDeadFunctions(compiler: Map): Unit {
+    val functions = mapGet(compiler, "functions")
+    val pool = mapGet(compiler, "pool")
+    if (functions == null) { return }
+    if (pool == null) { return }
+
+    // Build name index: funcName -> index in functions list
+    val nameIndex = mapCreate()
+    var fi: Int = 0
+    while (fi < listSize(functions)) {
+        val funcRec = listGet(functions, fi)
+        val nameIdx = toInt(mapGet(funcRec, "nameIdx"))
+        val poolEntry = listGet(pool, nameIdx)
+        val fname = toString(mapGet(poolEntry, "value"))
+        mapPut(nameIndex, fname, fi)
+        fi = fi + 1
+    }
+
+    // Build set of all function names for reference checking
+    val allFuncNames = mapCreate()
+    val nameKeys = mapKeys(nameIndex)
+    var ni: Int = 0
+    while (ni < listSize(nameKeys)) {
+        mapPut(allFuncNames, toString(listGet(nameKeys, ni)), true)
+        ni = ni + 1
+    }
+
+    // Find all reachable functions starting from "main"
+    val reachable = mapCreate()
+    val worklist = listCreate()
+    listAppend(worklist, "main")
+    mapPut(reachable, "main", true)
+
+    while (listSize(worklist) > 0) {
+        val fname = toString(listRemoveAt(worklist, 0))
+        val funcIdx = mapGet(nameIndex, fname)
+        if (funcIdx == null) { continue }
+        val funcRec = listGet(functions, toInt(funcIdx))
+
+        // Scan bytecode for CALL instructions that reference string constants
+        // Also scan the global constant pool for function name string references
+        // Simple approach: scan ALL string constants in the pool and check if
+        // the function's bytecode references them via CONST_STRING opcodes
+        val bytecode = mapGet(funcRec, "bytecode")
+        if (bytecode != null) {
+            var bi: Int = 0
+            while (bi < listSize(bytecode)) {
+                val byte = toInt(listGet(bytecode, bi))
+                // OP_CALL = 0x50 (80), OP_CALL_INDIRECT = 0x52 (82)
+                // OP_CONST_STRING = 0x13 (19)
+                // All string constant references could be function names
+                if (byte == 5) {
+                    // OP_CONST_STRING (5): dest(2), constIdx(2)
+                    if (bi + 4 < listSize(bytecode)) {
+                        val cidxHi = toInt(listGet(bytecode, bi + 3))
+                        val cidxLo = toInt(listGet(bytecode, bi + 4))
+                        val cidx = cidxHi * 256 + cidxLo
+                        if (cidx < listSize(pool)) {
+                            val constEntry = listGet(pool, cidx)
+                            val cval = toString(mapGet(constEntry, "value"))
+                            if (mapGet(allFuncNames, cval) != null) {
+                                if (mapGet(reachable, cval) == null) {
+                                    mapPut(reachable, cval, true)
+                                    listAppend(worklist, cval)
+                                }
+                            }
+                        }
+                    }
+                } else if (byte == 80) {
+                    // OP_CALL: dest(2), funcIdx(2), argCount(2), args...
+                    if (bi + 4 < listSize(bytecode)) {
+                        val fidxHi = toInt(listGet(bytecode, bi + 3))
+                        val fidxLo = toInt(listGet(bytecode, bi + 4))
+                        val fidx = fidxHi * 256 + fidxLo
+                        if (fidx < listSize(pool)) {
+                            val constEntry = listGet(pool, fidx)
+                            val cval = toString(mapGet(constEntry, "value"))
+                            if (mapGet(allFuncNames, cval) != null) {
+                                if (mapGet(reachable, cval) == null) {
+                                    mapPut(reachable, cval, true)
+                                    listAppend(worklist, cval)
+                                }
+                            }
+                        }
+                    }
+                }
+                bi = bi + 1
+            }
+        }
+    }
+
+    // Filter functions list to keep only reachable ones
+    var ri: Int = listSize(functions) - 1
+    while (ri >= 0) {
+        val funcRec = listGet(functions, ri)
+        val nameIdx = toInt(mapGet(funcRec, "nameIdx"))
+        val poolEntry = listGet(pool, nameIdx)
+        val fname = toString(mapGet(poolEntry, "value"))
+        if (mapGet(reachable, fname) == null) {
+            listRemoveAt(functions, ri)
+        }
+        ri = ri - 1
+    }
+}

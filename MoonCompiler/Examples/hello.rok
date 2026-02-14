@@ -1,0 +1,109 @@
+// hello.rok — First Rockit program
+// Dark Matter Tech
+
+package com.darkmatter.hello
+
+import rockit.core.List
+import rockit.http.HttpClient
+
+// Constants and variables
+val appName: String = "Rockit Demo"
+var counter: Int = 0
+val version = 1.0
+val hexColor = 0xFF5B21B6
+val binary = 0b10110100
+
+// Nullable types
+val optional: String? = null
+val length = optional?.length ?: 0
+
+// Functions
+fun add(a: Int, b: Int): Int {
+    return a + b
+}
+
+fun greet(name: String, greeting: String = "Hello"): String {
+    return "${greeting}, ${name}!"
+}
+
+fun multiply(a: Int, b: Int): Int = a * b
+
+// Data class
+data class User(
+    val id: String,
+    val name: String,
+    val email: String,
+    val role: Role = Role.Viewer
+)
+
+// Sealed class
+sealed class Result<out T> {
+    data class Success<T>(val data: T) : Result<T>()
+    data class Error(val message: String) : Result<Nothing>()
+    object Loading : Result<Nothing>()
+}
+
+// Interface
+interface Serializable {
+    fun toBytes(): ByteArray
+    fun contentType(): String = "application/octet-stream"
+}
+
+// Control flow
+fun handleResult(r: Result<User>) = when (r) {
+    is Result.Success -> showUser(r.data)
+    is Result.Error   -> showError(r.message)
+    Result.Loading    -> showSpinner()
+}
+
+// Async
+suspend fun fetchUser(id: String): User {
+    val resp = http.get("https://api.example.com/users/$id")
+    return resp.decode<User>()
+}
+
+// Actor
+actor ShoppingCart {
+    private var items = mutableListOf<CartItem>()
+    fun add(item: CartItem) { items.add(item) }
+    fun total(): Float64 = items.sumOf { it.price * it.quantity }
+}
+
+// View (RockitUI)
+view ProductCard(product: Product) {
+    Column(spacing = 12.dp, padding = 16.dp) {
+        Image(product.thumbnailUrl)
+            .size(200.dp, 200.dp).cornerRadius(8.dp)
+        Text(product.name).font(.headline).color(.primary)
+        Text("$${product.price}").font(.body).color(.secondary)
+        Button("Add to Cart") { cart.add(product) }
+            .style(.primary).fullWidth()
+    }
+}
+
+// Navigation
+navigation App {
+    route("/") { HomePage() }
+    route("/products/{id}") { p -> ProductDetail(p["id"]) }
+    route("/cart") { CartPage() }
+}
+
+// Theme
+theme AppTheme {
+    colors { primary = Color(0x5B21B6); surface = Color(0xFFFFFF) }
+}
+
+// Platform capability
+@Capability(requires = Capability.Payments)
+suspend fun checkout(cart: Cart): PaymentResult {
+    val payment = Payment(cart.total, Currency.USD)
+    return Platform.payments.request(payment)
+}
+
+// Entry point
+fun main() {
+    print("Hello, Rockit!")
+    val user = User("1", "Micah", "micah@darkmatter.tech")
+    val result = add(40, 2)
+    print("The answer is $result")
+}

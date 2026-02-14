@@ -1,0 +1,10 @@
+// Test extension functions
+
+fun Int.double(): Int {
+    return this * 2
+}
+
+fun main(): Unit {
+    println(5.double())
+    println(10.double())
+}

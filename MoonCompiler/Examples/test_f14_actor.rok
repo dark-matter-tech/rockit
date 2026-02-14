@@ -1,0 +1,20 @@
+// Test: Actor declaration and method calls
+actor Counter {
+    var count: Int = 0
+
+    fun increment(): Unit {
+        count = count + 1
+    }
+
+    fun getCount(): Int {
+        return count
+    }
+}
+
+fun main(): Unit {
+    val c = Counter()
+    c.increment()
+    c.increment()
+    c.increment()
+    println(c.getCount())
+}

@@ -1,0 +1,12 @@
+.claude
+**/.build/
+.swiftpm/
+**/.swiftpm/
+.idea/
+*.o
+*.ll
+*.rokb
+MoonCompiler/--dump-llvm
+MoonCompiler/Examples/test_*
+!MoonCompiler/Examples/test_*.rok
+MoonCompiler/Stage1/command
