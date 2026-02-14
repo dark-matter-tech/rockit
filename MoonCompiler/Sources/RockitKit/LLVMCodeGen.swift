@@ -362,6 +362,9 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare void @rockit_object_set_field(ptr, i32, i64)")
         externalDecls.insert("declare void @rockit_retain(ptr)")
         externalDecls.insert("declare void @rockit_release(ptr)")
+        // Universal value ARC (for write barriers on untyped fields)
+        externalDecls.insert("declare void @rockit_retain_value(i64)")
+        externalDecls.insert("declare void @rockit_release_value(i64)")
         // Type checking runtime
         externalDecls.insert("declare i8 @rockit_is_type(ptr, ptr)")
         externalDecls.insert("declare ptr @rockit_object_get_type_name(ptr)")
@@ -490,6 +493,9 @@ public final class LLVMCodeGen {
         registerTypes = [:]
         currentParams = function.parameters
         paramMap = [:]
+
+        // Reset per-function ARC tracking
+        ownedHeapTemps = []
 
         // Pre-pass: identify temps used as callIndirect function refs
         indirectCallTargets = []
@@ -1070,6 +1076,7 @@ public final class LLVMCodeGen {
             }
             let globalName = stringPool[value]!
             let tmp = nextSSA()
+            ownedHeapTemps.append((allocaName: dest, kind: .string))
             return [
                 "\(tmp) = call ptr @rockit_string_new(ptr \(globalName))",
                 storeToTemp(dest, value: tmp, type: "ptr")
@@ -1356,23 +1363,59 @@ public final class LLVMCodeGen {
     /// Actual LLVM return type for the current function (may differ from MIR's declared type).
     private var currentReturnType: String = "void"
 
+    // MARK: - ARC Tracking
+
+    /// The kind of heap object a temp holds (for choosing the correct release function).
+    private enum HeapKind {
+        case string   // rockit_string_release
+        case object   // rockit_release
+        case list     // rockit_release_value (i64 pointer-as-int from listCreate)
+        case map      // rockit_release_value (i64 pointer-as-int from mapCreate)
+    }
+
+    /// Temps that own newly-allocated heap objects and need release at function exit.
+    /// Populated during instruction emission; consumed when emitting ret terminators.
+    private var ownedHeapTemps: [(allocaName: String, kind: HeapKind)] = []
+
+    /// Emit release calls for all owned heap temps except the return value.
+    /// Called before every `ret` instruction to clean up function-local allocations.
+    ///
+    /// NOTE: Function-exit cleanup is currently disabled because it causes
+    /// premature deallocation when values are passed to runtime functions
+    /// (mapPut, listAppend, etc.) that store references without retaining them.
+    /// Enabling this requires either escape analysis or runtime-side retains
+    /// in all collection functions. Write barriers on setField and constructor
+    /// retains are still active and handle object field management correctly.
+    private func emitARCCleanup(returnTemp: String?) -> [String] {
+        // Disabled for now — see note above
+        return []
+    }
+
     private func emitTerminator(_ term: MIRTerminator, returnType: MIRType) -> [String] {
         switch term {
         case .ret(let val):
+            var lines: [String] = []
+
             if isMainFunction {
-                // C ABI: main returns i32 0
-                return ["ret i32 0"]
+                // ARC cleanup before main returns
+                lines.append(contentsOf: emitARCCleanup(returnTemp: nil))
+                lines.append("ret i32 0")
+                return lines
             }
             if let val = val {
                 // Use the function's actual return type (may be inferred, not MIR's declared type)
                 let retLLVM = currentReturnType != "void" ? currentReturnType : typeOf(val)
                 let tmp = nextSSA()
-                return [
-                    "\(tmp) = load \(retLLVM), ptr \(addrOf(val))",
-                    "ret \(retLLVM) \(tmp)"
-                ]
+                lines.append("\(tmp) = load \(retLLVM), ptr \(addrOf(val))")
+                // ARC: cleanup local allocations (currently disabled, see emitARCCleanup)
+                lines.append(contentsOf: emitARCCleanup(returnTemp: val))
+                lines.append("ret \(retLLVM) \(tmp)")
+                return lines
             } else {
-                return ["ret void"]
+                // ARC cleanup before void return
+                lines.append(contentsOf: emitARCCleanup(returnTemp: nil))
+                lines.append("ret void")
+                return lines
             }
 
         case .jump(let label):
@@ -1536,11 +1579,32 @@ public final class LLVMCodeGen {
             let resultTmp = nextSSA()
             lines.append("\(resultTmp) = call \(retType) @\(funcName)(\(argList))")
             lines.append(storeToTemp(dest, value: resultTmp, type: retType))
+
+            // ARC: track heap-allocating calls
+            if let kind = heapKindForFunction(function) {
+                ownedHeapTemps.append((allocaName: dest, kind: kind))
+            }
         } else {
             lines.append("call void @\(funcName)(\(argList))")
         }
 
         return lines
+    }
+
+    /// Returns the HeapKind for functions that return newly-allocated heap objects, or nil.
+    private func heapKindForFunction(_ name: String) -> HeapKind? {
+        switch name {
+        case "rockit_string_new", "rockit_string_concat", "stringConcat",
+             "readLine", "substring", "charAt", "stringTrim", "fileRead",
+             "rockit_int_to_string", "rockit_float_to_string", "rockit_bool_to_string":
+            return .string
+        case "rockit_list_create", "listCreate":
+            return .list
+        case "rockit_map_create", "mapCreate":
+            return .map
+        default:
+            return nil
+        }
     }
 
     // MARK: - Collection Builtins
@@ -1572,6 +1636,7 @@ public final class LLVMCodeGen {
             }
         }
         lines.append(storeToTemp(dest, value: listTmp, type: "ptr"))
+        ownedHeapTemps.append((allocaName: dest, kind: .list))
         return lines
     }
 
@@ -1591,6 +1656,7 @@ public final class LLVMCodeGen {
             i += 2
         }
         lines.append(storeToTemp(dest, value: mapTmp, type: "ptr"))
+        ownedHeapTemps.append((allocaName: dest, kind: .map))
         return lines
     }
 
@@ -1648,30 +1714,34 @@ public final class LLVMCodeGen {
         case "i64":
             // In Stage 1 code, i64 may actually be a string pointer stored as integer.
             // Use the runtime's toString which handles both cases.
+            ownedHeapTemps.append((allocaName: dest, kind: .string))
             return [
                 "\(tmp) = load i64, ptr \(addrOf(arg))",
                 "\(resultTmp) = call ptr @toString(i64 \(tmp))",
                 storeToTemp(dest, value: resultTmp, type: "ptr")
             ]
         case "double":
+            ownedHeapTemps.append((allocaName: dest, kind: .string))
             return [
                 "\(tmp) = load double, ptr \(addrOf(arg))",
                 "\(resultTmp) = call ptr @rockit_float_to_string(double \(tmp))",
                 storeToTemp(dest, value: resultTmp, type: "ptr")
             ]
         case "i1":
+            ownedHeapTemps.append((allocaName: dest, kind: .string))
             return [
                 "\(tmp) = load i1, ptr \(addrOf(arg))",
                 "\(resultTmp) = call ptr @rockit_bool_to_string(i1 \(tmp))",
                 storeToTemp(dest, value: resultTmp, type: "ptr")
             ]
         case "ptr":
-            // Already a string pointer — just copy
+            // Already a string pointer — just copy (no new allocation, no ARC tracking)
             return [
                 "\(tmp) = load ptr, ptr \(addrOf(arg))",
                 storeToTemp(dest, value: tmp, type: "ptr")
             ]
         default:
+            ownedHeapTemps.append((allocaName: dest, kind: .string))
             return [
                 "\(tmp) = load i64, ptr \(addrOf(arg))",
                 "\(resultTmp) = call ptr @rockit_int_to_string(i64 \(tmp))",
@@ -2007,6 +2077,7 @@ public final class LLVMCodeGen {
         }
 
         lines.append(storeToTemp(dest, value: accumulator, type: "ptr"))
+        ownedHeapTemps.append((allocaName: dest, kind: .string))
         return lines
     }
 
@@ -2048,40 +2119,45 @@ public final class LLVMCodeGen {
         let objTmp = nextSSA()
         lines.append("\(objTmp) = call ptr @rockit_object_alloc(ptr \(typeNameGlobal), i32 \(fieldCount))")
 
-        // Set each field from the constructor args
+        // Set each field from the constructor args (with ARC retain for each stored value)
         if typeDecls[typeName] != nil {
             for (i, arg) in args.enumerated() {
                 let argType = typeOf(arg)
                 let valTmp = nextSSA()
                 lines.append("\(valTmp) = load \(argType), ptr \(addrOf(arg))")
+                let valI64: String
                 if argType == "ptr" {
-                    // Convert ptr to i64 for storage
                     let castTmp = nextSSA()
                     lines.append("\(castTmp) = ptrtoint ptr \(valTmp) to i64")
-                    lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(castTmp))")
+                    valI64 = castTmp
                 } else if argType == "i1" {
                     let extTmp = nextSSA()
                     lines.append("\(extTmp) = zext i1 \(valTmp) to i64")
-                    lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(extTmp))")
+                    valI64 = extTmp
                 } else if argType == "double" {
                     let castTmp = nextSSA()
                     lines.append("\(castTmp) = bitcast double \(valTmp) to i64")
-                    lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(castTmp))")
+                    valI64 = castTmp
                 } else {
-                    // i64 — store directly
-                    lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(valTmp))")
+                    valI64 = valTmp
                 }
+                // ARC: retain the value being stored into the field
+                lines.append("call void @rockit_retain_value(i64 \(valI64))")
+                lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(valI64))")
             }
         } else {
             // No type decl — store args by index
             for (i, arg) in args.enumerated() {
                 let valTmp = nextSSA()
                 lines.append("\(valTmp) = load i64, ptr \(addrOf(arg))")
+                // ARC: retain the value being stored into the field
+                lines.append("call void @rockit_retain_value(i64 \(valTmp))")
                 lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(valTmp))")
             }
         }
 
         lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
+        ownedHeapTemps.append((allocaName: dest, kind: .object))
         return lines
     }
 
@@ -2157,26 +2233,37 @@ public final class LLVMCodeGen {
             idx = found ?? 0
         }
 
-        // Load value and convert to i64
+        // ARC write barrier: load old value before overwriting
+        let oldVal = nextSSA()
+        lines.append("\(oldVal) = call i64 @rockit_object_get_field(ptr \(objTmp), i32 \(idx))")
+
+        // Load new value and convert to i64
         let valType = typeOf(value)
         let valTmp = nextSSA()
         lines.append("\(valTmp) = load \(valType), ptr \(addrOf(value))")
 
+        // Convert new value to i64 for storage
+        let newValI64: String
         if valType == "ptr" {
             let castTmp = nextSSA()
             lines.append("\(castTmp) = ptrtoint ptr \(valTmp) to i64")
-            lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(idx), i64 \(castTmp))")
+            newValI64 = castTmp
         } else if valType == "i1" {
             let extTmp = nextSSA()
             lines.append("\(extTmp) = zext i1 \(valTmp) to i64")
-            lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(idx), i64 \(extTmp))")
+            newValI64 = extTmp
         } else if valType == "double" {
             let castTmp = nextSSA()
             lines.append("\(castTmp) = bitcast double \(valTmp) to i64")
-            lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(idx), i64 \(castTmp))")
+            newValI64 = castTmp
         } else {
-            lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(idx), i64 \(valTmp))")
+            newValI64 = valTmp
         }
+
+        // ARC: retain new value, store, release old value
+        lines.append("call void @rockit_retain_value(i64 \(newValI64))")
+        lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(idx), i64 \(newValI64))")
+        lines.append("call void @rockit_release_value(i64 \(oldVal))")
 
         return lines
     }

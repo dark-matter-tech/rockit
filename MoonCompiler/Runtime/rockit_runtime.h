@@ -59,6 +59,11 @@ void     rockit_object_set_field(RockitObject* obj, int32_t index, int64_t value
 void     rockit_retain(RockitObject* obj);
 void     rockit_release(RockitObject* obj);
 
+// ── Universal Value ARC ─────────────────────────────────────────────────────
+// Retain/release for any ref-counted value stored as i64 (type detected at runtime).
+void     rockit_retain_value(int64_t val);
+void     rockit_release_value(int64_t val);
+
 // ── Runtime Type Checking ──────────────────────────────────────────────────
 
 /// Type hierarchy entry: maps a child type name to its parent type name.

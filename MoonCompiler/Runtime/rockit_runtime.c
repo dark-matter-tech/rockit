@@ -89,6 +89,59 @@ void rockit_release(RockitObject* obj) {
     }
 }
 
+// ── Universal Value ARC ─────────────────────────────────────────────────────
+// These functions handle retain/release for any ref-counted value stored as i64.
+// Used by write barriers where the compile-time type is unknown.
+
+static int is_likely_heap_ptr(int64_t value) {
+    if (value == 0 || value == ROCKIT_NULL) return 0;
+    uint64_t uval = (uint64_t)value;
+    return (uval > 0x100000000ULL && uval < 0x800000000000ULL);
+}
+
+void rockit_retain_value(int64_t val) {
+    if (!is_likely_heap_ptr(val)) return;
+    void* ptr = (void*)(intptr_t)val;
+    // RockitObject has typeName (a pointer) as its first field.
+    // String/List/Map have refCount (a small integer) as their first field.
+    int64_t first_field = *(int64_t*)ptr;
+    if (is_likely_heap_ptr(first_field)) {
+        // First field is a pointer → RockitObject (typeName is first, refCount is second)
+        ((RockitObject*)ptr)->refCount++;
+    } else {
+        // First field is refCount → String, List, or Map
+        (*(int64_t*)ptr)++;
+    }
+}
+
+void rockit_release_value(int64_t val) {
+    if (!is_likely_heap_ptr(val)) return;
+    void* ptr = (void*)(intptr_t)val;
+    int64_t first_field = *(int64_t*)ptr;
+    if (is_likely_heap_ptr(first_field)) {
+        // RockitObject: refCount is at offset 8
+        RockitObject* obj = (RockitObject*)ptr;
+        if (--obj->refCount <= 0) {
+            // Cascade: release all field values before freeing
+            for (int32_t i = 0; i < obj->fieldCount; i++) {
+                rockit_release_value(obj->fields[i]);
+            }
+            free(obj);
+        }
+    } else {
+        // String/List/Map: refCount is at offset 0
+        int64_t* refCount = (int64_t*)ptr;
+        if (--(*refCount) <= 0) {
+            // Check if it's a List (has data pointer at offset 24) or Map (has entries at offset 24)
+            // For bootstrap simplicity, just free the struct.
+            // Lists and Maps also have internal allocations that should be freed,
+            // but we can't distinguish them here without a type tag.
+            // The typed release functions (rockit_list_release, rockit_map_release) handle this.
+            free(ptr);
+        }
+    }
+}
+
 // ── Runtime Type Checking ──────────────────────────────────────────────────
 
 static const RockitTypeEntry* g_type_hierarchy = NULL;
