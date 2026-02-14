@@ -116,7 +116,7 @@ public final class TypeChecker {
         }
     }
 
-    private func gatherProperty(_ p: PropertyDecl) {
+    private func gatherProperty(_ p: PropertyDecl, allowRedeclaration: Bool = false) {
         let type: Type
         if let typeNode = p.type {
             type = resolver.resolve(typeNode)
@@ -130,7 +130,12 @@ public final class TypeChecker {
         let isMutable = !p.isVal
         let symbol = Symbol(name: p.name, type: type, kind: .variable(isMutable: isMutable), span: p.span)
         if !symbolTable.define(symbol) {
-            diagnostics.error("redeclaration of '\(p.name)'", at: p.span.start)
+            if allowRedeclaration {
+                // Kotlin-style: allow rebinding val/var in the same local scope
+                symbolTable.currentScope.update(symbol)
+            } else {
+                diagnostics.error("redeclaration of '\(p.name)'", at: p.span.start)
+            }
         }
     }
 
@@ -678,8 +683,8 @@ public final class TypeChecker {
             let _ = checkExpression(expr)
 
         case .propertyDecl(let p):
-            // Gather into scope then check
-            gatherProperty(p)
+            // Gather into scope then check (allow rebinding in local scopes)
+            gatherProperty(p, allowRedeclaration: true)
             checkProperty(p)
 
         case .returnStmt(let expr, _):

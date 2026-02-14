@@ -5081,7 +5081,12 @@ fun emitLLVM(compiler: Map, outputFile: String): Unit {
         if (mapGet(definedFuncs, name) == null) {
             // Not a user-defined function — might be needed
             if (name != "println" && name != "print") {
-                val sigStr = toString(mapGet(sigTable, name))
+                val rawSig = mapGet(sigTable, name)
+                if (rawSig == null) {
+                    di = di + 1
+                    continue
+                }
+                val sigStr = toString(rawSig)
                 val sig = llvmParseSig(sigStr)
                 val retType = toString(listGet(sig, 0))
                 var paramStr: String = ""
@@ -8494,8 +8499,8 @@ fun main(): Unit {
     // Compile
     val compiler = compileProgram(ast)
 
-    // Dead function elimination (always on — safe and reduces output size)
-    eliminateDeadFunctions(compiler)
+    // Dead function elimination — disabled for Stage 2 bootstrap
+    // eliminateDeadFunctions(compiler)
 
     val funcCount = listSize(mapGet(compiler, "functions"))
 

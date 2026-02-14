@@ -232,10 +232,9 @@ public final class LLVMCodeGen {
             for block in function.blocks {
                 for inst in block.instructions {
                     if case .constString(_, let value) = inst {
-                        // Skip lambda function names — they become function pointers, not strings
-                        if !moduleFunctionNames.contains(value) {
-                            internString(value)
-                        }
+                        // Always intern — even if the string matches a function name,
+                        // it may be used as a regular string (not a lambda reference).
+                        internString(value)
                     }
                 }
             }
@@ -491,6 +490,16 @@ public final class LLVMCodeGen {
         registerTypes = [:]
         currentParams = function.parameters
         paramMap = [:]
+
+        // Pre-pass: identify temps used as callIndirect function refs
+        indirectCallTargets = []
+        for block in function.blocks {
+            for inst in block.instructions {
+                if case .callIndirect(_, let funcRef, _) = inst {
+                    indirectCallTargets.insert(funcRef)
+                }
+            }
+        }
 
         var lines: [String] = []
 
@@ -1004,6 +1013,28 @@ public final class LLVMCodeGen {
             }
         }
 
+        // Pass 3: Re-propagate after alloc defaults are filled in.
+        // Temps created by .load from void-typed allocs (e.g., if-expression
+        // resultSlots) missed pass 2 because their source had no type yet.
+        changed = true
+        while changed {
+            changed = false
+            for edge in storeEdges {
+                if let srcType = tempTypes[edge.src], srcType != "void" {
+                    if tempTypes[edge.dest] == nil || tempTypes[edge.dest] == "void" {
+                        tempTypes[edge.dest] = srcType
+                        changed = true
+                    }
+                }
+                if let destType = tempTypes[edge.dest], destType != "void" {
+                    if tempTypes[edge.src] == nil || tempTypes[edge.src] == "void" {
+                        tempTypes[edge.src] = destType
+                        changed = true
+                    }
+                }
+            }
+        }
+
         // Filter out parameter names and special names (they get separate allocas in the prologue)
         let paramNames = Set(function.parameters.map { "param.\($0.0)" })
         let specialNames: Set<String> = ["this", "super"]
@@ -1030,8 +1061,10 @@ public final class LLVMCodeGen {
             return [storeToTemp(dest, value: value ? "1" : "0", type: "i1")]
 
         case .constString(let dest, let value):
-            // Lambda references: if the string is a known function name, store as function pointer
-            if moduleFunctionNames.contains(value) {
+            // Lambda references: only convert to function pointer when this temp is
+            // actually used as a callIndirect target (not just a string that happens
+            // to match a function name like "main").
+            if moduleFunctionNames.contains(value) && indirectCallTargets.contains(dest) {
                 let funcName = llvmFunctionName(value)
                 return [storeToTemp(dest, value: "@\(funcName)", type: "ptr")]
             }
@@ -1315,6 +1348,10 @@ public final class LLVMCodeGen {
 
     /// Whether the function currently being emitted is the entry point.
     private var isMainFunction = false
+
+    /// Temps used as function references in callIndirect instructions.
+    /// Only constString values for these temps should be converted to function pointers.
+    private var indirectCallTargets: Set<String> = []
 
     /// Actual LLVM return type for the current function (may differ from MIR's declared type).
     private var currentReturnType: String = "void"
