@@ -529,6 +529,11 @@ public final class MIRLowering {
             } else if case .memberAccess(let obj, let member, _) = a.target {
                 let objTemp = lowerExpression(obj)
                 builder.emit(.setField(object: objTemp, fieldName: member, value: value))
+            } else if case .subscriptAccess(let obj, let index, _) = a.target {
+                let objTemp = lowerExpression(obj)
+                let idxTemp = lowerExpression(index)
+                let dest = builder.newTemp()
+                builder.emit(.call(dest: dest, function: "listSet", args: [objTemp, idxTemp, value]))
             }
 
         case .plusAssign, .minusAssign, .timesAssign, .divideAssign, .moduloAssign:
@@ -585,9 +590,31 @@ public final class MIRLowering {
                 } else if let slot = locals[name] {
                     builder.emitStore(dest: slot, src: resultTemp)
                 }
-            } else {
-                // Member compound assignment — not fully supported in Stage 0
-                let _ = lowerExpression(a.target)
+            } else if case .memberAccess(let obj, let member, _) = a.target {
+                // Member compound assignment: obj.field op= value
+                let objTemp = lowerExpression(obj)
+                let oldVal = builder.newTemp()
+                builder.emit(.getField(dest: oldVal, object: objTemp, fieldName: member))
+
+                let resultTemp = builder.newTemp()
+                let opType = lookupExprType(a.target)
+
+                switch a.op {
+                case .plusAssign:
+                    builder.emit(.add(dest: resultTemp, lhs: oldVal, rhs: value, type: opType))
+                case .minusAssign:
+                    builder.emit(.sub(dest: resultTemp, lhs: oldVal, rhs: value, type: opType))
+                case .timesAssign:
+                    builder.emit(.mul(dest: resultTemp, lhs: oldVal, rhs: value, type: opType))
+                case .divideAssign:
+                    builder.emit(.div(dest: resultTemp, lhs: oldVal, rhs: value, type: opType))
+                case .moduloAssign:
+                    builder.emit(.mod(dest: resultTemp, lhs: oldVal, rhs: value, type: opType))
+                default:
+                    break
+                }
+
+                builder.emit(.setField(object: objTemp, fieldName: member, value: resultTemp))
             }
         }
     }
@@ -1031,6 +1058,14 @@ public final class MIRLowering {
     // MARK: - Binary Operations
 
     private func lowerBinary(left: Expression, op: BinaryOp, right: Expression) -> String {
+        // Short-circuit: && and || must NOT eagerly evaluate the right operand
+        if op == .and {
+            return lowerShortCircuitAnd(left: left, right: right)
+        }
+        if op == .or {
+            return lowerShortCircuitOr(left: left, right: right)
+        }
+
         let lhs = lowerExpression(left)
         let rhs = lowerExpression(right)
         let dest = builder.newTemp()
@@ -1050,11 +1085,57 @@ public final class MIRLowering {
         case .greater:      builder.emit(.gt(dest: dest, lhs: lhs, rhs: rhs, type: type))
         case .greaterEqual: builder.emit(.gte(dest: dest, lhs: lhs, rhs: rhs, type: type))
 
-        case .and:  builder.emit(.and(dest: dest, lhs: lhs, rhs: rhs))
-        case .or:   builder.emit(.or(dest: dest, lhs: lhs, rhs: rhs))
+        case .and, .or:
+            fatalError("unreachable: && and || handled above")
         }
 
         return dest
+    }
+
+    // MARK: - Short-Circuit Boolean Operators
+
+    private func lowerShortCircuitAnd(left: Expression, right: Expression) -> String {
+        let leftVal = lowerExpression(left)
+        let rhsLabel = builder.newBlockLabel("and.rhs")
+        let mergeLabel = builder.newBlockLabel("and.merge")
+        let resultSlot = builder.emitAlloc(type: .bool)
+
+        // If left is false, short-circuit to false
+        let falseConst = builder.emitConstBool(false)
+        builder.emitStore(dest: resultSlot, src: falseConst)
+        builder.terminate(.branch(condition: leftVal, thenLabel: rhsLabel, elseLabel: mergeLabel))
+
+        // RHS: evaluate right, store result
+        builder.startBlock(label: rhsLabel)
+        let rightVal = lowerExpression(right)
+        builder.emitStore(dest: resultSlot, src: rightVal)
+        builder.terminate(.jump(mergeLabel))
+
+        // Merge
+        builder.startBlock(label: mergeLabel)
+        return builder.emitLoad(src: resultSlot)
+    }
+
+    private func lowerShortCircuitOr(left: Expression, right: Expression) -> String {
+        let leftVal = lowerExpression(left)
+        let rhsLabel = builder.newBlockLabel("or.rhs")
+        let mergeLabel = builder.newBlockLabel("or.merge")
+        let resultSlot = builder.emitAlloc(type: .bool)
+
+        // If left is true, short-circuit to true
+        let trueConst = builder.emitConstBool(true)
+        builder.emitStore(dest: resultSlot, src: trueConst)
+        builder.terminate(.branch(condition: leftVal, thenLabel: mergeLabel, elseLabel: rhsLabel))
+
+        // RHS: evaluate right, store result
+        builder.startBlock(label: rhsLabel)
+        let rightVal = lowerExpression(right)
+        builder.emitStore(dest: resultSlot, src: rightVal)
+        builder.terminate(.jump(mergeLabel))
+
+        // Merge
+        builder.startBlock(label: mergeLabel)
+        return builder.emitLoad(src: resultSlot)
     }
 
     // MARK: - Unary Operations
@@ -1217,7 +1298,9 @@ public final class MIRLowering {
 
         // Then branch
         builder.startBlock(label: thenLabel)
-        lowerBlock(ie.thenBranch)
+        if let thenVal = lowerBlockAsExpression(ie.thenBranch) {
+            builder.emitStore(dest: resultSlot, src: thenVal)
+        }
         if !builder.isTerminated {
             builder.terminate(.jump(mergeLabel))
         }
@@ -1227,9 +1310,12 @@ public final class MIRLowering {
         if let elseBranch = ie.elseBranch {
             switch elseBranch {
             case .elseBlock(let block):
-                lowerBlock(block)
+                if let elseVal = lowerBlockAsExpression(block) {
+                    builder.emitStore(dest: resultSlot, src: elseVal)
+                }
             case .elseIf(let elseIf):
-                let _ = lowerIfExpr(elseIf)
+                let elseIfVal = lowerIfExpr(elseIf)
+                builder.emitStore(dest: resultSlot, src: elseIfVal)
             }
         }
         if !builder.isTerminated {
@@ -1239,6 +1325,27 @@ public final class MIRLowering {
         // Merge
         builder.startBlock(label: mergeLabel)
         return builder.emitLoad(src: resultSlot)
+    }
+
+    /// Lower a block and return the value of its last expression, if any.
+    private func lowerBlockAsExpression(_ block: Block) -> String? {
+        guard !block.statements.isEmpty else {
+            return nil
+        }
+        // Lower all statements except the last
+        for stmt in block.statements.dropLast() {
+            if builder.isTerminated { return nil }
+            lowerStatement(stmt)
+        }
+        // If the last statement is an expression, capture its value
+        if !builder.isTerminated, let last = block.statements.last {
+            if case .expression(let expr) = last {
+                return lowerExpression(expr)
+            } else {
+                lowerStatement(last)
+            }
+        }
+        return nil
     }
 
     // MARK: - When Expression

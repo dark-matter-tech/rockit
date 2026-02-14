@@ -225,6 +225,9 @@ public final class LLVMCodeGen {
     // MARK: - String Collection
 
     private func collectStrings(module: MIRModule) {
+        // Pre-intern runtime panic messages
+        internString("NullPointerException")
+
         for function in module.functions {
             for block in function.blocks {
                 for inst in block.instructions {
@@ -1222,7 +1225,7 @@ public final class LLVMCodeGen {
                 "br i1 \(tmp2), label %\(labelFail), label %\(labelOk)",
                 "",
                 "\(labelFail):",
-                "  call void @rockit_panic(ptr @.str.nullcheck)",
+                "  call void @rockit_panic(ptr \(stringPool["NullPointerException"]!))",
                 "  unreachable",
                 "",
                 "\(labelOk):",

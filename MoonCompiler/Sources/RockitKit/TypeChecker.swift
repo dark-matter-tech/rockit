@@ -1147,19 +1147,47 @@ public final class TypeChecker {
             diagnostics.error("if condition must be Bool, got '\(condType)'", at: ie.span.start)
         }
 
-        checkBlock(ie.thenBranch)
+        // Check then branch and infer type from last expression
+        let thenType = checkBlockAsExpression(ie.thenBranch)
 
+        // Check else branch
+        var elseType: Type = .unit
         if let elseBranch = ie.elseBranch {
             switch elseBranch {
             case .elseBlock(let block):
-                checkBlock(block)
+                elseType = checkBlockAsExpression(block)
             case .elseIf(let elseIf):
-                let _ = checkIfExpr(elseIf)
+                elseType = checkIfExpr(elseIf)
             }
         }
 
-        // For Stage 0, if used as expression, we'd need to unify branch types.
-        // Simplified: return Unit for now.
+        // If both branches have the same type, use it as the if-expression type
+        if thenType == elseType && !thenType.isError {
+            return thenType
+        }
+        // If either is Unit (statement block), return Unit
+        if thenType == .unit || elseType == .unit {
+            return .unit
+        }
+        // Otherwise return the then-branch type (best effort)
+        return thenType.isError ? elseType : thenType
+    }
+
+    /// Check a block and return the type of its last expression, or .unit if last is a statement.
+    private func checkBlockAsExpression(_ block: Block) -> Type {
+        guard !block.statements.isEmpty else {
+            return .unit
+        }
+        for stmt in block.statements.dropLast() {
+            checkStatement(stmt)
+        }
+        if let last = block.statements.last {
+            if case .expression(let expr) = last {
+                return checkExpression(expr)
+            } else {
+                checkStatement(last)
+            }
+        }
         return .unit
     }
 

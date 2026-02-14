@@ -1,0 +1,133 @@
+// test_f15_codegen_fixes.rok — Verify bug fixes and missing features
+
+// --- Bug 1: !! non-null assert ---
+fun testNonNullAssert(): Unit {
+    val s: String? = "hello"
+    val notNull: String = s!!
+    println(notNull)
+}
+
+// --- Bug 2: Subscript assignment ---
+fun testSubscriptAssign(): Unit {
+    val list = listCreate()
+    listAppend(list, 10)
+    listAppend(list, 20)
+    listAppend(list, 30)
+    list[1] = 99
+    println(listGet(list, 1))
+}
+
+// --- Bug 3: Member compound assignment ---
+data class Counter(var count: Int)
+
+fun testMemberCompound(): Unit {
+    val c = Counter(10)
+    c.count += 5
+    println(c.count)
+    c.count -= 3
+    println(c.count)
+    c.count *= 2
+    println(c.count)
+}
+
+// --- Bug 4: If as expression ---
+fun testIfExpression(): Unit {
+    val x: Int = if (true) { 42 } else { 0 }
+    println(x)
+    val y: Int = if (false) { 1 } else { 99 }
+    println(y)
+}
+
+// --- Bug 5: Short-circuit && / || ---
+fun crashIfCalled(): Bool {
+    println("FAIL: should not be called")
+    return true
+}
+
+fun testShortCircuit(): Unit {
+    // false && <anything> should NOT evaluate the right side
+    if (false && crashIfCalled()) {
+        println("FAIL")
+    } else {
+        println("and-short: pass")
+    }
+
+    // true || <anything> should NOT evaluate the right side
+    if (true || crashIfCalled()) {
+        println("or-short: pass")
+    } else {
+        println("FAIL")
+    }
+
+    // Normal evaluation still works
+    if (true && true) { println("and-true: pass") } else { println("FAIL") }
+    if (false || true) { println("or-true: pass") } else { println("FAIL") }
+    if (false || false) { println("FAIL") } else { println("or-false: pass") }
+}
+
+// --- Feature 6: Compound operators for locals ---
+fun testCompoundOps(): Unit {
+    var x: Int = 10
+    x += 5
+    println(x)
+    x -= 3
+    println(x)
+    x *= 2
+    println(x)
+    x /= 4
+    println(x)
+    x %= 4
+    println(x)
+}
+
+// --- Feature 7: break / continue ---
+fun testBreakContinue(): Unit {
+    var sum: Int = 0
+    var i: Int = 1
+    while (i <= 10) {
+        if (i == 6) { break }
+        sum = sum + i
+        i = i + 1
+    }
+    println(sum)
+
+    var sum2: Int = 0
+    var j: Int = 0
+    while (j < 10) {
+        j = j + 1
+        if (j % 2 == 0) { continue }
+        sum2 = sum2 + j
+    }
+    println(sum2)
+}
+
+// --- Feature 8: do-while ---
+fun testDoWhile(): Unit {
+    var i: Int = 0
+    do {
+        i = i + 1
+    } while (i < 5)
+    println(i)
+}
+
+// --- Feature 9: Expression-body functions ---
+fun double(x: Int): Int = x * 2
+fun greet(name: String): String = "hi ${name}"
+
+fun testExpressionBody(): Unit {
+    println(double(21))
+    println(greet("world"))
+}
+
+fun main(): Unit {
+    testNonNullAssert()
+    testSubscriptAssign()
+    testMemberCompound()
+    testIfExpression()
+    testShortCircuit()
+    testCompoundOps()
+    testBreakContinue()
+    testDoWhile()
+    testExpressionBody()
+    println("all done")
+}

@@ -209,9 +209,10 @@ final class MIRLoweringTests: XCTestCase {
         """)
         let f = findFunction(module, named: "main")
         XCTAssertNotNil(f)
-        let texts = instructionTexts(f!)
-        XCTAssert(texts.contains { $0.contains(" and ") }, "Expected and instruction")
-        XCTAssert(texts.contains { $0.contains(" or ") }, "Expected or instruction")
+        // Short-circuit && and || use branch-based evaluation instead of and/or instructions
+        let blockLabels = f!.blocks.map { $0.label }
+        XCTAssert(blockLabels.contains { $0.contains("and.") }, "Expected and.rhs/and.merge blocks for short-circuit &&")
+        XCTAssert(blockLabels.contains { $0.contains("or.") }, "Expected or.rhs/or.merge blocks for short-circuit ||")
     }
 
     // MARK: - Unary Operations
