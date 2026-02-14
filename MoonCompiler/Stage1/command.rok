@@ -8499,8 +8499,8 @@ fun main(): Unit {
     // Compile
     val compiler = compileProgram(ast)
 
-    // Dead function elimination — disabled for Stage 2 bootstrap
-    // eliminateDeadFunctions(compiler)
+    // Dead function elimination (always on — safe and reduces output size)
+    eliminateDeadFunctions(compiler)
 
     val funcCount = listSize(mapGet(compiler, "functions"))
 
