@@ -1479,6 +1479,7 @@ fun parseStatement(p: Map): Map {
     if (tt == "KW_THROW") { return parseThrow(p) }
     if (tt == "KW_IF") { return parseIfExpr(p) }
     if (tt == "KW_WHILE") { return parseWhile(p) }
+    if (tt == "KW_DO") { return parseDoWhile(p) }
     if (tt == "KW_FOR") { return parseFor(p) }
     if (tt == "KW_TRY") { return parseTryCatch(p) }
 
@@ -1574,6 +1575,22 @@ fun parseWhile(p: Map): Map {
     expect(p, "RPAREN")
     val body = parseBlock(p)
     val node = makeNodeAt("while", line, col)
+    mapPut(node, "condition", condition)
+    mapPut(node, "body", body)
+    return node
+}
+
+fun parseDoWhile(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_DO")
+    val body = parseBlock(p)
+    skipNewlines(p)
+    expect(p, "KW_WHILE")
+    expect(p, "LPAREN")
+    val condition = parseExpression(p, 0)
+    expect(p, "RPAREN")
+    val node = makeNodeAt("doWhile", line, col)
     mapPut(node, "condition", condition)
     mapPut(node, "body", body)
     return node
@@ -1971,6 +1988,118 @@ fun parseTypeAlias(p: Map): Map {
 }
 
 // ---------------------------------------------------------------------------
+// Actor, View, Navigation, Theme declarations
+// ---------------------------------------------------------------------------
+
+fun parseActorDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_ACTOR")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("actorDecl", line, col)
+    mapPut(node, "name", name)
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseClassBody(p))
+    }
+    return node
+}
+
+fun parseViewDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_VIEW")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("viewDecl", line, col)
+    mapPut(node, "name", name)
+    // View parameters
+    expect(p, "LPAREN")
+    val params = listCreate()
+    if (!check(p, "RPAREN")) {
+        listAppend(params, parseParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(params, parseParam(p))
+        }
+    }
+    expect(p, "RPAREN")
+    mapPut(node, "params", params)
+    // View body (block of statements)
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseBlock(p))
+    }
+    return node
+}
+
+fun parseNavigationDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_NAVIGATION")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("navigationDecl", line, col)
+    mapPut(node, "name", name)
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseBlock(p))
+    }
+    return node
+}
+
+fun parseThemeDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_THEME")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("themeDecl", line, col)
+    mapPut(node, "name", name)
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseBlock(p))
+    }
+    return node
+}
+
+fun parseAnnotation(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "AT")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("annotation", line, col)
+    mapPut(node, "name", name)
+    // Optional arguments: @Name(key = value, ...) or @Name(expr, ...)
+    if (check(p, "LPAREN")) {
+        advance(p)
+        val args = listCreate()
+        while (!check(p, "RPAREN") && !parserAtEnd(p)) {
+            val argNode = makeNode("annotationArg")
+            // Check for named argument: IDENT followed by EQ
+            if (check(p, "IDENT")) {
+                val savedPos = mapGet(p, "pos")
+                val ident = toString(mapGet(advance(p), "value"))
+                if (check(p, "EQ")) {
+                    advance(p)
+                    mapPut(argNode, "name", ident)
+                    mapPut(argNode, "value", parseExpression(p, 0))
+                } else {
+                    // Not a named arg — backtrack and parse as expression
+                    mapPut(p, "pos", savedPos)
+                    mapPut(argNode, "value", parseExpression(p, 0))
+                }
+            } else {
+                mapPut(argNode, "value", parseExpression(p, 0))
+            }
+            listAppend(args, argNode)
+            if (!check(p, "RPAREN")) {
+                matchToken(p, "COMMA")
+            }
+        }
+        expect(p, "RPAREN")
+        mapPut(node, "args", args)
+    }
+    return node
+}
+
+// ---------------------------------------------------------------------------
 // Top-level program parsing
 // ---------------------------------------------------------------------------
 
@@ -1980,41 +2109,61 @@ fun parseProgram(p: Map): Map {
         skipNewlines(p)
         if (parserAtEnd(p) || peekType(p) == "EOF") { break }
         val tt = peekType(p)
-        if (tt == "KW_FUN") {
-            listAppend(decls, parseFunDecl(p))
-        } else {
-            if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") {
-                listAppend(decls, parseClassDecl(p))
-            } else {
-                if (tt == "KW_INTERFACE") {
-                    listAppend(decls, parseInterfaceDecl(p))
-                } else {
-                    if (tt == "KW_ENUM") {
-                        listAppend(decls, parseEnumDecl(p))
-                    } else {
-                        if (tt == "KW_OBJECT") {
-                            listAppend(decls, parseObjectDecl(p))
-                        } else {
-                            if (tt == "KW_VAL" || tt == "KW_VAR") {
-                                listAppend(decls, parseStatement(p))
-                            } else {
-                                if (tt == "KW_IMPORT") {
-                                    listAppend(decls, parseImport(p))
-                                } else {
-                                    if (tt == "KW_TYPEALIAS") {
-                                        listAppend(decls, parseTypeAlias(p))
-                                    } else {
-                                        // Skip unknown top-level tokens
-                                        val tok = advance(p)
-                                        val err = stringConcat("unexpected top-level token: ", stringConcat(tt, stringConcat(" at ", stringConcat(toString(peekLine(p)), stringConcat(":", toString(peekCol(p)))))))
-                                        listAppend(mapGet(p, "errors"), err)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+
+        // Annotations: collect @Name(...) before the next declaration
+        if (tt == "AT") {
+            val annotations = listCreate()
+            while (check(p, "AT")) {
+                listAppend(annotations, parseAnnotation(p))
+                skipNewlines(p)
             }
+            // Now parse the annotated declaration
+            val tt2 = peekType(p)
+            var decl: Map = mapCreate()
+            if (tt2 == "KW_FUN") {
+                decl = parseFunDecl(p)
+            } else if (tt2 == "KW_CLASS" || tt2 == "KW_DATA" || tt2 == "KW_SEALED") {
+                decl = parseClassDecl(p)
+            } else if (tt2 == "KW_ACTOR") {
+                decl = parseActorDecl(p)
+            } else if (tt2 == "KW_VIEW") {
+                decl = parseViewDecl(p)
+            } else if (tt2 == "KW_INTERFACE") {
+                decl = parseInterfaceDecl(p)
+            } else {
+                decl = parseStatement(p)
+            }
+            mapPut(decl, "annotations", annotations)
+            listAppend(decls, decl)
+        } else if (tt == "KW_FUN") {
+            listAppend(decls, parseFunDecl(p))
+        } else if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") {
+            listAppend(decls, parseClassDecl(p))
+        } else if (tt == "KW_INTERFACE") {
+            listAppend(decls, parseInterfaceDecl(p))
+        } else if (tt == "KW_ENUM") {
+            listAppend(decls, parseEnumDecl(p))
+        } else if (tt == "KW_OBJECT") {
+            listAppend(decls, parseObjectDecl(p))
+        } else if (tt == "KW_ACTOR") {
+            listAppend(decls, parseActorDecl(p))
+        } else if (tt == "KW_VIEW") {
+            listAppend(decls, parseViewDecl(p))
+        } else if (tt == "KW_NAVIGATION") {
+            listAppend(decls, parseNavigationDecl(p))
+        } else if (tt == "KW_THEME") {
+            listAppend(decls, parseThemeDecl(p))
+        } else if (tt == "KW_VAL" || tt == "KW_VAR") {
+            listAppend(decls, parseStatement(p))
+        } else if (tt == "KW_IMPORT") {
+            listAppend(decls, parseImport(p))
+        } else if (tt == "KW_TYPEALIAS") {
+            listAppend(decls, parseTypeAlias(p))
+        } else {
+            // Skip unknown top-level tokens
+            val tok = advance(p)
+            val err = stringConcat("unexpected top-level token: ", stringConcat(tt, stringConcat(" at ", stringConcat(toString(peekLine(p)), stringConcat(":", toString(peekCol(p)))))))
+            listAppend(mapGet(p, "errors"), err)
         }
         skipNewlines(p)
     }
@@ -2059,7 +2208,7 @@ fun dumpAST(node: Map, indent: Int): Unit {
         return
     }
 
-    if (kind == "funDecl") {
+    if (kind == "funDecl" || kind == "viewDecl") {
         val name = toString(mapGet(node, "name"))
         val params = mapGet(node, "params")
         var paramStr: String = ""
@@ -2131,6 +2280,13 @@ fun dumpAST(node: Map, indent: Int): Unit {
         println(stringConcat(pad, "while"))
         dumpAST(mapGet(node, "condition"), indent + 2)
         dumpAST(mapGet(node, "body"), indent + 2)
+        return
+    }
+
+    if (kind == "doWhile") {
+        println(stringConcat(pad, "do-while"))
+        dumpAST(mapGet(node, "body"), indent + 2)
+        dumpAST(mapGet(node, "condition"), indent + 2)
         return
     }
 
@@ -2229,16 +2385,34 @@ fun dumpAST(node: Map, indent: Int): Unit {
         return
     }
 
-    if (kind == "classDecl") {
+    if (kind == "classDecl" || kind == "actorDecl") {
         val name = toString(mapGet(node, "name"))
         var prefix: String = ""
+        if (kind == "actorDecl") { prefix = "actor " }
         if (mapGet(node, "isData") == true) { prefix = "data " }
         if (mapGet(node, "isSealed") == true) { prefix = "sealed " }
-        println(stringConcat(pad, stringConcat(prefix, stringConcat("class ", name))))
+        if (prefix == "") { prefix = "class " }
+        println(stringConcat(pad, stringConcat(prefix, name)))
         val body = mapGet(node, "body")
         if (body != null) {
             dumpAST(body, indent + 2)
         }
+        return
+    }
+
+    if (kind == "viewDecl") {
+        val name = toString(mapGet(node, "name"))
+        println(stringConcat(pad, stringConcat("view ", name)))
+        val body = mapGet(node, "body")
+        if (body != null) {
+            dumpAST(body, indent + 2)
+        }
+        return
+    }
+
+    if (kind == "navigationDecl" || kind == "themeDecl") {
+        val name = toString(mapGet(node, "name"))
+        println(stringConcat(pad, stringConcat(kind, stringConcat(" ", name))))
         return
     }
 
@@ -2594,7 +2768,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
     if (!isMap(decl)) { return }
     val kind = toString(mapGet(decl, "kind"))
 
-    if (kind == "funDecl") {
+    if (kind == "funDecl" || kind == "viewDecl") {
         val name = toString(mapGet(decl, "name"))
         val params = mapGet(decl, "params")
         var arity: Int = 0
@@ -2608,7 +2782,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
         mapPut(sig, "variadic", false)
         mapPut(sig, "params", params)
         mapPut(mapGet(tc, "functions"), name, sig)
-    } else if (kind == "classDecl") {
+    } else if (kind == "classDecl" || kind == "actorDecl") {
         val name = toString(mapGet(decl, "name"))
         val classInfo = mapCreate()
         val fields = mapCreate()
@@ -2793,7 +2967,7 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
     if (!isMap(decl)) { return }
     val kind = toString(mapGet(decl, "kind"))
 
-    if (kind == "funDecl") {
+    if (kind == "funDecl" || kind == "viewDecl") {
         tcPushScope(tc)
         // Register parameters
         val params = mapGet(decl, "params")
@@ -2818,7 +2992,7 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
             }
         }
         tcPopScope(tc)
-    } else if (kind == "classDecl") {
+    } else if (kind == "classDecl" || kind == "actorDecl") {
         // Check methods
         val classBody = mapGet(decl, "body")
         if (classBody == null) { return }
@@ -3022,6 +3196,21 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
             val stmts = mapGet(body, "stmts")
             if (stmts != null) { tcCheckStmts(tc, stmts) }
             tcPopScope(tc)
+        }
+    } else if (kind == "doWhile") {
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            tcPushScope(tc)
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) { tcCheckStmts(tc, stmts) }
+            tcPopScope(tc)
+        }
+        val condition = mapGet(stmt, "condition")
+        if (condition != null) {
+            val condType = tcInferExpr(tc, condition)
+            if (condType != "Bool" && condType != "Any") {
+                tcError(tc, stringConcat("do-while condition must be Bool, got ", condType), stmt)
+            }
         }
     } else if (kind == "for") {
         tcPushScope(tc)
@@ -3581,7 +3770,7 @@ fun foldDeclConstants(decl: Map): Unit {
     if (decl == null) { return }
     if (!isMap(decl)) { return }
     val kind = toString(mapGet(decl, "kind"))
-    if (kind == "funDecl") {
+    if (kind == "funDecl" || kind == "viewDecl") {
         val body = mapGet(decl, "body")
         if (body != null) {
             val stmts = mapGet(body, "stmts")
@@ -3589,7 +3778,7 @@ fun foldDeclConstants(decl: Map): Unit {
                 foldStmtList(stmts)
             }
         }
-    } else if (kind == "classDecl") {
+    } else if (kind == "classDecl" || kind == "actorDecl") {
         val members = mapGet(decl, "members")
         if (members != null) {
             var i: Int = 0
@@ -3657,6 +3846,16 @@ fun foldStmt(stmt: Map): Map {
         if (body != null) {
             val stmts = mapGet(body, "stmts")
             if (stmts != null) { foldStmtList(stmts) }
+        }
+    } else if (kind == "doWhile") {
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) { foldStmtList(stmts) }
+        }
+        val condition = mapGet(stmt, "condition")
+        if (condition != null) {
+            mapPut(stmt, "condition", foldExpr(condition))
         }
     } else if (kind == "for") {
         val iterable = mapGet(stmt, "iterable")
@@ -6256,7 +6455,7 @@ fun collectFreeVarsStmt(node: Map, names: Map): Unit {
         if (target != null) {
             collectFreeVarsExpr(target, names)
         }
-    } else if (kind == "while") {
+    } else if (kind == "while" || kind == "doWhile") {
         collectFreeVarsExpr(mapGet(node, "condition"), names)
         val body = mapGet(node, "body")
         if (body != null) {
@@ -6382,7 +6581,7 @@ fun compileLambda(fs: Map, node: Map): Int {
         if (stmtCount > 0) {
             val lastStmt = listGet(stmts, stmtCount - 1)
             val lastKind = toString(mapGet(lastStmt, "kind"))
-            if (lastKind != "return" && lastKind != "break" && lastKind != "continue" && lastKind != "valDecl" && lastKind != "varDecl" && lastKind != "assign" && lastKind != "while" && lastKind != "for" && lastKind != "if") {
+            if (lastKind != "return" && lastKind != "break" && lastKind != "continue" && lastKind != "valDecl" && lastKind != "varDecl" && lastKind != "assign" && lastKind != "while" && lastKind != "doWhile" && lastKind != "for" && lastKind != "if") {
                 val retNode = mapCreate()
                 mapPut(retNode, "kind", "return")
                 mapPut(retNode, "value", lastStmt)
@@ -6799,6 +6998,40 @@ fun compileStmt(fs: Map, node: Map): Unit {
         emitU32(fs, loopStart)
 
         // Exit
+        patchJump(fs, toInt(mapGet(patches, "elsePatch")))
+        markLabel(fs, breakLabel)
+
+        // Pop loop context
+        val stack = mapGet(fs, "loopStack")
+        listRemoveAt(stack, listSize(stack) - 1)
+        return
+    }
+
+    if (kind == "doWhile") {
+        val loopStart = currentOffset(fs)
+        val breakLabel = newLabel(fs)
+        val continueLabel = newLabel(fs)
+
+        // Push loop context
+        val loopCtx = mapCreate()
+        mapPut(loopCtx, "breakLabel", breakLabel)
+        mapPut(loopCtx, "continueLabel", continueLabel)
+        listAppend(mapGet(fs, "loopStack"), loopCtx)
+
+        // Body executes first
+        compileBlock(fs, mapGet(node, "body"))
+
+        // Condition (continue target)
+        markLabel(fs, continueLabel)
+        val condReg = compileExpr(fs, mapGet(node, "condition"))
+        val patches = emitBranch(fs, condReg)
+        patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+
+        // If true, loop back to body
+        emitByte(fs, OP_JUMP())
+        emitU32(fs, loopStart)
+
+        // If false, exit
         patchJump(fs, toInt(mapGet(patches, "elsePatch")))
         markLabel(fs, breakLabel)
 
@@ -8065,7 +8298,7 @@ fun compileProgram(ast: Map): Map {
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
         val kind = toString(mapGet(decl, "kind"))
-        if (kind == "classDecl") {
+        if (kind == "classDecl" || kind == "actorDecl") {
             val cname = toString(mapGet(decl, "name"))
             mapPut(mapGet(compiler, "classNames"), cname, true)
             // Register sealed classes
@@ -8096,7 +8329,7 @@ fun compileProgram(ast: Map): Map {
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
         val kind = toString(mapGet(decl, "kind"))
-        if (kind == "classDecl") {
+        if (kind == "classDecl" || kind == "actorDecl") {
             val superTypes = mapGet(decl, "superTypes")
             if (superTypes != null) {
                 val cname = toString(mapGet(decl, "name"))
@@ -8120,7 +8353,7 @@ fun compileProgram(ast: Map): Map {
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
         val kind = toString(mapGet(decl, "kind"))
-        if (kind == "funDecl") {
+        if (kind == "funDecl" || kind == "viewDecl") {
             val fname = toString(mapGet(decl, "name"))
             val fparams = mapGet(decl, "params")
             if (fparams != null) {
@@ -8140,10 +8373,14 @@ fun compileProgram(ast: Map): Map {
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
         val kind = toString(mapGet(decl, "kind"))
-        if (kind == "classDecl") {
+        if (kind == "classDecl" || kind == "actorDecl") {
             compileClassDecl(compiler, decl)
         }
         if (kind == "funDecl") {
+            compileFunction(compiler, decl)
+        }
+        if (kind == "viewDecl") {
+            // Compile view as a function with its params and body
             compileFunction(compiler, decl)
         }
         i = i + 1
