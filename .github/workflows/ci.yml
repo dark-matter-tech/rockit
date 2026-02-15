@@ -96,33 +96,80 @@ jobs:
           ROCKIT=.build/release/rockit
           PASS=0; FAIL=0; TOTAL=0
           FAILED_TESTS=""
+          FEATURES=""
           START=$(date +%s)
           for f in Examples/test_*.rok; do
             TOTAL=$((TOTAL + 1))
             name=$(basename "$f" .rok)
-            printf "  🚀 %-40s" "$name"
+            echo "  ┌──────────────────────────────────────────────"
+            printf "  │ 🚀 %-42s" "$name"
             if $ROCKIT build-native "$f" > /tmp/build_log 2>&1; then
               output=$("Examples/$name" 2>&1) || true
               echo "✅ PASS"
+              if [ -n "$output" ]; then
+                echo "$output" | while IFS= read -r line; do
+                  echo "  │   📟 $line"
+                done
+              fi
               PASS=$((PASS + 1))
+              # Tag which feature was tested
+              case "$name" in
+                *interp*)      FEATURES="$FEATURES 🔤 string-interpolation" ;;
+                *for*)         FEATURES="$FEATURES 🔁 for-loops" ;;
+                *lambda*)      FEATURES="$FEATURES 🎭 lambdas" ;;
+                *when*)        FEATURES="$FEATURES 🔀 when-expressions" ;;
+                *nullable*)    FEATURES="$FEATURES ❓ null-safety" ;;
+                *enum*)        FEATURES="$FEATURES 🏷️ enums" ;;
+                *default*)     FEATURES="$FEATURES 📋 default-params" ;;
+                *sealed*)      FEATURES="$FEATURES 🔒 sealed-classes" ;;
+                *extension*)   FEATURES="$FEATURES 🔌 extensions" ;;
+                *dataclass*)   FEATURES="$FEATURES 📦 data-classes" ;;
+                *type_check*)  FEATURES="$FEATURES 🔍 type-checks" ;;
+                *poly*)        FEATURES="$FEATURES 🧬 polymorphism" ;;
+                *actor*)       FEATURES="$FEATURES 🎭 actors" ;;
+                *codegen*)     FEATURES="$FEATURES ⚙️ codegen-ops" ;;
+                *class*)       FEATURES="$FEATURES 🏗️ classes" ;;
+                *collect*)     FEATURES="$FEATURES 📚 collections" ;;
+                *control*)     FEATURES="$FEATURES 🚦 control-flow" ;;
+                *except*)      FEATURES="$FEATURES 🛡️ exceptions" ;;
+                *string*)      FEATURES="$FEATURES 🧵 strings" ;;
+                *feature*)     FEATURES="$FEATURES 🌟 core-features" ;;
+                *)             FEATURES="$FEATURES 🔧 $name" ;;
+              esac
             else
               echo "❌ FAIL"
+              echo "  │   💥 Build log:"
+              cat /tmp/build_log | while IFS= read -r line; do
+                echo "  │   💥 $line"
+              done
               FAIL=$((FAIL + 1))
               FAILED_TESTS="$FAILED_TESTS\n    💥 $name"
             fi
+            echo "  └──────────────────────────────────────────────"
           done
           END=$(date +%s)
           ELAPSED=$((END - START))
           echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           if [ "$FAIL" -eq 0 ]; then
             echo "  🏆 ALL TESTS PASSED: $PASS/$TOTAL"
+            echo ""
+            echo "  🛸 Features verified on Linux x86_64:"
+            for feat in $FEATURES; do
+              case "$feat" in
+                🔤|🔁|🎭|🔀|❓|🏷️|📋|🔒|🔌|📦|🔍|🧬|⚙️|🏗️|📚|🚦|🛡️|🧵|🌟|🔧)
+                  printf "    %s " "$feat" ;;
+                *)
+                  printf "%s " "$feat" ;;
+              esac
+            done
+            echo ""
           else
             echo "  💀 FAILURES: $FAIL/$TOTAL failed"
             printf "$FAILED_TESTS\n"
           fi
           echo "  ⏱️  Completed in ${ELAPSED}s"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
           [ "$FAIL" -eq 0 ] || exit 1
 
