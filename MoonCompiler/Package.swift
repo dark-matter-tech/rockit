@@ -6,9 +6,6 @@ import PackageDescription
 
 let package = Package(
     name: "RockitCompiler",
-    platforms: [
-        .macOS(.v14)
-    ],
     products: [
         .executable(name: "rockit", targets: ["RockitCLI"]),
         .library(name: "RockitKit", targets: ["RockitKit"]),

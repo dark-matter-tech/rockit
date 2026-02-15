@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [master, feature/*]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    container: swift:5.10.1-jammy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang
+        run: apt-get update && apt-get install -y clang
+
+      - name: Cache Swift build
+        uses: actions/cache@v4
+        with:
+          path: MoonCompiler/.build
+          key: swift-build-${{ hashFiles('MoonCompiler/Package.swift') }}
+
+      # Step 1: Unit tests
+      - name: Run unit tests
+        working-directory: MoonCompiler
+        run: swift test 2>&1 | tee test-output.log
+
+      # Step 2: Build Stage 0 compiler
+      - name: Build Stage 0 (Swift)
+        working-directory: MoonCompiler
+        run: swift build -c release 2>&1 | tee build-output.log
+
+      # Step 3: Native feature tests
+      # Stage 0 (Swift) auto-detects triple and runtime dir.
+      # Output goes to Examples/<name> (default: strip .rok extension).
+      - name: Run native feature tests
+        working-directory: MoonCompiler
+        run: |
+          ROCKIT=.build/release/rockit
+          PASS=0; FAIL=0; TOTAL=0
+          for f in Examples/test_*.rok; do
+            TOTAL=$((TOTAL + 1))
+            name=$(basename "$f" .rok)
+            echo "=== $name ==="
+            if $ROCKIT build-native "$f" 2>&1; then
+              output=$("Examples/$name" 2>&1) || true
+              echo "$output"
+              PASS=$((PASS + 1))
+            else
+              echo "FAIL: build-native failed"
+              FAIL=$((FAIL + 1))
+            fi
+          done
+          echo "Results: $PASS/$TOTAL passed, $FAIL failed"
+          [ "$FAIL" -eq 0 ] || exit 1
+
+      # Step 4: Self-hosting bootstrap (3 stages)
+      # Stage 0 (Swift) auto-detects triple — no --target-triple needed.
+      # Stage 1+ (Rockit native) needs --target-triple and --runtime-path.
+      - name: Bootstrap Stage 1
+        working-directory: MoonCompiler
+        run: |
+          ROCKIT=.build/release/rockit
+          TRIPLE="x86_64-unknown-linux-gnu"
+          echo "=== Stage 0 → Stage 1 ==="
+          $ROCKIT build-native Stage1/command.rok 2>&1
+          echo "=== Stage 1 → Stage 2 ==="
+          Stage1/command build-native Stage1/command.rok -o /tmp/stage2 --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE 2>&1
+          echo "=== Stage 2 → Stage 3 ==="
+          /tmp/stage2 build-native Stage1/command.rok -o /tmp/stage3 --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE 2>&1
+          echo "Bootstrap complete — 3 stages built successfully"
