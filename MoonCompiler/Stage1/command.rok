@@ -925,9 +925,22 @@ fun parseType(p: Map): Map {
         return node
     }
 
-    // Simple type: Name or Name<TypeArgs>
+    // Simple type: Name or Name.Nested or Name<TypeArgs>
     val nameTok = expect(p, "IDENT")
-    val name = toString(mapGet(nameTok, "value"))
+    var name: String = toString(mapGet(nameTok, "value"))
+    // Handle dotted type names like Shape.Circle
+    while (check(p, "DOT")) {
+        val savedPos = parserPos(p)
+        advance(p)  // consume DOT
+        if (check(p, "IDENT")) {
+            val nextTok = advance(p)
+            name = stringConcat(name, stringConcat(".", toString(mapGet(nextTok, "value"))))
+        } else {
+            // Not an identifier after dot — restore and stop
+            mapPut(p, "pos", savedPos)
+            break
+        }
+    }
     val node = makeNode("type")
     mapPut(node, "name", name)
 
@@ -1102,7 +1115,12 @@ fun parsePrimary(p: Map): Map {
 fun parsePostfix(p: Map, left: Map): Map {
     var expr: Map = left
     while (true) {
-        skipNewlines(p)
+        val noNL = mapGet(p, "noNewlineInfix")
+        if (noNL != true) {
+            skipNewlines(p)
+        } else {
+            if (peekType(p) == "NEWLINE") { break }
+        }
         val tt = peekType(p)
 
         // Function call: expr(args)
@@ -1197,7 +1215,13 @@ fun parseExpression(p: Map, minPrec: Int): Map {
     left = parsePostfix(p, left)
 
     while (true) {
-        skipNewlines(p)
+        val noNL = mapGet(p, "noNewlineInfix")
+        if (noNL != true) {
+            skipNewlines(p)
+        } else {
+            // In no-newline mode, stop at newlines
+            if (peekType(p) == "NEWLINE") { break }
+        }
         val tt = peekType(p)
         val prec = getPrecedence(tt)
         if (prec <= minPrec) {
@@ -1401,7 +1425,10 @@ fun parseWhenExpr(p: Map): Map {
         if (check(p, "LBRACE")) {
             mapPut(branch, "body", parseBlock(p))
         } else {
+            // Parse expression without crossing newlines (prevents eating next branch's 'is')
+            mapPut(p, "noNewlineInfix", true)
             mapPut(branch, "body", parseExpression(p, 0))
+            mapPut(p, "noNewlineInfix", false)
         }
         listAppend(branches, branch)
         skipNewlines(p)
@@ -1859,30 +1886,28 @@ fun parseClassBody(p: Map): Map {
         val tt = peekType(p)
         if (tt == "KW_FUN") {
             listAppend(members, parseFunDecl(p))
+        } else if (tt == "KW_VAL" || tt == "KW_VAR") {
+            listAppend(members, parseStatement(p))
+        } else if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") {
+            listAppend(members, parseClassDecl(p))
+        } else if (tt == "KW_ENUM") {
+            listAppend(members, parseEnumDecl(p))
+        } else if (tt == "KW_OVERRIDE") {
+            advance(p)
+            val member = parseFunDecl(p)
+            mapPut(member, "isOverride", true)
+            listAppend(members, member)
+        } else if (tt == "KW_COMPANION") {
+            advance(p)
+            expect(p, "KW_OBJECT")
+            skipNewlines(p)
+            val companionBody = parseClassBody(p)
+            val compNode = makeNode("companionObject")
+            mapPut(compNode, "body", companionBody)
+            listAppend(members, compNode)
         } else {
-            if (tt == "KW_VAL" || tt == "KW_VAR") {
-                listAppend(members, parseStatement(p))
-            } else {
-                if (tt == "KW_OVERRIDE") {
-                    advance(p)
-                    val member = parseFunDecl(p)
-                    mapPut(member, "isOverride", true)
-                    listAppend(members, member)
-                } else {
-                    if (tt == "KW_COMPANION") {
-                        advance(p)
-                        expect(p, "KW_OBJECT")
-                        skipNewlines(p)
-                        val companionBody = parseClassBody(p)
-                        val compNode = makeNode("companionObject")
-                        mapPut(compNode, "body", companionBody)
-                        listAppend(members, compNode)
-                    } else {
-                        // Skip unknown tokens in class body
-                        advance(p)
-                    }
-                }
-            }
+            // Skip unknown tokens in class body
+            advance(p)
         }
         skipNewlines(p)
     }
@@ -4300,6 +4325,8 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "rockit_object_alloc", "ptr|ptr,i32")
     mapPut(t, "rockit_object_get_field", "i64|ptr,i32")
     mapPut(t, "rockit_object_set_field", "void|ptr,i32,i64")
+    mapPut(t, "rockit_object_is_type", "i64|ptr,ptr")
+    mapPut(t, "rockit_object_get_type_name", "ptr|ptr")
 
     return t
 }
@@ -4601,6 +4628,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
     // State map for SSA counter and declared externs
     val state = mapCreate()
     mapPut(state, "ssa", 0)
+    mapPut(state, "vcallLabel", 0)
     val usedExterns = mapCreate()
     mapPut(state, "usedExterns", usedExterns)
 
@@ -4902,10 +4930,27 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val argc = llvmReadU16(bc, ip + 5)
             val typeName = llvmPoolString(compiler, typeIdx)
             val tyGlobal = stringConcat("@.typename.", toString(typeIdx))
+            // Determine total field count (ctor params + body fields)
+            var totalFields: Int = argc
+            val allTypes = mapGet(compiler, "types")
+            if (allTypes != null) {
+                var ati: Int = 0
+                while (ati < listSize(allTypes)) {
+                    val atr = listGet(allTypes, ati)
+                    val atrNameIdx = toInt(mapGet(atr, "nameIdx"))
+                    if (llvmPoolString(compiler, atrNameIdx) == typeName) {
+                        val atrFields = mapGet(atr, "fields")
+                        if (atrFields != null) {
+                            totalFields = listSize(atrFields)
+                        }
+                    }
+                    ati = ati + 1
+                }
+            }
             val tobj = llvmNextSSA(state)
             val tobjI64 = llvmNextSSA(state)
             mapPut(usedExterns, "rockit_object_alloc", true)
-            llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = call ptr @rockit_object_alloc(ptr ", stringConcat(tyGlobal, stringConcat(", i32 ", stringConcat(toString(argc), ")")))))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = call ptr @rockit_object_alloc(ptr ", stringConcat(tyGlobal, stringConcat(", i32 ", stringConcat(toString(totalFields), ")")))))))
             // Set fields
             var ai: Int = 0
             while (ai < argc) {
@@ -4998,23 +5043,114 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val methodIdx = llvmReadU16(bc, ip + 5)
             val argc = llvmReadU16(bc, ip + 7)
             val methodName = llvmPoolString(compiler, methodIdx)
-            // For virtual calls, pass object as first arg, call method directly
+            // Load object pointer
             val tobj = llvmNextSSA(state)
             llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
-            // Build arg list: obj + args
-            var callArgs: String = stringConcat("i64 ", tobj)
+            // Load args
+            val argSSAs = listCreate()
             var vi: Int = 0
             while (vi < argc) {
                 val argReg = llvmReadU16(bc, ip + 9 + vi * 2)
                 val ta = llvmNextSSA(state)
                 llvmLine(buf, stringConcat("  ", stringConcat(ta, stringConcat(" = load i64, ptr %t", toString(argReg)))))
-                callArgs = stringConcat(callArgs, stringConcat(", i64 ", ta))
+                listAppend(argSSAs, ta)
                 vi = vi + 1
             }
-            val tres = llvmNextSSA(state)
-            mapPut(usedExterns, methodName, true)
-            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @", stringConcat(methodName, stringConcat("(", stringConcat(callArgs, ")")))))))
-            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            // Build arg string: obj + args
+            var callArgs: String = stringConcat("i64 ", tobj)
+            var cai: Int = 0
+            while (cai < listSize(argSSAs)) {
+                callArgs = stringConcat(callArgs, stringConcat(", i64 ", toString(listGet(argSSAs, cai))))
+                cai = cai + 1
+            }
+            // Find all classes that have this method and emit type-based dispatch
+            val vcTypes = mapGet(compiler, "types")
+            val vcMatches = listCreate()  // list of qualified method names
+            if (vcTypes != null) {
+                var vti: Int = 0
+                while (vti < listSize(vcTypes)) {
+                    val vcTypeRec = listGet(vcTypes, vti)
+                    val vcTypeMethods = mapGet(vcTypeRec, "methods")
+                    if (vcTypeMethods != null) {
+                        var vmi2: Int = 0
+                        var found: Bool = false
+                        while (vmi2 < listSize(vcTypeMethods)) {
+                            if (toString(listGet(vcTypeMethods, vmi2)) == methodName) {
+                                found = true
+                            }
+                            vmi2 = vmi2 + 1
+                        }
+                        if (found) {
+                            val vcTypeNameIdx = toInt(mapGet(vcTypeRec, "nameIdx"))
+                            val vcTypeName = llvmPoolString(compiler, vcTypeNameIdx)
+                            val qualName = stringConcat(vcTypeName, stringConcat(".", methodName))
+                            listAppend(vcMatches, qualName)
+                        }
+                    }
+                    vti = vti + 1
+                }
+            }
+            if (listSize(vcMatches) == 0) {
+                // No known implementors — fallback to direct call (may fail at link time)
+                val tres = llvmNextSSA(state)
+                mapPut(usedExterns, methodName, true)
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @", stringConcat(methodName, stringConcat("(", stringConcat(callArgs, ")")))))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            } else if (listSize(vcMatches) == 1) {
+                // Single implementor — direct static call
+                val qualName = toString(listGet(vcMatches, 0))
+                val tres = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @", stringConcat(qualName, stringConcat("(", stringConcat(callArgs, ")")))))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            } else {
+                // Multiple implementors — type-based dispatch using if-else chain
+                val tobjPtr = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+                val vcId = toInt(mapGet(state, "vcallLabel"))
+                // Need: N "then" labels, N "check/else" labels, 1 "done" label = 2N+1
+                mapPut(state, "vcallLabel", vcId + 1)
+                val doneLabel = stringConcat("vc.", stringConcat(toString(vcId), ".done"))
+                var vmi: Int = 0
+                while (vmi < listSize(vcMatches)) {
+                    val qualName = toString(listGet(vcMatches, vmi))
+                    // Extract class name from "ClassName.method"
+                    val dotIdx = stringLength(qualName) - stringLength(methodName) - 1
+                    val className = substring(qualName, 0, dotIdx)
+                    // Find typename global index for this class
+                    var tyGlobalIdx: Int = -1
+                    var tyi: Int = 0
+                    while (tyi < listSize(vcTypes)) {
+                        val tr = listGet(vcTypes, tyi)
+                        val trNameIdx = toInt(mapGet(tr, "nameIdx"))
+                        if (llvmPoolString(compiler, trNameIdx) == className) {
+                            tyGlobalIdx = trNameIdx
+                        }
+                        tyi = tyi + 1
+                    }
+                    if (tyGlobalIdx >= 0) {
+                        val tyGlobal = stringConcat("@.typename.", toString(tyGlobalIdx))
+                        mapPut(usedExterns, "rockit_object_is_type", true)
+                        val tcmp = llvmNextSSA(state)
+                        llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i64 @rockit_object_is_type(ptr ", stringConcat(tobjPtr, stringConcat(", ptr ", stringConcat(tyGlobal, ")")))))))
+                        val tbool = llvmNextSSA(state)
+                        llvmLine(buf, stringConcat("  ", stringConcat(tbool, stringConcat(" = icmp ne i64 ", stringConcat(tcmp, ", 0")))))
+                        val thenLabel = stringConcat("vc.", stringConcat(toString(vcId), stringConcat(".t", toString(vmi))))
+                        val elseLabel = stringConcat("vc.", stringConcat(toString(vcId), stringConcat(".e", toString(vmi))))
+                        llvmLine(buf, stringConcat("  br i1 ", stringConcat(tbool, stringConcat(", label %", stringConcat(thenLabel, stringConcat(", label %", elseLabel))))))
+                        llvmLine(buf, stringConcat(thenLabel, ":"))
+                        val tcall = llvmNextSSA(state)
+                        llvmLine(buf, stringConcat("  ", stringConcat(tcall, stringConcat(" = call i64 @", stringConcat(qualName, stringConcat("(", stringConcat(callArgs, ")")))))))
+                        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tcall, stringConcat(", ptr %t", toString(dest)))))
+                        llvmLine(buf, stringConcat("  br label %", doneLabel))
+                        llvmLine(buf, stringConcat(elseLabel, ":"))
+                    }
+                    vmi = vmi + 1
+                }
+                // Final else (no match) — store 0
+                llvmLine(buf, stringConcat("  store i64 0, ptr %t", toString(dest)))
+                llvmLine(buf, stringConcat("  br label %", doneLabel))
+                llvmLine(buf, stringConcat(doneLabel, ":"))
+            }
             ip = ip + 9 + argc * 2
         } else if (op == 82) {
             // OP_CALL_INDIRECT: dest(u16) + funcRef(u16) + argc(u16) + args(u16*N)
@@ -5048,9 +5184,18 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             ip = ip + 7 + argc * 2
         } else if (op == 144) {
             // OP_TYPE_CHECK: dest(u16) + src(u16) + typeIdx(u16)
-            // Simplified: always return false for now
             val dest = llvmReadU16(bc, ip + 1)
-            llvmLine(buf, stringConcat("  store i64 0, ptr %t", toString(dest)))
+            val src = llvmReadU16(bc, ip + 3)
+            val typeIdx = llvmReadU16(bc, ip + 5)
+            val tyGlobal = stringConcat("@.typename.", toString(typeIdx))
+            val tsrc = llvmNextSSA(state)
+            val tobjPtr = llvmNextSSA(state)
+            val tresult = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tsrc, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tsrc, " to ptr")))))
+            mapPut(usedExterns, "rockit_object_is_type", true)
+            llvmLine(buf, stringConcat("  ", stringConcat(tresult, stringConcat(" = call i64 @rockit_object_is_type(ptr ", stringConcat(tobjPtr, stringConcat(", ptr ", stringConcat(tyGlobal, ")")))))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tresult, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7
         } else if (op == 145) {
             // OP_TYPE_CAST: dest(u16) + src(u16) + typeIdx(u16)
@@ -5430,6 +5575,7 @@ fun makeCompiler(): Map {
     mapPut(c, "funcSignatures", mapCreate()) // funcName -> params list (for default args)
     mapPut(c, "typeAliases", mapCreate())    // aliasName -> targetName
     mapPut(c, "extensionFuncs", mapCreate()) // "TypeName.method" -> true
+    mapPut(c, "classBodyInits", mapCreate()) // className -> list of {name, init} for body field defaults
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -6212,6 +6358,19 @@ fun compileExpr(fs: Map, node: Map): Int {
                 }
                 val dest = allocReg(fs)
                 emitNewObject(fs, dest, funcName, argRegs)
+                // Initialize body-declared fields with default values
+                val bodyInits = mapGet(mapGet(mapGet(fs, "compiler"), "classBodyInits"), funcName)
+                if (bodyInits != null) {
+                    var bi: Int = 0
+                    while (bi < listSize(bodyInits)) {
+                        val initRec = listGet(bodyInits, bi)
+                        val fieldName = toString(mapGet(initRec, "name"))
+                        val initExpr = mapGet(initRec, "init")
+                        val valReg = compileExpr(fs, initExpr)
+                        emitSetField(fs, dest, fieldName, valReg)
+                        bi = bi + 1
+                    }
+                }
                 return dest
             }
 
@@ -6328,7 +6487,7 @@ fun compileExpr(fs: Map, node: Map): Int {
                 val isObject = mapGet(mapGet(mapGet(fs, "compiler"), "objectNames"), memberObjName)
                 val isClass = mapGet(mapGet(mapGet(fs, "compiler"), "classNames"), memberObjName)
                 if (isObject != null || isClass != null) {
-                    // Static call to ObjectName.method
+                    // Static call to ObjectName.method OR nested class constructor
                     val fullName = stringConcat(memberObjName, stringConcat(".", methodName))
                     val argRegs = listCreate()
                     var i: Int = 0
@@ -6343,7 +6502,26 @@ fun compileExpr(fs: Map, node: Map): Int {
                         i = i + 1
                     }
                     val dest = allocReg(fs)
-                    emitCall(fs, dest, fullName, argRegs)
+                    // Check if fullName is a class name → constructor call
+                    val isNestedClass = mapGet(mapGet(mapGet(fs, "compiler"), "classNames"), fullName)
+                    if (isNestedClass != null) {
+                        emitNewObject(fs, dest, fullName, argRegs)
+                        // Initialize body-declared fields with default values
+                        val bodyInits = mapGet(mapGet(mapGet(fs, "compiler"), "classBodyInits"), fullName)
+                        if (bodyInits != null) {
+                            var bi: Int = 0
+                            while (bi < listSize(bodyInits)) {
+                                val initRec = listGet(bodyInits, bi)
+                                val fieldName = toString(mapGet(initRec, "name"))
+                                val initExpr = mapGet(initRec, "init")
+                                val valReg = compileExpr(fs, initExpr)
+                                emitSetField(fs, dest, fieldName, valReg)
+                                bi = bi + 1
+                            }
+                        }
+                    } else {
+                        emitCall(fs, dest, fullName, argRegs)
+                    }
                     return dest
                 }
             }
@@ -7624,8 +7802,9 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
         }
     }
 
-    // Collect fields from body val/var declarations
+    // Collect fields from body val/var declarations (and save initializers)
     val body = mapGet(decl, "body")
+    val bodyInits = listCreate()
     if (body != null) {
         val members = mapGet(body, "members")
         if (members != null) {
@@ -7634,8 +7813,9 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
                 val member = listGet(members, i)
                 val mkind = toString(mapGet(member, "kind"))
                 if (mkind == "valDecl" || mkind == "varDecl") {
+                    val fieldName = toString(mapGet(member, "name"))
                     val fieldRec = mapCreate()
-                    mapPut(fieldRec, "name", toString(mapGet(member, "name")))
+                    mapPut(fieldRec, "name", fieldName)
                     val mtype = mapGet(member, "type")
                     if (mtype != null) {
                         mapPut(fieldRec, "typeName", toString(mapGet(mtype, "name")))
@@ -7643,10 +7823,21 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
                         mapPut(fieldRec, "typeName", "Unit")
                     }
                     listAppend(fields, fieldRec)
+                    // Save initializer expression for constructor inlining
+                    val initExpr = mapGet(member, "init")
+                    if (initExpr != null) {
+                        val initRec = mapCreate()
+                        mapPut(initRec, "name", fieldName)
+                        mapPut(initRec, "init", initExpr)
+                        listAppend(bodyInits, initRec)
+                    }
                 }
                 i = i + 1
             }
         }
+    }
+    if (listSize(bodyInits) > 0) {
+        mapPut(mapGet(compiler, "classBodyInits"), className, bodyInits)
     }
 
     // Build field name list for method compilation
@@ -7736,6 +7927,10 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
                             }
                         }
                     }
+                }
+                if (mkind == "classDecl") {
+                    // Nested class — name already qualified in Pass 1, compile it
+                    compileClassDecl(compiler, member)
                 }
                 i = i + 1
             }
@@ -8341,6 +8536,31 @@ fun compileProgram(ast: Map): Map {
             // Register sealed classes
             if (mapGet(decl, "isSealed") == true) {
                 mapPut(mapGet(compiler, "sealedNames"), cname, listCreate())
+            }
+            // Register nested class declarations with qualified names
+            val cbody = mapGet(decl, "body")
+            if (cbody != null) {
+                val cmembers = mapGet(cbody, "members")
+                if (cmembers != null) {
+                    var ni: Int = 0
+                    while (ni < listSize(cmembers)) {
+                        val nested = listGet(cmembers, ni)
+                        val nkind = toString(mapGet(nested, "kind"))
+                        if (nkind == "classDecl") {
+                            val nestedName = toString(mapGet(nested, "name"))
+                            val qualName = stringConcat(cname, stringConcat(".", nestedName))
+                            mapPut(mapGet(compiler, "classNames"), qualName, true)
+                            // Register nested class as sealed subclass
+                            val sealedSubs = mapGet(mapGet(compiler, "sealedNames"), cname)
+                            if (sealedSubs != null) {
+                                listAppend(sealedSubs, qualName)
+                            }
+                            // Rewrite the nested decl name to qualified name for later compilation
+                            mapPut(nested, "name", qualName)
+                        }
+                        ni = ni + 1
+                    }
+                }
             }
         }
         if (kind == "enumDecl") {

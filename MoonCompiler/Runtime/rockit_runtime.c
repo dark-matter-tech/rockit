@@ -200,6 +200,11 @@ const char* rockit_object_get_type_name(RockitObject* obj) {
     return obj->typeName;
 }
 
+int64_t rockit_object_is_type(RockitObject* obj, const char* typeName) {
+    if (!obj || !typeName) return 0;
+    return strcmp(obj->typeName, typeName) == 0 ? 1 : 0;
+}
+
 // ── RockitList ──────────────────────────────────────────────────────────────
 
 RockitList* rockit_list_create(void) {
