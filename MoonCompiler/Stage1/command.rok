@@ -2612,6 +2612,7 @@ fun makeTypeChecker(ast: Map): Map {
     // Warnings: list of warning message strings
     mapPut(tc, "warnings", listCreate())
     mapPut(tc, "sourceFile", "")
+    mapPut(tc, "sealedNames", mapCreate())
     return tc
 }
 
@@ -2837,6 +2838,31 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
         }
         mapPut(classInfo, "fields", fields)
         mapPut(mapGet(tc, "classes"), name, classInfo)
+
+        // Track sealed classes
+        val isSealed = mapGet(decl, "isSealed")
+        if (isSealed == true) {
+            mapPut(mapGet(tc, "sealedNames"), name, listCreate())
+        }
+        // Track subclasses of sealed parents
+        val superTypes = mapGet(decl, "superTypes")
+        if (superTypes != null) {
+            var si: Int = 0
+            while (si < listSize(superTypes)) {
+                val st = listGet(superTypes, si)
+                var superName: String = ""
+                if (isMap(st)) {
+                    superName = toString(mapGet(st, "name"))
+                } else {
+                    superName = toString(st)
+                }
+                val sealedSubs = mapGet(mapGet(tc, "sealedNames"), superName)
+                if (sealedSubs != null) {
+                    listAppend(sealedSubs, name)
+                }
+                si = si + 1
+            }
+        }
 
         // Register constructor as a function
         val ctorSig = mapCreate()
@@ -3199,15 +3225,39 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
         }
     } else if (kind == "if") {
         val condition = mapGet(stmt, "condition")
+        var smartCastName: String = ""
+        var smartCastType: String = ""
         if (condition != null) {
             val condType = tcInferExpr(tc, condition)
             if (condType != "Bool" && condType != "Any") {
                 tcError(tc, stringConcat("if condition must be Bool, got ", condType), stmt)
             }
+            if (isMap(condition)) {
+                val condKind = toString(mapGet(condition, "kind"))
+                if (condKind == "typeCheck") {
+                    val operand = mapGet(condition, "operand")
+                    if (operand != null) {
+                        if (isMap(operand)) {
+                            if (toString(mapGet(operand, "kind")) == "ident") {
+                                smartCastName = toString(mapGet(operand, "name"))
+                                val tNode = mapGet(condition, "type")
+                                if (tNode != null) {
+                                    if (isMap(tNode)) {
+                                        smartCastType = toString(mapGet(tNode, "name"))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         val thenBody = mapGet(stmt, "then")
         if (thenBody != null) {
             tcPushScope(tc)
+            if (stringLength(smartCastName) > 0) {
+                tcDefine(tc, smartCastName, smartCastType)
+            }
             val stmts = mapGet(thenBody, "stmts")
             if (stmts != null) { tcCheckStmts(tc, stmts) }
             tcPopScope(tc)
@@ -3525,15 +3575,39 @@ fun tcInferExpr(tc: Map, expr: Map): String {
 
     if (kind == "if") {
         val condition = mapGet(expr, "condition")
+        var smartCastName: String = ""
+        var smartCastType: String = ""
         if (condition != null) {
             val condType = tcInferExpr(tc, condition)
             if (condType != "Bool" && condType != "Any") {
                 tcError(tc, stringConcat("if condition must be Bool, got ", condType), expr)
             }
+            if (isMap(condition)) {
+                val condKind = toString(mapGet(condition, "kind"))
+                if (condKind == "typeCheck") {
+                    val operand = mapGet(condition, "operand")
+                    if (operand != null) {
+                        if (isMap(operand)) {
+                            if (toString(mapGet(operand, "kind")) == "ident") {
+                                smartCastName = toString(mapGet(operand, "name"))
+                                val tNode = mapGet(condition, "type")
+                                if (tNode != null) {
+                                    if (isMap(tNode)) {
+                                        smartCastType = toString(mapGet(tNode, "name"))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         val thenBody = mapGet(expr, "then")
         if (thenBody != null) {
             tcPushScope(tc)
+            if (stringLength(smartCastName) > 0) {
+                tcDefine(tc, smartCastName, smartCastType)
+            }
             val stmts = mapGet(thenBody, "stmts")
             if (stmts != null) { tcCheckStmts(tc, stmts) }
             tcPopScope(tc)
@@ -3709,6 +3783,41 @@ fun tcCheckWhenExhaustiveness(tc: Map, node: Map, branches: List): Unit {
     }
     if (hasElse) { return }
 
+    // Check sealed class exhaustiveness
+    val sealedNames = mapGet(tc, "sealedNames")
+    if (sealedNames != null) {
+        val sealedKeys = mapKeys(sealedNames)
+        var sk: Int = 0
+        while (sk < listSize(sealedKeys)) {
+            val sealedName = toString(listGet(sealedKeys, sk))
+            val subs = mapGet(sealedNames, sealedName)
+            if (subs != null) {
+                if (listSize(subs) > 0) {
+                    var anyMatch: Bool = false
+                    var si: Int = 0
+                    while (si < listSize(subs)) {
+                        val subName = toString(listGet(subs, si))
+                        if (listContainsStr(coveredTypes, subName)) {
+                            anyMatch = true
+                        }
+                        si = si + 1
+                    }
+                    if (anyMatch) {
+                        var mi: Int = 0
+                        while (mi < listSize(subs)) {
+                            val subName = toString(listGet(subs, mi))
+                            if (!listContainsStr(coveredTypes, subName)) {
+                                tcError(tc, stringConcat("'when' on sealed class '", stringConcat(sealedName, stringConcat("' missing branch for '", stringConcat(subName, "'")))), node)
+                            }
+                            mi = mi + 1
+                        }
+                    }
+                }
+            }
+            sk = sk + 1
+        }
+    }
+
     // Check enum exhaustiveness
     val classes = mapGet(tc, "classes")
     val classKeys = mapKeys(classes)
@@ -3720,7 +3829,6 @@ fun tcCheckWhenExhaustiveness(tc: Map, node: Map, branches: List): Unit {
             val enumEntries = mapGet(cinfo, "enumEntries")
             if (enumEntries != null) {
                 if (listSize(enumEntries) > 0) {
-                    // Check if any entries from this enum are covered
                     var anyMatch: Bool = false
                     var ei: Int = 0
                     while (ei < listSize(enumEntries)) {
@@ -3730,13 +3838,12 @@ fun tcCheckWhenExhaustiveness(tc: Map, node: Map, branches: List): Unit {
                         }
                         ei = ei + 1
                     }
-                    // If some entries match but not all, warn about missing ones
                     if (anyMatch) {
                         var mi: Int = 0
                         while (mi < listSize(enumEntries)) {
                             val ename = toString(listGet(enumEntries, mi))
                             if (!listContainsStr(coveredEntries, ename)) {
-                                tcWarn(tc, stringConcat("'when' missing branch for '", stringConcat(cname, stringConcat(".", stringConcat(ename, "'")))), node)
+                                tcError(tc, stringConcat("'when' missing branch for '", stringConcat(cname, stringConcat(".", stringConcat(ename, "'")))), node)
                             }
                             mi = mi + 1
                         }
@@ -6846,13 +6953,59 @@ fun compileLambda(fs: Map, node: Map): Int {
 // If expression compilation
 // ---------------------------------------------------------------------------
 
+fun isStatementKind(k: String): Bool {
+    if (k == "valDecl") { return true }
+    if (k == "varDecl") { return true }
+    if (k == "assign") { return true }
+    if (k == "compoundAssign") { return true }
+    if (k == "return") { return true }
+    if (k == "while") { return true }
+    if (k == "for") { return true }
+    if (k == "break") { return true }
+    if (k == "continue") { return true }
+    if (k == "throw") { return true }
+    if (k == "destructure") { return true }
+    if (k == "forDestructure") { return true }
+    if (k == "doWhile") { return true }
+    return false
+}
+
+fun compileBlockWithResult(fs: Map, blockNode: Map, dest: Int): Unit {
+    val kind = toString(mapGet(blockNode, "kind"))
+    if (kind == "block") {
+        val stmts = mapGet(blockNode, "stmts")
+        val count = listSize(stmts)
+        var i: Int = 0
+        while (i < count - 1) {
+            compileStmt(fs, listGet(stmts, i))
+            i = i + 1
+        }
+        if (count > 0) {
+            val lastStmt = listGet(stmts, count - 1)
+            val lastKind = toString(mapGet(lastStmt, "kind"))
+            if (isStatementKind(lastKind)) {
+                compileStmt(fs, lastStmt)
+            } else {
+                val valReg = compileExpr(fs, lastStmt)
+                emitStore(fs, dest, valReg)
+            }
+        }
+    } else {
+        val valReg = compileExpr(fs, blockNode)
+        emitStore(fs, dest, valReg)
+    }
+}
+
 fun compileIfExpr(fs: Map, node: Map): Int {
+    val dest = allocReg(fs)
+    emitConstNull(fs, dest)
+
     val condReg = compileExpr(fs, mapGet(node, "condition"))
     val patches = emitBranch(fs, condReg)
 
     // Then branch
     patchJump(fs, toInt(mapGet(patches, "thenPatch")))
-    compileBlock(fs, mapGet(node, "then"))
+    compileBlockWithResult(fs, mapGet(node, "then"), dest)
     val jumpToEnd = emitJump(fs)
 
     // Else branch
@@ -6861,20 +7014,20 @@ fun compileIfExpr(fs: Map, node: Map): Int {
     if (elseNode != null) {
         val elseKind = toString(mapGet(elseNode, "kind"))
         if (elseKind == "block") {
-            compileBlock(fs, elseNode)
+            compileBlockWithResult(fs, elseNode, dest)
         } else {
             if (elseKind == "if") {
-                compileIfExpr(fs, elseNode)
+                val elseResult = compileIfExpr(fs, elseNode)
+                emitStore(fs, dest, elseResult)
             } else {
-                compileStmt(fs, elseNode)
+                val valReg = compileExpr(fs, elseNode)
+                emitStore(fs, dest, valReg)
             }
         }
     }
 
     // End
     patchJump(fs, jumpToEnd)
-    val dest = allocReg(fs)
-    emitConstNull(fs, dest)
     return dest
 }
 

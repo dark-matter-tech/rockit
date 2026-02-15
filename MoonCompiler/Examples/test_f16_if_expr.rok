@@ -1,0 +1,29 @@
+// Test: if-as-expression (val x = if (...) { ... } else { ... })
+// This was a bootstrap-breaking bug — if-expressions always returned null
+
+fun main(): Unit {
+    // Basic if-expression with strings (constant true)
+    val x: String = if (true) { "yes" } else { "no" }
+    println(x)
+
+    // If-expression with constant false
+    val y: String = if (false) { "wrong" } else { "right" }
+    println(y)
+
+    // Nested if-expression with strings
+    val grade: Int = 85
+    var letter: String = "F"
+    if (grade >= 90) { letter = "A" } else { if (grade >= 80) { letter = "B" } else { letter = "C" } }
+    println(letter)
+
+    // If-expression with integer values (explicit type annotation)
+    val a: Int = if (true) { 42 } else { 0 }
+    println(a)
+
+    val b: Int = if (false) { 1 } else { 99 }
+    println(b)
+
+    // If-expression in string concatenation
+    val msg: String = stringConcat("Result: ", if (true) { "pass" } else { "fail" })
+    println(msg)
+}
