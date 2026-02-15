@@ -2443,48 +2443,58 @@ public final class LLVMCodeGen {
         }
 
         /// Load a concat part and convert to ptr (string) if needed.
-        func loadAsString(_ part: String, into lines: inout [String]) -> String {
+        /// Returns (value, isOwned) — isOwned is true when a new string was allocated
+        /// (toString conversion), false when the value is a borrowed reference from an alloca.
+        func loadAsString(_ part: String, into lines: inout [String]) -> (String, Bool) {
             let partType = typeOf(part)
             let raw = nextSSA()
             lines.append("\(raw) = load \(partType), ptr \(addrOf(part))")
             switch partType {
             case "ptr":
-                return raw  // already a string
+                return (raw, false)  // borrowed reference — do NOT release
             case "i64":
                 let conv = nextSSA()
                 lines.append("\(conv) = call ptr @rockit_int_to_string(i64 \(raw))")
-                return conv
+                return (conv, true)
             case "double":
                 let conv = nextSSA()
                 lines.append("\(conv) = call ptr @rockit_float_to_string(double \(raw))")
-                return conv
+                return (conv, true)
             case "i1":
                 let conv = nextSSA()
                 lines.append("\(conv) = call ptr @rockit_bool_to_string(i1 \(raw))")
-                return conv
+                return (conv, true)
             default:
                 // Treat unknown types as i64 → int_to_string
                 let conv = nextSSA()
                 lines.append("\(conv) = call ptr @rockit_int_to_string(i64 \(raw))")
-                return conv
+                return (conv, true)
             }
         }
 
         var lines: [String] = []
 
         if parts.count == 1 {
-            let str = loadAsString(parts[0], into: &lines)
+            let (str, _) = loadAsString(parts[0], into: &lines)
             lines.append(storeToTemp(dest, value: str, type: "ptr"))
             return lines
         }
 
-        var accumulator = loadAsString(parts[0], into: &lines)
+        var (accumulator, accOwned) = loadAsString(parts[0], into: &lines)
 
         for i in 1..<parts.count {
-            let next = loadAsString(parts[i], into: &lines)
+            let (next, nextOwned) = loadAsString(parts[i], into: &lines)
             let result = nextSSA()
             lines.append("\(result) = call ptr @rockit_string_concat(ptr \(accumulator), ptr \(next))")
+            // Release intermediates: toString conversions and previous concat results
+            if accOwned {
+                lines.append("call void @rockit_string_release(ptr \(accumulator))")
+            }
+            if nextOwned {
+                lines.append("call void @rockit_string_release(ptr \(next))")
+            }
             accumulator = result
+            accOwned = true  // concat results are always owned
         }
 
         lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .string))
