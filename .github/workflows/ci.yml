@@ -13,7 +13,9 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: apt-get update && apt-get install -y git clang
+        run: |
+          apt-get update && apt-get install -y git clang-15
+          ln -sf /usr/bin/clang-15 /usr/bin/clang
 
       - name: Checkout
         run: |
