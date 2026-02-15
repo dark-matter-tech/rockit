@@ -1414,9 +1414,30 @@ fun parseWhenExpr(p: Map): Map {
             if (check(p, "KW_IS")) {
                 advance(p)
                 val typeNode = parseType(p)
-                val isPattern = makeNode("isPattern")
-                mapPut(isPattern, "type", typeNode)
-                listAppend(patterns, isPattern)
+                // Check for destructuring: is Type(val a, val b)
+                if (check(p, "LPAREN")) {
+                    advance(p)
+                    val bindings = listCreate()
+                    while (!check(p, "RPAREN") && !parserAtEnd(p)) {
+                        skipNewlines(p)
+                        if (check(p, "KW_VAL")) { advance(p) }
+                        val bname = toString(mapGet(expect(p, "IDENT"), "value"))
+                        listAppend(bindings, bname)
+                        if (!check(p, "RPAREN")) {
+                            expect(p, "COMMA")
+                        }
+                        skipNewlines(p)
+                    }
+                    expect(p, "RPAREN")
+                    val isDestructPattern = makeNode("isDestructPattern")
+                    mapPut(isDestructPattern, "type", typeNode)
+                    mapPut(isDestructPattern, "bindings", bindings)
+                    listAppend(patterns, isDestructPattern)
+                } else {
+                    val isPattern = makeNode("isPattern")
+                    mapPut(isPattern, "type", typeNode)
+                    listAppend(patterns, isPattern)
+                }
             } else {
                 if (check(p, "KW_IN")) {
                     advance(p)
@@ -1440,9 +1461,29 @@ fun parseWhenExpr(p: Map): Map {
                 if (check(p, "KW_IS")) {
                     advance(p)
                     val typeNode = parseType(p)
-                    val isPattern = makeNode("isPattern")
-                    mapPut(isPattern, "type", typeNode)
-                    listAppend(patterns, isPattern)
+                    if (check(p, "LPAREN")) {
+                        advance(p)
+                        val bindings = listCreate()
+                        while (!check(p, "RPAREN") && !parserAtEnd(p)) {
+                            skipNewlines(p)
+                            if (check(p, "KW_VAL")) { advance(p) }
+                            val bname = toString(mapGet(expect(p, "IDENT"), "value"))
+                            listAppend(bindings, bname)
+                            if (!check(p, "RPAREN")) {
+                                expect(p, "COMMA")
+                            }
+                            skipNewlines(p)
+                        }
+                        expect(p, "RPAREN")
+                        val isDestructPattern = makeNode("isDestructPattern")
+                        mapPut(isDestructPattern, "type", typeNode)
+                        mapPut(isDestructPattern, "bindings", bindings)
+                        listAppend(patterns, isDestructPattern)
+                    } else {
+                        val isPattern = makeNode("isPattern")
+                        mapPut(isPattern, "type", typeNode)
+                        listAppend(patterns, isPattern)
+                    }
                 } else {
                     if (check(p, "KW_IN")) {
                         advance(p)
@@ -5953,6 +5994,7 @@ fun makeCompiler(): Map {
     mapPut(c, "typeAliases", mapCreate())    // aliasName -> targetName
     mapPut(c, "extensionFuncs", mapCreate()) // "TypeName.method" -> true
     mapPut(c, "classBodyInits", mapCreate()) // className -> list of {name, init} for body field defaults
+    mapPut(c, "classFieldNames", mapCreate()) // className -> ordered list of ctor param names
     mapPut(c, "overloadedFuncs", mapCreate()) // baseName -> true (marks name as overloaded)
     mapPut(c, "varargFuncs", mapCreate())    // funcName -> vararg param index
     mapPut(c, "lambdaCounter", 0)
@@ -7425,8 +7467,8 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
                     val leReg = allocReg(fs)
                     emitBinaryOp(fs, "<=", leReg, subjectReg, endReg)
                     emitBinaryOp(fs, "&&", singleCond, geReg, leReg)
-                } else if (patKind == "isPattern") {
-                    // Type check pattern: is Type
+                } else if (patKind == "isPattern" || patKind == "isDestructPattern") {
+                    // Type check pattern: is Type or is Type(val a, val b)
                     val typeNode = mapGet(pattern, "type")
                     val typeName = toString(mapGet(typeNode, "name"))
                     emitTypeCheck(fs, singleCond, subjectReg, typeName)
@@ -7465,6 +7507,37 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
             }
             val patches = emitBranch(fs, condReg)
             patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+
+            // Emit destructuring bindings for isDestructPattern
+            var dpi: Int = 0
+            while (dpi < listSize(patterns)) {
+                val dpat = listGet(patterns, dpi)
+                if (toString(mapGet(dpat, "kind")) == "isDestructPattern") {
+                    val dBindings = mapGet(dpat, "bindings")
+                    val dTypeName = toString(mapGet(mapGet(dpat, "type"), "name"))
+                    // Look up field names from the class
+                    val classInfo = mapGet(mapGet(mapGet(fs, "compiler"), "classNames"), dTypeName)
+                    val classFields = mapGet(mapGet(mapGet(fs, "compiler"), "classFieldNames"), dTypeName)
+                    var dbi: Int = 0
+                    while (dbi < listSize(dBindings)) {
+                        val bindName = toString(listGet(dBindings, dbi))
+                        // Get field name by position (or use binding name as fallback)
+                        var fieldName: String = bindName
+                        if (classFields != null) {
+                            if (dbi < listSize(classFields)) {
+                                fieldName = toString(listGet(classFields, dbi))
+                            }
+                        }
+                        val fieldReg = allocReg(fs)
+                        emitGetField(fs, fieldReg, subjectReg, fieldName)
+                        val slot = allocReg(fs)
+                        emitStore(fs, slot, fieldReg)
+                        mapPut(mapGet(fs, "locals"), bindName, slot)
+                        dbi = dbi + 1
+                    }
+                }
+                dpi = dpi + 1
+            }
 
             // Handle guard: if guard -> body, else -> next branch
             val guardExpr = mapGet(branch, "guard")
@@ -8379,6 +8452,8 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
         listAppend(fieldNames, toString(mapGet(listGet(fields, fi), "name")))
         fi = fi + 1
     }
+    // Store field names for when destructuring patterns
+    mapPut(mapGet(compiler, "classFieldNames"), className, fieldNames)
 
     // Collect method names first (needed for self-calls within methods)
     val methods = listCreate()

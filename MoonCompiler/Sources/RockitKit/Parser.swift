@@ -1740,6 +1740,22 @@ public final class Parser {
             let start = advance()
             skipNewlines()
             let type = parseType()
+            // Check for destructuring bindings: is Type(val a, val b)
+            if check(.leftParen) {
+                advance()
+                var bindings: [String] = []
+                while !check(.rightParen) && !check(.eof) {
+                    skipNewlines()
+                    if check(.kwVal) { advance() }
+                    bindings.append(expectIdentifier("expected binding name"))
+                    if !check(.rightParen) {
+                        expect(.comma, "expected ',' between bindings")
+                    }
+                    skipNewlines()
+                }
+                expect(.rightParen, "expected ')' after bindings")
+                return .isTypeWithBindings(type, bindings, spanFrom(start))
+            }
             return .isType(type, spanFrom(start))
         }
         if check(.kwIn) {

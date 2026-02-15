@@ -698,6 +698,7 @@ public enum WhenCondition {
     case expression(Expression)
     case isType(TypeNode, SourceSpan)
     case inRange(Expression, Expression, SourceSpan) // in start..end
+    case isTypeWithBindings(TypeNode, [String], SourceSpan) // is Type(val a, val b)
 }
 
 // MARK: - AST Dump
@@ -995,6 +996,8 @@ extension Expression {
                         lines.append("\(pad)    is \(t.summary)")
                     case .inRange(let start, let end, _):
                         lines.append("\(pad)    in \(start.dump(indent: 0))..\(end.dump(indent: 0))")
+                    case .isTypeWithBindings(let t, let bindings, _):
+                        lines.append("\(pad)    is \(t.summary)(\(bindings.joined(separator: ", ")))")
                     }
                 }
                 switch entry.body {

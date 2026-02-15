@@ -1503,6 +1503,13 @@ public final class MIRLowering {
                         builder.emit(.typeCheck(dest: checkTemp, operand: subj, typeName: typeName))
                         builder.terminate(.branch(condition: checkTemp, thenLabel: condTarget, elseLabel: nextLabel))
                     }
+                case .isTypeWithBindings(_, _, _):
+                    if let subj = subject {
+                        let checkTemp = builder.newTemp()
+                        let typeName = typeNodeName(condition)
+                        builder.emit(.typeCheck(dest: checkTemp, operand: subj, typeName: typeName))
+                        builder.terminate(.branch(condition: checkTemp, thenLabel: condTarget, elseLabel: nextLabel))
+                    }
                 case .inRange(let startExpr, let endExpr, _):
                     if let subj = subject {
                         let startVal = lowerExpression(startExpr)
@@ -1531,6 +1538,32 @@ public final class MIRLowering {
 
             // Body
             builder.startBlock(label: bodyLabel)
+
+            // Emit destructuring bindings for isTypeWithBindings
+            for condition in entry.conditions {
+                if case .isTypeWithBindings(_, let bindings, _) = condition, let subj = subject {
+                    let typeName = typeNodeName(condition)
+                    // Look up field names from type declaration
+                    let fieldNames: [String]
+                    if let typeInfo = result.symbolTable.lookupType(typeName) {
+                        fieldNames = typeInfo.members.filter { sym in
+                            if case .variable = sym.kind { return true }
+                            return false
+                        }.map { $0.name }
+                    } else {
+                        fieldNames = bindings // Fallback: use binding names as field names
+                    }
+                    for (i, binding) in bindings.enumerated() {
+                        let fieldName = i < fieldNames.count ? fieldNames[i] : binding
+                        let fieldTemp = builder.newTemp()
+                        builder.emit(.getField(dest: fieldTemp, object: subj, fieldName: fieldName))
+                        let slot = builder.emitAlloc(type: .int)
+                        locals[binding] = slot
+                        builder.emitStore(dest: slot, src: fieldTemp)
+                    }
+                }
+            }
+
             switch entry.body {
             case .expression(let expr):
                 let val = lowerExpression(expr)
@@ -1909,6 +1942,8 @@ public final class MIRLowering {
     private func typeNodeName(_ condition: WhenCondition) -> String {
         switch condition {
         case .isType(let typeNode, _):
+            return typeNodeSimpleName(typeNode)
+        case .isTypeWithBindings(let typeNode, _, _):
             return typeNodeSimpleName(typeNode)
         case .expression, .inRange:
             return "Any"

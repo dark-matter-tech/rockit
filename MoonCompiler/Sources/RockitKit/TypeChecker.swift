@@ -1281,6 +1281,32 @@ public final class TypeChecker {
                 case .inRange(let start, let end, _):
                     let _ = checkExpression(start)
                     let _ = checkExpression(end)
+                case .isTypeWithBindings(let typeNode, let bindings, _):
+                    let resolvedType = resolver.resolve(typeNode)
+                    if let name = resolvedType.typeName {
+                        coveredTypes.append(name)
+                    }
+                    // Smart cast + bind each destructured name as a local
+                    if let subject = we.subject,
+                       case .identifier(let subjectName, let subjectSpan) = subject {
+                        let narrowed = Symbol(
+                            name: subjectName,
+                            type: resolvedType,
+                            kind: .variable(isMutable: false),
+                            span: subjectSpan
+                        )
+                        symbolTable.currentScope.update(narrowed)
+                    }
+                    // Bind each destructured name as Any in scope
+                    for binding in bindings {
+                        let sym = Symbol(
+                            name: binding,
+                            type: .classType(name: "Any", typeArguments: []),
+                            kind: .variable(isMutable: false),
+                            span: entry.span
+                        )
+                        symbolTable.define(sym)
+                    }
                 }
             }
 
