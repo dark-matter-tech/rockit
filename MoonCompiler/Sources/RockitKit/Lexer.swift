@@ -49,6 +49,7 @@ public final class Lexer {
         "protected":   .kwProtected,
         "companion":   .kwCompanion,
         "typealias":   .kwTypealias,
+        "vararg":      .kwVararg,
 
         // Rockit-specific
         "view":        .kwView,

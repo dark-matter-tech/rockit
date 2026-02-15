@@ -40,6 +40,7 @@ fun buildKeywordMap(): Map {
     mapPut(kw, "protected", "KW_PROTECTED")
     mapPut(kw, "companion", "KW_COMPANION")
     mapPut(kw, "typealias", "KW_TYPEALIAS")
+    mapPut(kw, "vararg", "KW_VARARG")
     // Rockit-specific keywords
     mapPut(kw, "view", "KW_VIEW")
     mapPut(kw, "actor", "KW_ACTOR")
@@ -1409,7 +1410,7 @@ fun parseWhenExpr(p: Map): Map {
             mapPut(branch, "isElse", true)
         } else {
             val patterns = listCreate()
-            // Check for "is Type" pattern
+            // Check for "is Type" or "in range" pattern
             if (check(p, "KW_IS")) {
                 advance(p)
                 val typeNode = parseType(p)
@@ -1417,7 +1418,23 @@ fun parseWhenExpr(p: Map): Map {
                 mapPut(isPattern, "type", typeNode)
                 listAppend(patterns, isPattern)
             } else {
-                listAppend(patterns, parseExpression(p, 0))
+                if (check(p, "KW_IN")) {
+                    advance(p)
+                    val rangeExpr = parseExpression(p, 0)
+                    // Range is parsed as binary with op ".." or "..<"
+                    val rangeKind = toString(mapGet(rangeExpr, "kind"))
+                    val rangeOp = toString(mapGet(rangeExpr, "op"))
+                    if (rangeKind == "binary" && (rangeOp == ".." || rangeOp == "..<")) {
+                        val inPattern = makeNode("inRangePattern")
+                        mapPut(inPattern, "start", mapGet(rangeExpr, "left"))
+                        mapPut(inPattern, "end", mapGet(rangeExpr, "right"))
+                        listAppend(patterns, inPattern)
+                    } else {
+                        listAppend(patterns, rangeExpr)
+                    }
+                } else {
+                    listAppend(patterns, parseExpression(p, 0))
+                }
             }
             while (matchToken(p, "COMMA")) {
                 if (check(p, "KW_IS")) {
@@ -1427,11 +1444,34 @@ fun parseWhenExpr(p: Map): Map {
                     mapPut(isPattern, "type", typeNode)
                     listAppend(patterns, isPattern)
                 } else {
-                    listAppend(patterns, parseExpression(p, 0))
+                    if (check(p, "KW_IN")) {
+                        advance(p)
+                        val rangeExpr = parseExpression(p, 0)
+                        val rangeKind = toString(mapGet(rangeExpr, "kind"))
+                        val rangeOp = toString(mapGet(rangeExpr, "op"))
+                        if (rangeKind == "binary" && (rangeOp == ".." || rangeOp == "..<")) {
+                            val inPattern = makeNode("inRangePattern")
+                            mapPut(inPattern, "start", mapGet(rangeExpr, "left"))
+                            mapPut(inPattern, "end", mapGet(rangeExpr, "right"))
+                            listAppend(patterns, inPattern)
+                        } else {
+                            listAppend(patterns, rangeExpr)
+                        }
+                    } else {
+                        listAppend(patterns, parseExpression(p, 0))
+                    }
                 }
             }
             mapPut(branch, "patterns", patterns)
         }
+        // Optional guard: `if condition`
+        skipNewlines(p)
+        if (check(p, "KW_IF")) {
+            advance(p)
+            skipNewlines(p)
+            mapPut(branch, "guard", parseExpression(p, 0))
+        }
+        skipNewlines(p)
         expect(p, "ARROW")
         // Branch body: either a block or a single expression
         skipNewlines(p)
@@ -1801,7 +1841,7 @@ fun parseFunDecl(p: Map): Map {
 fun parseParam(p: Map): Map {
     skipNewlines(p)
     val node = makeNode("param")
-    // Handle var/val prefix (for constructor params that become fields)
+    // Handle var/val/vararg prefix (for constructor params that become fields)
     if (check(p, "KW_VAR")) {
         advance(p)
         mapPut(node, "isVar", true)
@@ -1809,6 +1849,11 @@ fun parseParam(p: Map): Map {
         if (check(p, "KW_VAL")) {
             advance(p)
             mapPut(node, "isVal", true)
+        } else {
+            if (check(p, "KW_VARARG")) {
+                advance(p)
+                mapPut(node, "isVararg", true)
+            }
         }
     }
     val name = toString(mapGet(expect(p, "IDENT"), "value"))
@@ -2852,7 +2897,18 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
         val sig = mapCreate()
         mapPut(sig, "arity", arity)
         mapPut(sig, "returnType", ret)
-        mapPut(sig, "variadic", false)
+        // Check if any param is vararg
+        var isVariadic: Bool = false
+        if (params != null) {
+            var vci: Int = 0
+            while (vci < listSize(params)) {
+                if (mapGet(listGet(params, vci), "isVararg") != null) {
+                    isVariadic = true
+                }
+                vci = vci + 1
+            }
+        }
+        mapPut(sig, "variadic", isVariadic)
         mapPut(sig, "params", params)
         // Check for function overloads
         val fns = mapGet(tc, "functions")
@@ -3625,12 +3681,15 @@ fun tcInferExpr(tc: Map, expr: Map): String {
                 // Check if overloaded — skip arity check for overloaded functions
                 val isOverloaded = mapGet(mapGet(tc, "overloadedFuncs"), fname)
                 if (isOverloaded == null) {
-                    val expectedArity = toInt(mapGet(sig, "arity"))
-                    // Only check arity for non-variadic functions with known arity
-                    if (expectedArity >= 0 && argCount != expectedArity) {
-                        // Allow default parameters — don't error if fewer args
-                        if (argCount > expectedArity) {
-                            tcError(tc, stringConcat(fname, stringConcat(" expects ", stringConcat(toString(expectedArity), stringConcat(" argument(s), got ", toString(argCount))))), expr)
+                    val isVariadic = mapGet(sig, "variadic")
+                    if (isVariadic != true) {
+                        val expectedArity = toInt(mapGet(sig, "arity"))
+                        // Only check arity for non-variadic functions with known arity
+                        if (expectedArity >= 0 && argCount != expectedArity) {
+                            // Allow default parameters — don't error if fewer args
+                            if (argCount > expectedArity) {
+                                tcError(tc, stringConcat(fname, stringConcat(" expects ", stringConcat(toString(expectedArity), stringConcat(" argument(s), got ", toString(argCount))))), expr)
+                            }
                         }
                     }
                 }
@@ -5895,6 +5954,7 @@ fun makeCompiler(): Map {
     mapPut(c, "extensionFuncs", mapCreate()) // "TypeName.method" -> true
     mapPut(c, "classBodyInits", mapCreate()) // className -> list of {name, init} for body field defaults
     mapPut(c, "overloadedFuncs", mapCreate()) // baseName -> true (marks name as overloaded)
+    mapPut(c, "varargFuncs", mapCreate())    // funcName -> vararg param index
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -6810,6 +6870,42 @@ fun compileExpr(fs: Map, node: Map): Int {
                     }
                 }
             }
+            // Pack vararg arguments into a list
+            val varargIdx = mapGet(mapGet(mapGet(fs, "compiler"), "varargFuncs"), funcName)
+            if (varargIdx != null) {
+                val vidx = toInt(varargIdx)
+                // Collect args before vararg position
+                val packedArgs = listCreate()
+                var vai: Int = 0
+                while (vai < vidx) {
+                    if (vai < listSize(argRegs)) {
+                        listAppend(packedArgs, toInt(listGet(argRegs, vai)))
+                    }
+                    vai = vai + 1
+                }
+                // Create a list from remaining args
+                val listReg = allocReg(fs)
+                emitCall(fs, listReg, "listCreate", listCreate())
+                while (vai < listSize(argRegs)) {
+                    val appendArgs = listCreate()
+                    listAppend(appendArgs, listReg)
+                    listAppend(appendArgs, toInt(listGet(argRegs, vai)))
+                    emitCall(fs, allocReg(fs), "listAppend", appendArgs)
+                    vai = vai + 1
+                }
+                listAppend(packedArgs, listReg)
+                // Replace argRegs with packed version
+                // Clear and refill argRegs
+                while (listSize(argRegs) > 0) {
+                    listRemoveAt(argRegs, 0)
+                }
+                var pai: Int = 0
+                while (pai < listSize(packedArgs)) {
+                    listAppend(argRegs, toInt(listGet(packedArgs, pai)))
+                    pai = pai + 1
+                }
+            }
+
             // Resolve overloaded function names by arity
             val overloads = mapGet(mapGet(mapGet(fs, "compiler"), "overloadedFuncs"), funcName)
             if (overloads != null) {
@@ -7320,6 +7416,15 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
                     // No subject — pattern is a boolean condition
                     val exprReg = compileExpr(fs, pattern)
                     emitStore(fs, singleCond, exprReg)
+                } else if (patKind == "inRangePattern") {
+                    // Range pattern: in start..end → subject >= start && subject <= end
+                    val startReg = compileExpr(fs, mapGet(pattern, "start"))
+                    val endReg = compileExpr(fs, mapGet(pattern, "end"))
+                    val geReg = allocReg(fs)
+                    emitBinaryOp(fs, ">=", geReg, subjectReg, startReg)
+                    val leReg = allocReg(fs)
+                    emitBinaryOp(fs, "<=", leReg, subjectReg, endReg)
+                    emitBinaryOp(fs, "&&", singleCond, geReg, leReg)
                 } else if (patKind == "isPattern") {
                     // Type check pattern: is Type
                     val typeNode = mapGet(pattern, "type")
@@ -7361,15 +7466,35 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
             val patches = emitBranch(fs, condReg)
             patchJump(fs, toInt(mapGet(patches, "thenPatch")))
 
-            val body = mapGet(branch, "body")
-            val bodyKind = toString(mapGet(body, "kind"))
-            if (bodyKind == "block") {
-                compileBlock(fs, body)
+            // Handle guard: if guard -> body, else -> next branch
+            val guardExpr = mapGet(branch, "guard")
+            if (guardExpr != null) {
+                val guardReg = compileExpr(fs, guardExpr)
+                val guardPatches = emitBranch(fs, guardReg)
+                patchJump(fs, toInt(mapGet(guardPatches, "thenPatch")))
+                // Body goes here (guard succeeded)
+                val body = mapGet(branch, "body")
+                val bodyKind = toString(mapGet(body, "kind"))
+                if (bodyKind == "block") {
+                    compileBlock(fs, body)
+                } else {
+                    val valReg = compileExpr(fs, body)
+                    emitStore(fs, dest, valReg)
+                }
+                listAppend(endPatches, emitJump(fs))
+                // Guard failed → jump to else (next branch)
+                patchJump(fs, toInt(mapGet(guardPatches, "elsePatch")))
             } else {
-                val valReg = compileExpr(fs, body)
-                emitStore(fs, dest, valReg)
+                val body = mapGet(branch, "body")
+                val bodyKind = toString(mapGet(body, "kind"))
+                if (bodyKind == "block") {
+                    compileBlock(fs, body)
+                } else {
+                    val valReg = compileExpr(fs, body)
+                    emitStore(fs, dest, valReg)
+                }
+                listAppend(endPatches, emitJump(fs))
             }
-            listAppend(endPatches, emitJump(fs))
 
             patchJump(fs, toInt(mapGet(patches, "elsePatch")))
         }
@@ -8103,6 +8228,16 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
 
     // Store function signature info for call sites
     mapPut(mapGet(compiler, "funcSignatures"), name, params)
+
+    // Track vararg functions
+    var vi: Int = 0
+    while (vi < listSize(params)) {
+        val vp = listGet(params, vi)
+        if (mapGet(vp, "isVararg") != null) {
+            mapPut(mapGet(compiler, "varargFuncs"), name, vi)
+        }
+        vi = vi + 1
+    }
 
     // Compile body
     val body = mapGet(decl, "body")

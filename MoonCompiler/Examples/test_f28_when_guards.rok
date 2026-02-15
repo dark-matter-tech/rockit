@@ -1,0 +1,31 @@
+// test_f28_when_guards.rok — Pattern matching guards in when expressions
+
+fun classify(x: Int): String {
+    return when (x) {
+        in 1..100 if x > 50 -> "high"
+        in 1..100 if x > 20 -> "medium"
+        in 1..100 -> "low"
+        else -> "out of range"
+    }
+}
+
+fun describeNumber(n: Int): String {
+    return when (n) {
+        0 -> "zero"
+        1 if n > 0 -> "one"
+        else -> "other"
+    }
+}
+
+fun main() {
+    // Test guards with ranges
+    println(classify(75))
+    println(classify(35))
+    println(classify(10))
+    println(classify(200))
+
+    // Test guard with value match
+    println(describeNumber(0))
+    println(describeNumber(1))
+    println(describeNumber(5))
+}

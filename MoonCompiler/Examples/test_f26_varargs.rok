@@ -1,0 +1,48 @@
+// test_f26_varargs.rok — Vararg function support
+
+fun sum(vararg numbers: Int): Int {
+    var total = 0
+    val len = listSize(numbers)
+    var i = 0
+    while (i < len) {
+        total = total + toInt(listGet(numbers, i))
+        i = i + 1
+    }
+    return total
+}
+
+fun printAll(prefix: String, vararg items: String): String {
+    var result = prefix
+    val len = listSize(items)
+    var i = 0
+    while (i < len) {
+        result = stringConcat(result, toString(listGet(items, i)))
+        if (i < len - 1) {
+            result = stringConcat(result, ", ")
+        }
+        i = i + 1
+    }
+    return result
+}
+
+fun main() {
+    // Test 1: vararg with multiple args
+    val s1 = sum(1, 2, 3)
+    println(s1)
+
+    // Test 2: vararg with single arg
+    val s2 = sum(10)
+    println(s2)
+
+    // Test 3: vararg with no args
+    val s3 = sum()
+    println(s3)
+
+    // Test 4: vararg with regular param before it
+    val msg = printAll("Items: ", "apple", "banana", "cherry")
+    println(msg)
+
+    // Test 5: vararg with regular param, single vararg
+    val msg2 = printAll("One: ", "hello")
+    println(msg2)
+}

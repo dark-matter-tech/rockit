@@ -65,6 +65,7 @@ public enum TokenKind: Equatable {
     case kwProtected                      // protected
     case kwCompanion                      // companion
     case kwTypealias                      // typealias
+    case kwVararg                         // vararg
 
     // MARK: - Keywords — Moon-Specific
 

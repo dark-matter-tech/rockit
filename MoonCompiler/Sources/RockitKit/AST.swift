@@ -132,15 +132,17 @@ public struct Parameter {
     public let defaultValue: Expression?
     public let isVal: Bool
     public let isVar: Bool
+    public let isVararg: Bool
     public let span: SourceSpan
 
     public init(name: String, type: TypeNode?, defaultValue: Expression?,
-                isVal: Bool = false, isVar: Bool = false, span: SourceSpan) {
+                isVal: Bool = false, isVar: Bool = false, isVararg: Bool = false, span: SourceSpan) {
         self.name = name
         self.type = type
         self.defaultValue = defaultValue
         self.isVal = isVal
         self.isVar = isVar
+        self.isVararg = isVararg
         self.span = span
     }
 }
@@ -673,11 +675,13 @@ public struct WhenExpr {
 /// A single when entry
 public struct WhenEntry {
     public let conditions: [WhenCondition]
+    public let guard_: Expression?
     public let body: WhenBody
     public let span: SourceSpan
 
-    public init(conditions: [WhenCondition], body: WhenBody, span: SourceSpan) {
+    public init(conditions: [WhenCondition], guard_: Expression? = nil, body: WhenBody, span: SourceSpan) {
         self.conditions = conditions
+        self.guard_ = guard_
         self.body = body
         self.span = span
     }
@@ -693,6 +697,7 @@ public enum WhenBody {
 public enum WhenCondition {
     case expression(Expression)
     case isType(TypeNode, SourceSpan)
+    case inRange(Expression, Expression, SourceSpan) // in start..end
 }
 
 // MARK: - AST Dump
@@ -988,6 +993,8 @@ extension Expression {
                         lines.append(e.dump(indent: indent + 2))
                     case .isType(let t, _):
                         lines.append("\(pad)    is \(t.summary)")
+                    case .inRange(let start, let end, _):
+                        lines.append("\(pad)    in \(start.dump(indent: 0))..\(end.dump(indent: 0))")
                     }
                 }
                 switch entry.body {

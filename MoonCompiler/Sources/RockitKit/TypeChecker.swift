@@ -11,6 +11,8 @@ public struct TypeCheckResult {
     public let symbolTable: SymbolTable
     public let diagnostics: DiagnosticEngine
     public let functionOverloads: [String: Set<Int>]
+    /// Maps function name → index of the vararg parameter
+    public let varargFunctions: [String: Int]
 }
 
 // MARK: - Type Checker
@@ -30,6 +32,8 @@ public final class TypeChecker {
     private var typeMap: [ExpressionID: Type] = [:]
     /// Tracks overloaded function names: baseName -> set of arities
     private var functionOverloads: [String: Set<Int>] = [:]
+    /// Tracks functions with vararg parameters: funcName -> vararg param index
+    private var varargFunctions: [String: Int] = [:]
 
     public init(ast: SourceFile, diagnostics: DiagnosticEngine) {
         self.ast = ast
@@ -55,7 +59,8 @@ public final class TypeChecker {
             typeMap: typeMap,
             symbolTable: symbolTable,
             diagnostics: diagnostics,
-            functionOverloads: functionOverloads
+            functionOverloads: functionOverloads,
+            varargFunctions: varargFunctions
         )
     }
 
@@ -115,6 +120,10 @@ public final class TypeChecker {
         }
         let funcType = Type.function(parameterTypes: paramTypes, returnType: returnType)
         let arity = paramTypes.count
+        // Track vararg parameter index
+        if let varargIdx = f.parameters.firstIndex(where: { $0.isVararg }) {
+            varargFunctions[f.name] = varargIdx
+        }
         let symbol = Symbol(name: f.name, type: funcType, kind: .function, span: f.span)
         if !symbolTable.define(symbol) {
             // Check if this is a valid overload (same name, different arity)
@@ -1269,6 +1278,17 @@ public final class TypeChecker {
                         )
                         symbolTable.currentScope.update(narrowed)
                     }
+                case .inRange(let start, let end, _):
+                    let _ = checkExpression(start)
+                    let _ = checkExpression(end)
+                }
+            }
+
+            // Check guard expression
+            if let guardExpr = entry.guard_ {
+                let guardType = checkExpression(guardExpr)
+                if !guardType.isError && guardType != .bool {
+                    diagnostics.error("when guard must be Bool, got '\(guardType)'", at: entry.span.start)
                 }
             }
 

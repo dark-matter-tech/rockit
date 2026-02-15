@@ -426,8 +426,10 @@ public final class Parser {
         let start = peek()
         var isVal = false
         var isVar = false
+        var isVararg = false
         if check(.kwVal) { isVal = true; advance() }
         else if check(.kwVar) { isVar = true; advance() }
+        else if check(.kwVararg) { isVararg = true; advance() }
         let name = expectIdentifier("expected parameter name")
         let type = parseOptionalTypeAnnotation()
         var defaultValue: Expression? = nil
@@ -436,7 +438,7 @@ public final class Parser {
             defaultValue = parseExpression()
         }
         return Parameter(name: name, type: type, defaultValue: defaultValue,
-                         isVal: isVal, isVar: isVar, span: spanFrom(start))
+                         isVal: isVal, isVar: isVar, isVararg: isVararg, span: spanFrom(start))
     }
 
     private func parseOptionalReturnType() -> TypeNode? {
@@ -1710,6 +1712,15 @@ public final class Parser {
             }
         }
 
+        // Optional guard: `if condition`
+        skipNewlines()
+        var guardExpr: Expression? = nil
+        if check(.kwIf) {
+            advance()
+            skipNewlines()
+            guardExpr = parseExpression()
+        }
+
         skipNewlines()
         expect(.arrow, "expected '->' in when entry")
         skipNewlines()
@@ -1721,7 +1732,7 @@ public final class Parser {
             body = .expression(parseExpression())
         }
 
-        return WhenEntry(conditions: conditions, body: body, span: spanFrom(start))
+        return WhenEntry(conditions: conditions, guard_: guardExpr, body: body, span: spanFrom(start))
     }
 
     private func parseWhenCondition() -> WhenCondition {
@@ -1730,6 +1741,17 @@ public final class Parser {
             skipNewlines()
             let type = parseType()
             return .isType(type, spanFrom(start))
+        }
+        if check(.kwIn) {
+            let start = advance()
+            skipNewlines()
+            let rangeExpr = parseExpression()
+            // Range expressions are parsed as .range(start, end, inclusive, span)
+            if case .range(let rangeStart, let rangeEnd, _, _) = rangeExpr {
+                return .inRange(rangeStart, rangeEnd, spanFrom(start))
+            }
+            // If not a range, treat as a single value check
+            return .expression(rangeExpr)
         }
         return .expression(parseExpression())
     }

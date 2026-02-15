@@ -1340,15 +1340,23 @@ public final class MIRLowering {
                 return dest
             }
 
+            // Pack vararg arguments into a list if this is a vararg function
+            let finalArgs: [String]
+            if let varargIdx = result.varargFunctions[name] {
+                finalArgs = packVarargs(argTemps: argTemps, varargIndex: varargIdx)
+            } else {
+                finalArgs = argTemps
+            }
+
             // Regular function call — resolve overloads by arity
             let resolvedName: String
             if result.functionOverloads[name] != nil {
-                resolvedName = "\(name)$\(argTemps.count)"
+                resolvedName = "\(name)$\(finalArgs.count)"
             } else {
                 resolvedName = name
             }
             let dest = builder.newTemp()
-            builder.emit(.call(dest: dest, function: resolvedName, args: argTemps))
+            builder.emit(.call(dest: dest, function: resolvedName, args: finalArgs))
             return dest
         }
 
@@ -1357,6 +1365,24 @@ public final class MIRLowering {
         let dest = builder.newTemp()
         builder.emit(.callIndirect(dest: dest, functionRef: calleeTemp, args: argTemps))
         return dest
+    }
+
+    // MARK: - Vararg Packing
+
+    /// Pack arguments from `varargIndex` onward into a single list argument.
+    private func packVarargs(argTemps: [String], varargIndex: Int) -> [String] {
+        let before = Array(argTemps.prefix(varargIndex))
+        let varargArgs = Array(argTemps.dropFirst(varargIndex))
+
+        // Create a list and append each vararg argument
+        let listTemp = builder.newTemp()
+        builder.emit(.call(dest: listTemp, function: "listCreate", args: []))
+        for arg in varargArgs {
+            let appendResult = builder.newTemp()
+            builder.emit(.call(dest: appendResult, function: "listAppend", args: [listTemp, arg]))
+        }
+
+        return before + [listTemp]
     }
 
     // MARK: - If Expression
@@ -1446,6 +1472,14 @@ public final class MIRLowering {
                 nextLabel = mergeLabel
             }
 
+            // If there's a guard, conditions branch to the guard block first
+            let condTarget: String
+            if entry.guard_ != nil {
+                condTarget = builder.newBlockLabel("when.guard\(index)")
+            } else {
+                condTarget = bodyLabel
+            }
+
             // Evaluate condition
             var isElse = false
             for condition in entry.conditions {
@@ -1457,23 +1491,42 @@ public final class MIRLowering {
                         let condVal = lowerExpression(expr)
                         let cmpTemp = builder.newTemp()
                         builder.emit(.eq(dest: cmpTemp, lhs: subj, rhs: condVal, type: .unit))
-                        builder.terminate(.branch(condition: cmpTemp, thenLabel: bodyLabel, elseLabel: nextLabel))
+                        builder.terminate(.branch(condition: cmpTemp, thenLabel: condTarget, elseLabel: nextLabel))
                     } else {
                         let condVal = lowerExpression(expr)
-                        builder.terminate(.branch(condition: condVal, thenLabel: bodyLabel, elseLabel: nextLabel))
+                        builder.terminate(.branch(condition: condVal, thenLabel: condTarget, elseLabel: nextLabel))
                     }
                 case .isType(_, _):
                     if let subj = subject {
                         let checkTemp = builder.newTemp()
                         let typeName = typeNodeName(condition)
                         builder.emit(.typeCheck(dest: checkTemp, operand: subj, typeName: typeName))
-                        builder.terminate(.branch(condition: checkTemp, thenLabel: bodyLabel, elseLabel: nextLabel))
+                        builder.terminate(.branch(condition: checkTemp, thenLabel: condTarget, elseLabel: nextLabel))
+                    }
+                case .inRange(let startExpr, let endExpr, _):
+                    if let subj = subject {
+                        let startVal = lowerExpression(startExpr)
+                        let endVal = lowerExpression(endExpr)
+                        let geTemp = builder.newTemp()
+                        builder.emit(.gte(dest: geTemp, lhs: subj, rhs: startVal, type: .int))
+                        let leTemp = builder.newTemp()
+                        builder.emit(.lte(dest: leTemp, lhs: subj, rhs: endVal, type: .int))
+                        let andTemp = builder.newTemp()
+                        builder.emit(.and(dest: andTemp, lhs: geTemp, rhs: leTemp))
+                        builder.terminate(.branch(condition: andTemp, thenLabel: condTarget, elseLabel: nextLabel))
                     }
                 }
             }
 
             if isElse {
-                builder.terminate(.jump(bodyLabel))
+                builder.terminate(.jump(condTarget))
+            }
+
+            // Guard block (if present)
+            if let guardExpr = entry.guard_ {
+                builder.startBlock(label: condTarget)
+                let guardVal = lowerExpression(guardExpr)
+                builder.terminate(.branch(condition: guardVal, thenLabel: bodyLabel, elseLabel: nextLabel))
             }
 
             // Body
@@ -1665,7 +1718,12 @@ public final class MIRLowering {
             for entry in we.entries {
                 for cond in entry.conditions {
                     if case .expression(let e) = cond { collectFreeVars(expr: e, into: &names) }
+                    if case .inRange(let s, let e, _) = cond {
+                        collectFreeVars(expr: s, into: &names)
+                        collectFreeVars(expr: e, into: &names)
+                    }
                 }
+                if let g = entry.guard_ { collectFreeVars(expr: g, into: &names) }
                 switch entry.body {
                 case .expression(let e): collectFreeVars(expr: e, into: &names)
                 case .block(let b): b.statements.forEach { collectFreeVars(stmt: $0, into: &names) }
@@ -1852,7 +1910,7 @@ public final class MIRLowering {
         switch condition {
         case .isType(let typeNode, _):
             return typeNodeSimpleName(typeNode)
-        case .expression:
+        case .expression, .inRange:
             return "Any"
         }
     }
