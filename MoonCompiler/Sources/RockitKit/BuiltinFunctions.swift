@@ -834,6 +834,17 @@ public final class BuiltinRegistry {
             }
             return .string(result)
         }
+
+        register(name: "stringToBytes") { args in
+            guard args.count >= 1, case .string(let s) = args[0] else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "stringToBytes")
+            }
+            let utf8Bytes = Array(s.utf8)
+            let listId = heap.allocate(typeName: "List")
+            let listObj = try heap.get(listId)
+            listObj.listStorage = utf8Bytes.map { .int(Int64($0)) }
+            return .objectRef(listId)
+        }
     }
 
     // MARK: Heap-Aware File I/O Builtins

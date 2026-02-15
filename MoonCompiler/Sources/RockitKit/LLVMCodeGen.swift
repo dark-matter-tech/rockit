@@ -546,6 +546,7 @@ public final class LLVMCodeGen {
 
         // Reset per-function ARC tracking
         ownedHeapTemps = []
+        arcFlags = [:]
 
         // Pre-pass: identify temps used as callIndirect function refs.
         // Trace backward through load/store chains so constString temps that
@@ -691,6 +692,17 @@ public final class LLVMCodeGen {
                 registerMap[temp] = allocaName
                 registerTypes[temp] = lt
                 lines.append("  \(allocaName) = alloca \(lt)")
+            }
+            // ARC flag allocas: i1 flags for heap temp tracking.
+            // Each flag is initialized to 0 (not allocated) and set to 1 at creation sites.
+            // The actual heap temp allocas remain UNINITIALIZED to preserve LLVM optimization.
+            let heapDests = collectHeapTempDests(function)
+            for dest in heapDests {
+                let rawName = dest.hasPrefix("%") ? String(dest.dropFirst()) : dest
+                let flagName = "%\(rawName).arc"
+                lines.append("  \(flagName) = alloca i1")
+                lines.append("  store i1 0, ptr \(flagName)")
+                arcFlags[dest] = flagName
             }
             // Initialize process args and module globals (main only)
             if isMain {
@@ -1164,10 +1176,12 @@ public final class LLVMCodeGen {
             let globalName = stringPool[value]!
             let tmp = nextSSA()
             ownedHeapTemps.append((allocaName: dest, kind: .string))
-            return [
+            var result = [
                 "\(tmp) = call ptr @rockit_string_new(ptr \(globalName))",
                 storeToTemp(dest, value: tmp, type: "ptr")
             ]
+            if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
+            return result
 
         case .constNull(let dest):
             // Use ROCKIT_NULL sentinel (0xCAFEBABE) instead of null pointer.
@@ -1468,16 +1482,64 @@ public final class LLVMCodeGen {
     /// Populated during instruction emission; consumed when emitting ret terminators.
     private var ownedHeapTemps: [(allocaName: String, kind: HeapKind)] = []
 
+    /// Maps heap temp name → flag alloca name (e.g., "t5" → "%t5.arc").
+    /// Flag allocas are i1 values initialized to 0 in the prologue, set to 1 at creation sites.
+    /// Used by emitARCCleanup to conditionally release only initialized temps.
+    private var arcFlags: [String: String] = [:]
+
     /// Emit release calls for all owned heap temps except the return value.
     /// Called before every `ret` instruction to clean up function-local allocations.
-    ///
-    /// NOTE: Function-exit cleanup is currently disabled. While heap temp allocas
-    /// are zero-initialized and MIR resultSlots are initialized on all paths,
-    /// some heap objects have shared ownership (e.g., toString may return an existing
-    /// string, strings get stored into collections/fields) that makes blanket release
-    /// at function exit unsafe without full escape analysis.
-    private func emitARCCleanup(returnTemp: String?) -> [String] {
-        return []
+    /// Uses boolean init flags to safely skip uninitialized temps.
+    /// When returnValueI64 is provided, each temp's value is compared against it
+    /// to avoid releasing a value that aliases the return value (common with store/load chains).
+    private func emitARCCleanup(returnTemp: String?, returnValueI64: String? = nil) -> [String] {
+        var lines: [String] = []
+        var seen = Set<String>()
+        for (allocaName, _) in ownedHeapTemps {
+            // Skip duplicates (same temp may be appended on multiple code paths)
+            guard seen.insert(allocaName).inserted else { continue }
+            // Skip the return value — ownership transfers to caller
+            if allocaName == returnTemp { continue }
+            // Skip temps without flags (shouldn't happen, but defensive)
+            guard let flagName = arcFlags[allocaName] else { continue }
+
+            let flagTmp = nextSSA()
+            let checkLabel = "arc.chk.\(labelCounter)"
+            let relLabel = "arc.rel.\(labelCounter)"
+            let skipLabel = "arc.skip.\(labelCounter)"
+            labelCounter += 1
+
+            lines.append("\(flagTmp) = load i1, ptr \(flagName)")
+            lines.append("br i1 \(flagTmp), label %\(checkLabel), label %\(skipLabel)")
+            lines.append("\(checkLabel):")
+
+            // Load the value (safe here because flag was set → temp was initialized)
+            let valType = registerTypes[allocaName] ?? "ptr"
+            let valTmp = nextSSA()
+            lines.append("  \(valTmp) = load \(valType), ptr \(addrOf(allocaName))")
+
+            let valI64: String
+            if valType == "ptr" {
+                let castTmp = nextSSA()
+                lines.append("  \(castTmp) = ptrtoint ptr \(valTmp) to i64")
+                valI64 = castTmp
+            } else {
+                valI64 = valTmp
+            }
+
+            // If returning a value, check for aliasing before releasing
+            if let retVal = returnValueI64 {
+                let cmpTmp = nextSSA()
+                lines.append("  \(cmpTmp) = icmp eq i64 \(valI64), \(retVal)")
+                lines.append("  br i1 \(cmpTmp), label %\(skipLabel), label %\(relLabel)")
+                lines.append("  \(relLabel):")
+            }
+
+            lines.append("  call void @rockit_release_value(i64 \(valI64))")
+            lines.append("  br label %\(skipLabel)")
+            lines.append("\(skipLabel):")
+        }
+        return lines
     }
 
     private func emitTerminator(_ term: MIRTerminator, returnType: MIRType) -> [String] {
@@ -1496,8 +1558,20 @@ public final class LLVMCodeGen {
                 let retLLVM = currentReturnType != "void" ? currentReturnType : typeOf(val)
                 let tmp = nextSSA()
                 lines.append("\(tmp) = load \(retLLVM), ptr \(addrOf(val))")
-                // ARC: cleanup local allocations (currently disabled, see emitARCCleanup)
-                lines.append(contentsOf: emitARCCleanup(returnTemp: val))
+                // Cast return value to i64 for alias comparison in ARC cleanup
+                let retI64: String
+                if retLLVM == "ptr" {
+                    let castTmp = nextSSA()
+                    lines.append("\(castTmp) = ptrtoint ptr \(tmp) to i64")
+                    retI64 = castTmp
+                } else if retLLVM == "i64" {
+                    retI64 = tmp
+                } else {
+                    // i1/double can't alias heap objects — use 0 (never matches)
+                    retI64 = "0"
+                }
+                // ARC: cleanup local allocations, skip any that alias the return value
+                lines.append(contentsOf: emitARCCleanup(returnTemp: val, returnValueI64: retI64))
                 lines.append("ret \(retLLVM) \(tmp)")
                 return lines
             } else {
@@ -1672,6 +1746,7 @@ public final class LLVMCodeGen {
             // ARC: track heap-allocating calls
             if let kind = heapKindForFunction(function) {
                 ownedHeapTemps.append((allocaName: dest, kind: kind))
+                if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
             }
         } else {
             lines.append("call void @\(funcName)(\(argList))")
@@ -1694,6 +1769,49 @@ public final class LLVMCodeGen {
         default:
             return nil
         }
+    }
+
+    /// Pre-scan a function to identify temps that will receive heap allocations.
+    /// Returns the set of dest temp names that need ARC flag allocas.
+    /// Over-inclusion is safe (flag stays 0 → no release); under-inclusion is NOT.
+    private func collectHeapTempDests(_ function: MIRFunction) -> Set<String> {
+        var dests = Set<String>()
+        for block in function.blocks {
+            for inst in block.instructions {
+                switch inst {
+                case .constString(let dest, let value):
+                    // Only if NOT a function pointer (function pointers don't get rockit_string_new)
+                    if !(moduleFunctionNames.contains(value) && indirectCallTargets.contains(dest)) {
+                        dests.insert(dest)
+                    }
+                case .newObject(let dest, _, _):
+                    dests.insert(dest)
+                case .stringConcat(let dest, _):
+                    dests.insert(dest)
+                case .call(let dest, let callee, _):
+                    guard let dest = dest else { continue }
+                    if heapKindForFunction(callee) != nil {
+                        dests.insert(dest)
+                    }
+                    // listOf/mutableListOf → emitListOf → list creation
+                    if callee == "listOf" || callee == "mutableListOf" {
+                        dests.insert(dest)
+                    }
+                    // mapOf/mutableMapOf → emitMapOf → map creation
+                    if callee == "mapOf" || callee == "mutableMapOf" {
+                        dests.insert(dest)
+                    }
+                    // toString → may or may not track depending on arg type at emission time
+                    // Over-include: flag stays 0 if emission doesn't track
+                    if callee == "toString" {
+                        dests.insert(dest)
+                    }
+                default:
+                    break
+                }
+            }
+        }
+        return dests
     }
 
     // MARK: - Collection Builtins
@@ -1726,6 +1844,7 @@ public final class LLVMCodeGen {
         }
         lines.append(storeToTemp(dest, value: listTmp, type: "ptr"))
         ownedHeapTemps.append((allocaName: dest, kind: .list))
+        if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines
     }
 
@@ -1746,6 +1865,7 @@ public final class LLVMCodeGen {
         }
         lines.append(storeToTemp(dest, value: mapTmp, type: "ptr"))
         ownedHeapTemps.append((allocaName: dest, kind: .map))
+        if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines
     }
 
@@ -1813,18 +1933,22 @@ public final class LLVMCodeGen {
             ]
         case "double":
             ownedHeapTemps.append((allocaName: dest, kind: .string))
-            return [
+            var result = [
                 "\(tmp) = load double, ptr \(addrOf(arg))",
                 "\(resultTmp) = call ptr @rockit_float_to_string(double \(tmp))",
                 storeToTemp(dest, value: resultTmp, type: "ptr")
             ]
+            if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
+            return result
         case "i1":
             ownedHeapTemps.append((allocaName: dest, kind: .string))
-            return [
+            var result = [
                 "\(tmp) = load i1, ptr \(addrOf(arg))",
                 "\(resultTmp) = call ptr @rockit_bool_to_string(i1 \(tmp))",
                 storeToTemp(dest, value: resultTmp, type: "ptr")
             ]
+            if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
+            return result
         case "ptr":
             // Already a string pointer — just copy (no new allocation, no ARC tracking)
             return [
@@ -1833,11 +1957,13 @@ public final class LLVMCodeGen {
             ]
         default:
             ownedHeapTemps.append((allocaName: dest, kind: .string))
-            return [
+            var result = [
                 "\(tmp) = load i64, ptr \(addrOf(arg))",
                 "\(resultTmp) = call ptr @rockit_int_to_string(i64 \(tmp))",
                 storeToTemp(dest, value: resultTmp, type: "ptr")
             ]
+            if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
+            return result
         }
     }
 
@@ -2169,6 +2295,7 @@ public final class LLVMCodeGen {
 
         lines.append(storeToTemp(dest, value: accumulator, type: "ptr"))
         ownedHeapTemps.append((allocaName: dest, kind: .string))
+        if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines
     }
 
@@ -2249,6 +2376,7 @@ public final class LLVMCodeGen {
 
         lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
         ownedHeapTemps.append((allocaName: dest, kind: .object))
+        if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines
     }
 
