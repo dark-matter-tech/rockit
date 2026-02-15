@@ -426,6 +426,7 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare void @rockit_list_set(ptr, i64, i64)")
         externalDecls.insert("declare i64 @rockit_list_size(ptr)")
         externalDecls.insert("declare i1 @rockit_list_is_empty(ptr)")
+        externalDecls.insert("declare void @rockit_list_release(ptr)")
         // Map runtime
         externalDecls.insert("declare ptr @rockit_map_create()")
         externalDecls.insert("declare void @rockit_map_put(ptr, i64, i64)")
@@ -433,6 +434,7 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i1 @rockit_map_contains_key(ptr, i64)")
         externalDecls.insert("declare i64 @rockit_map_size(ptr)")
         externalDecls.insert("declare i1 @rockit_map_is_empty(ptr)")
+        externalDecls.insert("declare void @rockit_map_release(ptr)")
         // Exception handling
         externalDecls.insert("declare ptr @rockit_exc_push()")
         externalDecls.insert("declare void @rockit_exc_pop()")
@@ -1492,10 +1494,11 @@ public final class LLVMCodeGen {
     /// Uses boolean init flags to safely skip uninitialized temps.
     /// When returnValueI64 is provided, each temp's value is compared against it
     /// to avoid releasing a value that aliases the return value (common with store/load chains).
+    /// Uses type-specific release functions for proper cascading deallocation.
     private func emitARCCleanup(returnTemp: String?, returnValueI64: String? = nil) -> [String] {
         var lines: [String] = []
         var seen = Set<String>()
-        for (allocaName, _) in ownedHeapTemps {
+        for (allocaName, kind) in ownedHeapTemps {
             // Skip duplicates (same temp may be appended on multiple code paths)
             guard seen.insert(allocaName).inserted else { continue }
             // Skip the return value — ownership transfers to caller
@@ -1518,12 +1521,18 @@ public final class LLVMCodeGen {
             let valTmp = nextSSA()
             lines.append("  \(valTmp) = load \(valType), ptr \(addrOf(allocaName))")
 
+            // Get both ptr and i64 representations
+            let valPtr: String
             let valI64: String
             if valType == "ptr" {
+                valPtr = valTmp
                 let castTmp = nextSSA()
                 lines.append("  \(castTmp) = ptrtoint ptr \(valTmp) to i64")
                 valI64 = castTmp
             } else {
+                let castTmp = nextSSA()
+                lines.append("  \(castTmp) = inttoptr i64 \(valTmp) to ptr")
+                valPtr = castTmp
                 valI64 = valTmp
             }
 
@@ -1535,7 +1544,18 @@ public final class LLVMCodeGen {
                 lines.append("  \(relLabel):")
             }
 
-            lines.append("  call void @rockit_release_value(i64 \(valI64))")
+            // Call type-specific release for proper cascading deallocation
+            switch kind {
+            case .string:
+                lines.append("  call void @rockit_string_release(ptr \(valPtr))")
+            case .object:
+                lines.append("  call void @rockit_release(ptr \(valPtr))")
+            case .list:
+                lines.append("  call void @rockit_list_release(ptr \(valPtr))")
+            case .map:
+                lines.append("  call void @rockit_map_release(ptr \(valPtr))")
+            }
+
             lines.append("  br label %\(skipLabel)")
             lines.append("\(skipLabel):")
         }

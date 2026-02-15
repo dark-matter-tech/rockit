@@ -85,6 +85,10 @@ void rockit_retain(RockitObject* obj) {
 
 void rockit_release(RockitObject* obj) {
     if (obj && --obj->refCount <= 0) {
+        // Cascade: release all field values before freeing
+        for (int32_t i = 0; i < obj->fieldCount; i++) {
+            rockit_release_value(obj->fields[i]);
+        }
         free(obj);
     }
 }
@@ -132,11 +136,26 @@ void rockit_release_value(int64_t val) {
         // String/List/Map: refCount is at offset 0
         int64_t* refCount = (int64_t*)ptr;
         if (--(*refCount) <= 0) {
-            // Check if it's a List (has data pointer at offset 24) or Map (has entries at offset 24)
-            // For bootstrap simplicity, just free the struct.
-            // Lists and Maps also have internal allocations that should be freed,
-            // but we can't distinguish them here without a type tag.
-            // The typed release functions (rockit_list_release, rockit_map_release) handle this.
+            // Check if it has an internal allocation at offset 24 (List data / Map entries).
+            // Strings use a flexible array member (inline data), so offset 24 is just string bytes.
+            // Lists/Maps have: [refCount:8][size:8][capacity:8][data/entries ptr:8]
+            int64_t potential_ptr = *((int64_t*)((char*)ptr + 24));
+            if (is_likely_heap_ptr(potential_ptr)) {
+                // Likely a List or Map — cascade release through elements.
+                // Read size and capacity from offsets 8 and 16.
+                int64_t size = *((int64_t*)((char*)ptr + 8));
+                int64_t capacity = *((int64_t*)((char*)ptr + 16));
+                int64_t* data = (int64_t*)(intptr_t)potential_ptr;
+                // Release elements: for lists, each 8-byte slot is a value.
+                // For maps, entries are larger structs but key/value are at predictable offsets.
+                // Use size for lists (release size elements) as a safe upper bound.
+                if (size > 0 && size <= capacity && capacity < 100000000) {
+                    for (int64_t i = 0; i < size; i++) {
+                        rockit_release_value(data[i]);
+                    }
+                }
+                free((void*)(intptr_t)potential_ptr);
+            }
             free(ptr);
         }
     }
@@ -227,6 +246,10 @@ int8_t rockit_list_is_empty(RockitList* list) {
 
 void rockit_list_release(RockitList* list) {
     if (list && --list->refCount <= 0) {
+        // Cascade: release all elements before freeing
+        for (int64_t i = 0; i < list->size; i++) {
+            rockit_release_value(list->data[i]);
+        }
         free(list->data);
         free(list);
     }
@@ -330,6 +353,13 @@ int8_t rockit_map_is_empty(RockitMap* map) {
 
 void rockit_map_release(RockitMap* map) {
     if (map && --map->refCount <= 0) {
+        // Cascade: release all occupied entries before freeing
+        for (int64_t i = 0; i < map->capacity; i++) {
+            if (map->entries[i].occupied) {
+                rockit_release_value(map->entries[i].key);
+                rockit_release_value(map->entries[i].value);
+            }
+        }
         free(map->entries);
         free(map);
     }
