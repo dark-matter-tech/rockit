@@ -451,7 +451,7 @@ public final class TypeChecker {
 
     private func gatherTypeAlias(_ ta: TypeAliasDecl) {
         let aliasedType = resolver.resolve(ta.type)
-        let symbol = Symbol(name: ta.name, type: aliasedType, kind: .typeDeclaration, span: ta.span)
+        let symbol = Symbol(name: ta.name, type: aliasedType, kind: .typeAlias, span: ta.span)
         if !symbolTable.define(symbol) {
             diagnostics.error("redeclaration of type '\(ta.name)'", at: ta.span.start)
         }
@@ -748,6 +748,14 @@ public final class TypeChecker {
         case .declaration(let decl):
             gatherDeclaration(decl)
             checkDeclaration(decl)
+
+        case .destructuringDecl(let d):
+            let _ = checkExpression(d.initializer)
+            for name in d.names {
+                let symbol = Symbol(name: name, type: .classType(name: "Any", typeArguments: []),
+                                    kind: .variable(isMutable: false), span: d.span)
+                symbolTable.define(symbol)
+            }
 
         case .breakStmt, .continueStmt:
             break

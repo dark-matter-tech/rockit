@@ -480,6 +480,23 @@ public final class Parser {
                             initializer: initializer, span: spanFrom(start))
     }
 
+    /// Parse destructuring val declaration: `val (a, b, c) = expr`
+    private func parseDestructuringDecl() -> DestructuringDecl {
+        let start = expect(.kwVal, "expected 'val'")
+        expect(.leftParen, "expected '(' for destructuring")
+        var names: [String] = []
+        names.append(expectIdentifier("expected variable name"))
+        while match(.comma) {
+            skipNewlines()
+            names.append(expectIdentifier("expected variable name"))
+        }
+        expect(.rightParen, "expected ')' after destructured variables")
+        expect(.equal, "expected '=' after destructuring pattern")
+        skipNewlines()
+        let initializer = parseExpression()
+        return DestructuringDecl(names: names, initializer: initializer, span: spanFrom(start))
+    }
+
     // MARK: - Class Declaration
 
     private func parseClassDecl(annotations: [Annotation],
@@ -923,6 +940,10 @@ public final class Parser {
 
         switch currentKind {
         case .kwVal:
+            // Check for destructuring: val (a, b) = expr
+            if peekNext().kind == .leftParen {
+                return .destructuringDecl(parseDestructuringDecl())
+            }
             return .propertyDecl(parsePropertyDecl(annotations: [], modifiers: [], isVal: true))
         case .kwVar:
             return .propertyDecl(parsePropertyDecl(annotations: [], modifiers: [], isVal: false))

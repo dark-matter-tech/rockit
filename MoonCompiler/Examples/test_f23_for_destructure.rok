@@ -1,0 +1,35 @@
+// Test: for-loop map destructuring — for ((k, v) in map)
+
+fun main(): Unit {
+    val scores = mapCreate()
+    mapPut(scores, "alice", 95)
+    mapPut(scores, "bob", 87)
+    mapPut(scores, "carol", 92)
+
+    // Destructure key-value pairs and sum values
+    var total = 0
+    for ((name, score) in scores) {
+        total = total + score
+    }
+    println(toString(total))
+
+    // Single-element map
+    val single = mapCreate()
+    mapPut(single, "only", 1)
+    for ((k, v) in single) {
+        println(k)
+        println(toString(v))
+    }
+
+    // Sum values via destructuring
+    val coords = mapCreate()
+    mapPut(coords, "x", 10)
+    mapPut(coords, "y", 20)
+    var sum = 0
+    for ((key, val_) in coords) {
+        sum = sum + val_
+    }
+    println(toString(sum))
+
+    println("destructure test complete")
+}

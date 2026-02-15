@@ -535,6 +535,9 @@ public final class MIRLowering {
 
         case .declaration(let decl):
             lowerDeclaration(decl)
+
+        case .destructuringDecl(let d):
+            lowerDestructuringDecl(d)
         }
     }
 
@@ -554,6 +557,21 @@ public final class MIRLowering {
         if let initializer = p.initializer {
             let val = lowerExpression(initializer)
             builder.emitStore(dest: slot, src: val)
+        }
+    }
+
+    // MARK: - Destructuring Decl
+
+    /// Lower `val (a, b, c) = expr` — eval expr, then listGet for each name.
+    private func lowerDestructuringDecl(_ d: DestructuringDecl) {
+        let initVal = lowerExpression(d.initializer)
+        for (i, name) in d.names.enumerated() {
+            let idxConst = builder.emitConstInt(Int64(i))
+            let element = builder.newTemp()
+            builder.emit(.call(dest: element, function: "listGet", args: [initVal, idxConst]))
+            let slot = builder.emitAlloc(type: .int)
+            locals[name] = slot
+            builder.emitStore(dest: slot, src: element)
         }
     }
 
@@ -945,14 +963,14 @@ public final class MIRLowering {
         let keyElement = builder.newTemp()
         builder.emit(.call(dest: keyElement, function: "listGet", args: [keysTemp, idx]))
 
-        let keySlot = builder.emitAlloc(type: .reference("Any"))
+        let keySlot = builder.emitAlloc(type: .int)
         locals[keyVar] = keySlot
         builder.emitStore(dest: keySlot, src: keyElement)
 
         let valueElement = builder.newTemp()
         builder.emit(.call(dest: valueElement, function: "mapGet", args: [mapTemp, keyElement]))
 
-        let valueSlot = builder.emitAlloc(type: .reference("Any"))
+        let valueSlot = builder.emitAlloc(type: .int)
         locals[valueVar] = valueSlot
         builder.emitStore(dest: valueSlot, src: valueElement)
 
@@ -1610,6 +1628,8 @@ public final class MIRLowering {
             if case .function(let f) = d {
                 if case .block(let b) = f.body { b.statements.forEach { collectFreeVars(stmt: $0, into: &names) } }
             }
+        case .destructuringDecl(let d):
+            collectFreeVars(expr: d.initializer, into: &names)
         default: break
         }
     }

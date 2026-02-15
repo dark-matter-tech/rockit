@@ -2647,6 +2647,7 @@ fun makeTypeChecker(ast: Map): Map {
     mapPut(tc, "sourceFile", "")
     mapPut(tc, "sealedNames", mapCreate())
     mapPut(tc, "overloadedFuncs", mapCreate()) // baseName -> true
+    mapPut(tc, "typeAliases", mapCreate())     // aliasName -> targetTypeName
     return tc
 }
 
@@ -2847,7 +2848,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
         if (params != null) { arity = listSize(params) }
         val retTypeNode = mapGet(decl, "returnType")
         var ret: String = "Unit"
-        if (retTypeNode != null) { ret = resolveTypeName(retTypeNode) }
+        if (retTypeNode != null) { ret = tcResolveType(tc, retTypeNode) }
         val sig = mapCreate()
         mapPut(sig, "arity", arity)
         mapPut(sig, "returnType", ret)
@@ -2879,7 +2880,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
                 val p = listGet(ctorParams, j)
                 val pname = toString(mapGet(p, "name"))
                 val ptype = mapGet(p, "type")
-                mapPut(fields, pname, if (ptype != null) { resolveTypeName(ptype) } else { "Any" })
+                mapPut(fields, pname, if (ptype != null) { tcResolveType(tc, ptype) } else { "Any" })
                 j = j + 1
             }
         }
@@ -2939,7 +2940,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
                                 val mret = mapGet(member, "returnType")
                                 val msig = mapCreate()
                                 mapPut(msig, "arity", marity + 1)
-                                mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
+                                mapPut(msig, "returnType", if (mret != null) { tcResolveType(tc, mret) } else { "Unit" })
                                 mapPut(msig, "variadic", false)
                                 mapPut(mapGet(tc, "functions"), fullName, msig)
                             }
@@ -2989,7 +2990,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
                         val mret = mapGet(member, "returnType")
                         val msig = mapCreate()
                         mapPut(msig, "arity", marity + 1)
-                        mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
+                        mapPut(msig, "returnType", if (mret != null) { tcResolveType(tc, mret) } else { "Unit" })
                         mapPut(msig, "variadic", false)
                         mapPut(mapGet(tc, "functions"), fullName, msig)
                     }
@@ -3025,7 +3026,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
                                 val mret = mapGet(member, "returnType")
                                 val msig = mapCreate()
                                 mapPut(msig, "arity", marity + 1)
-                                mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
+                                mapPut(msig, "returnType", if (mret != null) { tcResolveType(tc, mret) } else { "Unit" })
                                 mapPut(msig, "variadic", false)
                                 mapPut(mapGet(tc, "functions"), fullName, msig)
                             }
@@ -3037,6 +3038,13 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
         }
         mapPut(classInfo, "interfaceMethods", methodList)
         mapPut(mapGet(tc, "classes"), name, classInfo)
+    }
+
+    if (kind == "typeAlias") {
+        val aliasName = toString(mapGet(decl, "name"))
+        val targetNode = mapGet(decl, "target")
+        val targetName = resolveTypeName(targetNode)
+        mapPut(mapGet(tc, "typeAliases"), aliasName, targetName)
     }
 }
 
@@ -3055,6 +3063,28 @@ fun resolveTypeName(typeNode: Map): String {
         return "Function"
     }
     return "Any"
+}
+
+// Resolve a type name with alias substitution
+fun tcResolveType(tc: Map, typeNode: Map): String {
+    val name = resolveTypeName(typeNode)
+    val aliases = mapGet(tc, "typeAliases")
+    if (aliases == null) { return name }
+    // Handle nullable aliases: "Text?" -> check "Text" alias -> "String?"
+    val len = stringLength(name)
+    if (len > 1) {
+        val lastChar = charAt(name, len - 1)
+        if (lastChar == "?") {
+            val baseName = substring(name, 0, len - 1)
+            val baseTarget = mapGet(aliases, baseName)
+            if (baseTarget != null) {
+                return stringConcat(toString(baseTarget), "?")
+            }
+        }
+    }
+    val target = mapGet(aliases, name)
+    if (target != null) { return toString(target) }
+    return name
 }
 
 // ---------------------------------------------------------------------------
@@ -3088,7 +3118,7 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
                 val pname = toString(mapGet(p, "name"))
                 val ptype = mapGet(p, "type")
                 var typeName: String = "Any"
-                if (ptype != null) { typeName = resolveTypeName(ptype) }
+                if (ptype != null) { typeName = tcResolveType(tc, ptype) }
                 tcDefine(tc, pname, typeName)
                 i = i + 1
             }
@@ -3129,7 +3159,7 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
                             val pname = toString(mapGet(p, "name"))
                             val ptype = mapGet(p, "type")
                             var ptName: String = "Any"
-                            if (ptype != null) { ptName = resolveTypeName(ptype) }
+                            if (ptype != null) { ptName = tcResolveType(tc, ptype) }
                             tcDefine(tc, pname, ptName)
                             j = j + 1
                         }
@@ -3221,7 +3251,7 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
         val initExpr = mapGet(stmt, "init")
         var declaredType: String = ""
         if (typeAnnotation != null) {
-            declaredType = resolveTypeName(typeAnnotation)
+            declaredType = tcResolveType(tc, typeAnnotation)
         }
         if (initExpr != null) {
             val inferredType = tcInferExpr(tc, initExpr)
@@ -3241,7 +3271,7 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
         val initExpr = mapGet(stmt, "init")
         var declaredType: String = ""
         if (typeAnnotation != null) {
-            declaredType = resolveTypeName(typeAnnotation)
+            declaredType = tcResolveType(tc, typeAnnotation)
         }
         if (initExpr != null) {
             val inferredType = tcInferExpr(tc, initExpr)
@@ -3382,7 +3412,7 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
             if (catchVar != null) {
                 val catchType = mapGet(stmt, "catchType")
                 var catchTypeName: String = "Any"
-                if (catchType != null) { catchTypeName = resolveTypeName(catchType) }
+                if (catchType != null) { catchTypeName = tcResolveType(tc, catchType) }
                 tcDefine(tc, toString(catchVar), catchTypeName)
             }
             val cStmts = mapGet(catchBody, "stmts")
@@ -3793,7 +3823,7 @@ fun tcInferExpr(tc: Map, expr: Map): String {
         val inner = mapGet(expr, "expr")
         if (inner != null) { tcInferExpr(tc, inner) }
         val targetType = mapGet(expr, "targetType")
-        if (targetType != null) { return resolveTypeName(targetType) }
+        if (targetType != null) { return tcResolveType(tc, targetType) }
         return "Any"
     }
 

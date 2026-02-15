@@ -10,6 +10,7 @@ public enum SymbolKind: Equatable {
     case function
     case parameter
     case typeDeclaration
+    case typeAlias
     case typeParameter
     case enumEntry
 }

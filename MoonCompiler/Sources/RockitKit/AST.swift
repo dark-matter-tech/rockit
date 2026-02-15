@@ -407,6 +407,20 @@ public enum Statement {
     case whileLoop(WhileLoop)
     case doWhileLoop(DoWhileLoop)
     case declaration(Declaration)
+    case destructuringDecl(DestructuringDecl)
+}
+
+/// Destructuring val declaration: `val (a, b, c) = expr`
+public struct DestructuringDecl {
+    public let names: [String]
+    public let initializer: Expression
+    public let span: SourceSpan
+
+    public init(names: [String], initializer: Expression, span: SourceSpan) {
+        self.names = names
+        self.initializer = initializer
+        self.span = span
+    }
 }
 
 /// Assignment statement
@@ -882,6 +896,8 @@ extension Statement {
             return "\(pad)DoWhile\n\(d.body.dump(indent: indent + 1))\n\(d.condition.dump(indent: indent + 1))"
         case .declaration(let d):
             return d.dump(indent: indent)
+        case .destructuringDecl(let d):
+            return "\(pad)Destructure(\(d.names.joined(separator: ", ")))\n\(d.initializer.dump(indent: indent + 1))"
         }
     }
 }

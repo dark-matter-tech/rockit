@@ -79,6 +79,12 @@ public final class TypeResolver {
         // Look up in symbol table
         if let symbol = symbolTable.lookup(name) {
             switch symbol.kind {
+            case .typeAlias:
+                // Return the resolved target type directly
+                if resolvedArgs.isEmpty {
+                    return symbol.type
+                }
+                return symbol.type
             case .typeDeclaration:
                 return resolveTypeDeclaration(name: name, typeArguments: resolvedArgs, span: span)
             case .typeParameter:
