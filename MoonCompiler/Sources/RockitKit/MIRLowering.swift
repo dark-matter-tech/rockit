@@ -31,6 +31,9 @@ public final class MIRLowering {
     /// Counter for unique lambda names
     private var lambdaCounter: Int = 0
 
+    /// Interface declarations indexed by name (for default method inheritance)
+    private var interfaceDecls: [String: InterfaceDecl] = [:]
+
     public init(typeCheckResult: TypeCheckResult) {
         self.result = typeCheckResult
         self.diagnostics = typeCheckResult.diagnostics
@@ -38,10 +41,13 @@ public final class MIRLowering {
 
     /// Lower the entire AST to a MIR module.
     public func lower() -> MIRModule {
-        // Pre-scan for extension functions
+        // Pre-scan for extension functions and interface declarations
         for decl in result.ast.declarations {
             if case .function(let f) = decl, let receiverType = f.receiverType {
                 extensionFunctions.insert("\(receiverType).\(f.name)")
+            }
+            if case .interfaceDecl(let i) = decl {
+                interfaceDecls[i.name] = i
             }
         }
 
@@ -121,6 +127,8 @@ public final class MIRLowering {
             funcName = "\(receiverType).\(f.name)"
         } else if let className = currentClassName {
             funcName = "\(className).\(f.name)"
+        } else if result.functionOverloads[f.name] != nil {
+            funcName = "\(f.name)$\(f.parameters.count)"
         } else {
             funcName = f.name
         }
@@ -247,6 +255,28 @@ public final class MIRLowering {
             }
         }
 
+        // Inherit interface default methods
+        let classOwnMethods = Set(methodNames.map { name -> String in
+            // methodNames are "ClassName.method" — extract the method part
+            if let dotIdx = name.lastIndex(of: ".") {
+                return String(name[name.index(after: dotIdx)...])
+            }
+            return name
+        })
+        var inheritedDefaults: [FunctionDecl] = []
+        for superType in c.superTypes {
+            if case .simple(let superName, _, _) = superType,
+               let ifaceDecl = interfaceDecls[superName] {
+                for member in ifaceDecl.members {
+                    if case .function(let f) = member, f.body != nil,
+                       !classOwnMethods.contains(f.name) {
+                        methodNames.append("\(c.name).\(f.name)")
+                        inheritedDefaults.append(f)
+                    }
+                }
+            }
+        }
+
         // Retrieve hierarchy info from the type checker's symbol table
         let typeInfo = result.symbolTable.lookupType(c.name)
         let parentType = typeInfo?.superTypes.first
@@ -277,6 +307,10 @@ public final class MIRLowering {
                     }
                 }
             }
+        }
+        // Lower inherited interface default methods as class methods
+        for f in inheritedDefaults {
+            lowerFunction(f)
         }
         currentClassName = savedClassName
     }
@@ -1270,9 +1304,15 @@ public final class MIRLowering {
                 return dest
             }
 
-            // Regular function call
+            // Regular function call — resolve overloads by arity
+            let resolvedName: String
+            if result.functionOverloads[name] != nil {
+                resolvedName = "\(name)$\(argTemps.count)"
+            } else {
+                resolvedName = name
+            }
             let dest = builder.newTemp()
-            builder.emit(.call(dest: dest, function: name, args: argTemps))
+            builder.emit(.call(dest: dest, function: resolvedName, args: argTemps))
             return dest
         }
 

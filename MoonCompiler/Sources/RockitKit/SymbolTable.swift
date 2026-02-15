@@ -41,16 +41,19 @@ public struct TypeDeclInfo {
     public var enumEntries: [String]
     public var members: [Symbol]
     public var superTypes: [String]
+    public var defaultMethods: Set<String>
 
     public init(name: String, typeParameters: [String] = [],
                 sealedSubclasses: [String] = [], enumEntries: [String] = [],
-                members: [Symbol] = [], superTypes: [String] = []) {
+                members: [Symbol] = [], superTypes: [String] = [],
+                defaultMethods: Set<String> = []) {
         self.name = name
         self.typeParameters = typeParameters
         self.sealedSubclasses = sealedSubclasses
         self.enumEntries = enumEntries
         self.members = members
         self.superTypes = superTypes
+        self.defaultMethods = defaultMethods
     }
 }
 

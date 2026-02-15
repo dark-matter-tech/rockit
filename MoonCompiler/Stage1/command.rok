@@ -1508,7 +1508,7 @@ fun parseStatement(p: Map): Map {
 
     // Variable/value declarations
     if (tt == "KW_VAL") { return parseValDecl(p) }
-    if (tt == "KW_VAR") { return parseVarDecl(p) }
+    if (tt == "KW_VAR" || tt == "KW_WEAK" || tt == "KW_UNOWNED") { return parseVarDecl(p) }
 
     // Control flow
     if (tt == "KW_RETURN") { return parseReturn(p) }
@@ -1578,10 +1578,22 @@ fun parseValDecl(p: Map): Map {
 fun parseVarDecl(p: Map): Map {
     val line = peekLine(p)
     val col = peekCol(p)
+    var modifier: String = ""
+    if (check(p, "KW_WEAK")) {
+        advance(p)
+        modifier = "weak"
+    }
+    if (check(p, "KW_UNOWNED")) {
+        advance(p)
+        modifier = "unowned"
+    }
     expect(p, "KW_VAR")
     val name = toString(mapGet(expect(p, "IDENT"), "value"))
     val node = makeNodeAt("varDecl", line, col)
     mapPut(node, "name", name)
+    if (stringLength(modifier) > 0) {
+        mapPut(node, "refModifier", modifier)
+    }
     // Optional type annotation
     if (matchToken(p, "COLON")) {
         mapPut(node, "type", parseType(p))
@@ -2630,6 +2642,7 @@ fun makeTypeChecker(ast: Map): Map {
     mapPut(tc, "warnings", listCreate())
     mapPut(tc, "sourceFile", "")
     mapPut(tc, "sealedNames", mapCreate())
+    mapPut(tc, "overloadedFuncs", mapCreate()) // baseName -> true
     return tc
 }
 
@@ -2836,7 +2849,20 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
         mapPut(sig, "returnType", ret)
         mapPut(sig, "variadic", false)
         mapPut(sig, "params", params)
-        mapPut(mapGet(tc, "functions"), name, sig)
+        // Check for function overloads
+        val fns = mapGet(tc, "functions")
+        val existing = mapGet(fns, name)
+        if (existing != null) {
+            val existingArity = toInt(mapGet(existing, "arity"))
+            if (existingArity != arity) {
+                // Valid overload — register under mangled name
+                mapPut(mapGet(tc, "overloadedFuncs"), name, true)
+                val mangledName = stringConcat(name, stringConcat("$", toString(arity)))
+                mapPut(fns, mangledName, sig)
+            }
+        } else {
+            mapPut(fns, name, sig)
+        }
     } else if (kind == "classDecl" || kind == "actorDecl") {
         val name = toString(mapGet(decl, "name"))
         val classInfo = mapCreate()
@@ -3131,7 +3157,11 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
                                     val fullName = stringConcat(className, stringConcat(".", reqMethod))
                                     val fns = mapGet(tc, "functions")
                                     if (mapGet(fns, fullName) == null) {
-                                        tcWarn(tc, stringConcat("class '", stringConcat(className, stringConcat("' missing interface method '", stringConcat(reqMethod, stringConcat("' from '", stringConcat(superName, "'")))))), decl)
+                                        // Check if interface provides a default implementation
+                                        val ifaceFullName = stringConcat(superName, stringConcat(".", reqMethod))
+                                        if (mapGet(fns, ifaceFullName) == null) {
+                                            tcWarn(tc, stringConcat("class '", stringConcat(className, stringConcat("' missing interface method '", stringConcat(reqMethod, stringConcat("' from '", stringConcat(superName, "'")))))), decl)
+                                        }
                                     }
                                     mi = mi + 1
                                 }
@@ -3547,12 +3577,24 @@ fun tcInferExpr(tc: Map, expr: Map): String {
             val fns = mapGet(tc, "functions")
             val sig = mapGet(fns, fname)
             if (sig != null) {
-                val expectedArity = toInt(mapGet(sig, "arity"))
-                // Only check arity for non-variadic functions with known arity
-                if (expectedArity >= 0 && argCount != expectedArity) {
-                    // Allow default parameters — don't error if fewer args
-                    if (argCount > expectedArity) {
-                        tcError(tc, stringConcat(fname, stringConcat(" expects ", stringConcat(toString(expectedArity), stringConcat(" argument(s), got ", toString(argCount))))), expr)
+                // Check if overloaded — skip arity check for overloaded functions
+                val isOverloaded = mapGet(mapGet(tc, "overloadedFuncs"), fname)
+                if (isOverloaded == null) {
+                    val expectedArity = toInt(mapGet(sig, "arity"))
+                    // Only check arity for non-variadic functions with known arity
+                    if (expectedArity >= 0 && argCount != expectedArity) {
+                        // Allow default parameters — don't error if fewer args
+                        if (argCount > expectedArity) {
+                            tcError(tc, stringConcat(fname, stringConcat(" expects ", stringConcat(toString(expectedArity), stringConcat(" argument(s), got ", toString(argCount))))), expr)
+                        }
+                    }
+                }
+                // For overloaded functions, try to find the right overload's return type
+                if (isOverloaded != null) {
+                    val mangledName = stringConcat(fname, stringConcat("$", toString(argCount)))
+                    val overloadSig = mapGet(fns, mangledName)
+                    if (overloadSig != null) {
+                        return toString(mapGet(overloadSig, "returnType"))
                     }
                 }
                 return toString(mapGet(sig, "returnType"))
@@ -5714,11 +5756,13 @@ fun makeCompiler(): Map {
     mapPut(c, "enumNames", mapCreate())   // enumName -> list of entry names
     mapPut(c, "objectNames", mapCreate()) // objectName -> true (singletons)
     mapPut(c, "interfaceNames", mapCreate()) // ifaceName -> list of method names
+    mapPut(c, "interfaceDefaultDecls", mapCreate()) // ifaceName -> list of method AST nodes with default bodies
     mapPut(c, "sealedNames", mapCreate())    // sealedName -> list of subclass names
     mapPut(c, "funcSignatures", mapCreate()) // funcName -> params list (for default args)
     mapPut(c, "typeAliases", mapCreate())    // aliasName -> targetName
     mapPut(c, "extensionFuncs", mapCreate()) // "TypeName.method" -> true
     mapPut(c, "classBodyInits", mapCreate()) // className -> list of {name, init} for body field defaults
+    mapPut(c, "overloadedFuncs", mapCreate()) // baseName -> true (marks name as overloaded)
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -6613,6 +6657,11 @@ fun compileExpr(fs: Map, node: Map): Int {
                         listAppend(argRegs, nullReg)
                     }
                 }
+            }
+            // Resolve overloaded function names by arity
+            val overloads = mapGet(mapGet(mapGet(fs, "compiler"), "overloadedFuncs"), funcName)
+            if (overloads != null) {
+                funcName = stringConcat(funcName, stringConcat("$", toString(listSize(argRegs))))
             }
             val dest = allocReg(fs)
             emitCall(fs, dest, funcName, argRegs)
@@ -8061,6 +8110,52 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
         }
     }
 
+    // Inherit interface default methods (compile as ClassName.method)
+    val declSuperTypes = mapGet(decl, "superTypes")
+    if (declSuperTypes != null) {
+        var sti: Int = 0
+        while (sti < listSize(declSuperTypes)) {
+            val superType = listGet(declSuperTypes, sti)
+            val superName = toString(mapGet(superType, "name"))
+            val ifaceDefaults = mapGet(mapGet(compiler, "interfaceDefaultDecls"), superName)
+            if (ifaceDefaults != null) {
+                var di: Int = 0
+                while (di < listSize(ifaceDefaults)) {
+                    val defaultMethod = listGet(ifaceDefaults, di)
+                    val dmName = toString(mapGet(defaultMethod, "name"))
+                    if (!listContainsStr(methods, dmName)) {
+                        listAppend(methods, dmName)
+                        val dmParams = listCreate()
+                        val dmThis = mapCreate()
+                        mapPut(dmThis, "kind", "param")
+                        mapPut(dmThis, "name", "this")
+                        listAppend(dmParams, dmThis)
+                        val dmOrigParams = mapGet(defaultMethod, "params")
+                        if (dmOrigParams != null) {
+                            var dpi: Int = 0
+                            while (dpi < listSize(dmOrigParams)) {
+                                listAppend(dmParams, listGet(dmOrigParams, dpi))
+                                dpi = dpi + 1
+                            }
+                        }
+                        val dmDecl = mapCreate()
+                        mapPut(dmDecl, "kind", "funDecl")
+                        mapPut(dmDecl, "name", stringConcat(className, stringConcat(".", dmName)))
+                        mapPut(dmDecl, "params", dmParams)
+                        mapPut(dmDecl, "body", mapGet(defaultMethod, "body"))
+                        mapPut(dmDecl, "returnType", mapGet(defaultMethod, "returnType"))
+                        mapPut(dmDecl, "_className", className)
+                        mapPut(dmDecl, "_classFields", fieldNames)
+                        mapPut(dmDecl, "_classMethods", methods)
+                        compileFunction(compiler, dmDecl)
+                    }
+                    di = di + 1
+                }
+            }
+            sti = sti + 1
+        }
+    }
+
     // Compile methods
     if (body != null) {
         val members = mapGet(body, "members")
@@ -8468,6 +8563,10 @@ fun compileInterfaceDecl(compiler: Map, decl: Map): Unit {
     val methodNames = listCreate()
     mapPut(mapGet(compiler, "interfaceNames"), ifaceName, methodNames)
 
+    // Track default method declarations for inheritance by implementing classes
+    val defaultDecls = listCreate()
+    mapPut(mapGet(compiler, "interfaceDefaultDecls"), ifaceName, defaultDecls)
+
     // Compile default method implementations
     val body = mapGet(decl, "body")
     if (body != null) {
@@ -8483,6 +8582,7 @@ fun compileInterfaceDecl(compiler: Map, decl: Map): Unit {
                     // Only compile if it has a body (default implementation)
                     val methodBody = mapGet(member, "body")
                     if (methodBody != null) {
+                        listAppend(defaultDecls, member)
                         val fullName = stringConcat(ifaceName, stringConcat(".", methodName))
                         val methodParams = listCreate()
                         val thisParam = mapCreate()
@@ -8801,7 +8901,7 @@ fun compileProgram(ast: Map): Map {
         i = i + 1
     }
 
-    // Pass 1c: Pre-register function signatures for default param padding
+    // Pass 1c: Pre-register function signatures for default param padding + detect overloads
     i = 0
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
@@ -8809,8 +8909,20 @@ fun compileProgram(ast: Map): Map {
         if (kind == "funDecl" || kind == "viewDecl") {
             val fname = toString(mapGet(decl, "name"))
             val fparams = mapGet(decl, "params")
-            if (fparams != null) {
-                mapPut(mapGet(compiler, "funcSignatures"), fname, fparams)
+            // Detect overloads
+            val existingSig = mapGet(mapGet(compiler, "funcSignatures"), fname)
+            if (existingSig != null) {
+                if (fparams != null) {
+                    if (listSize(fparams) != listSize(existingSig)) {
+                        mapPut(mapGet(compiler, "overloadedFuncs"), fname, true)
+                        val mangledName = stringConcat(fname, stringConcat("$", toString(listSize(fparams))))
+                        mapPut(mapGet(compiler, "funcSignatures"), mangledName, fparams)
+                    }
+                }
+            } else {
+                if (fparams != null) {
+                    mapPut(mapGet(compiler, "funcSignatures"), fname, fparams)
+                }
             }
             // Register extension functions
             val recvType = mapGet(decl, "receiverType")
@@ -8830,7 +8942,23 @@ fun compileProgram(ast: Map): Map {
             compileClassDecl(compiler, decl)
         }
         if (kind == "funDecl") {
-            compileFunction(compiler, decl)
+            // Mangle overloaded function names
+            val fnName = toString(mapGet(decl, "name"))
+            val isOverloaded = mapGet(mapGet(compiler, "overloadedFuncs"), fnName)
+            if (isOverloaded != null) {
+                val fnParams = mapGet(decl, "params")
+                var fnArity: Int = 0
+                if (fnParams != null) { fnArity = listSize(fnParams) }
+                val mangledDecl = mapCreate()
+                mapPut(mangledDecl, "kind", "funDecl")
+                mapPut(mangledDecl, "name", stringConcat(fnName, stringConcat("$", toString(fnArity))))
+                mapPut(mangledDecl, "params", fnParams)
+                mapPut(mangledDecl, "body", mapGet(decl, "body"))
+                mapPut(mangledDecl, "returnType", mapGet(decl, "returnType"))
+                compileFunction(compiler, mangledDecl)
+            } else {
+                compileFunction(compiler, decl)
+            }
         }
         if (kind == "viewDecl") {
             // Compile view as a function with its params and body

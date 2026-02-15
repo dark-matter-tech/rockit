@@ -10,6 +10,7 @@ public struct TypeCheckResult {
     public let typeMap: [ExpressionID: Type]
     public let symbolTable: SymbolTable
     public let diagnostics: DiagnosticEngine
+    public let functionOverloads: [String: Set<Int>]
 }
 
 // MARK: - Type Checker
@@ -27,6 +28,8 @@ public final class TypeChecker {
     private let symbolTable: SymbolTable
     private let resolver: TypeResolver
     private var typeMap: [ExpressionID: Type] = [:]
+    /// Tracks overloaded function names: baseName -> set of arities
+    private var functionOverloads: [String: Set<Int>] = [:]
 
     public init(ast: SourceFile, diagnostics: DiagnosticEngine) {
         self.ast = ast
@@ -51,7 +54,8 @@ public final class TypeChecker {
             ast: ast,
             typeMap: typeMap,
             symbolTable: symbolTable,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            functionOverloads: functionOverloads
         )
     }
 
@@ -110,9 +114,26 @@ public final class TypeChecker {
             symbolTable.popScope()
         }
         let funcType = Type.function(parameterTypes: paramTypes, returnType: returnType)
+        let arity = paramTypes.count
         let symbol = Symbol(name: f.name, type: funcType, kind: .function, span: f.span)
         if !symbolTable.define(symbol) {
-            diagnostics.error("redeclaration of '\(f.name)'", at: f.span.start)
+            // Check if this is a valid overload (same name, different arity)
+            if let existing = symbolTable.lookup(f.name),
+               case .function(let existingParams, _) = existing.type,
+               existingParams.count != arity {
+                // Valid overload — register under mangled name
+                let mangledName = "\(f.name)$\(arity)"
+                let mangledSymbol = Symbol(name: mangledName, type: funcType, kind: .function, span: f.span)
+                symbolTable.define(mangledSymbol)
+                // Track overloads
+                if functionOverloads[f.name] == nil {
+                    functionOverloads[f.name] = [existingParams.count, arity]
+                } else {
+                    functionOverloads[f.name]?.insert(arity)
+                }
+            } else {
+                diagnostics.error("redeclaration of '\(f.name)'", at: f.span.start)
+            }
         }
     }
 
@@ -273,6 +294,9 @@ public final class TypeChecker {
                     kind: .function,
                     span: f.span
                 ))
+                if f.body != nil {
+                    info.defaultMethods.insert(f.name)
+                }
             } else if case .property(let p) = member {
                 let propType = p.type.map { resolver.resolve($0) } ?? .error
                 info.members.append(Symbol(
@@ -595,7 +619,9 @@ public final class TypeChecker {
                     }.map { $0.name })
 
                     for ifaceMember in ifaceInfo.members {
-                        if case .function = ifaceMember.kind, !classMethods.contains(ifaceMember.name) {
+                        if case .function = ifaceMember.kind,
+                           !classMethods.contains(ifaceMember.name),
+                           !ifaceInfo.defaultMethods.contains(ifaceMember.name) {
                             diagnostics.error(
                                 "class '\(c.name)' does not implement interface method '\(superTypeName).\(ifaceMember.name)'",
                                 at: c.span.start

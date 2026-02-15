@@ -2317,28 +2317,40 @@ public final class LLVMCodeGen {
             }
         }
 
-        guard let parentName = sealedParent else { return nil }
-        guard let parentDecl = typeDecls[parentName] else { return nil }
-
-        // Collect subclass implementations
-        var implementations: [(typeName: String, funcName: String, qualifiedMethod: String)] = []
-        for subclass in parentDecl.sealedSubclasses {
-            let subMethod = "\(subclass).\(method)"
-            if functionSignatures[subMethod] != nil || typeDecls[subclass]?.methods.contains(subMethod) == true {
-                implementations.append((typeName: subclass, funcName: llvmFunctionName(subMethod), qualifiedMethod: subMethod))
-            }
-        }
-
-        guard !implementations.isEmpty else { return nil }
-
-        // Fallback: base class implementation (if it exists), otherwise first subclass
-        let baseMethod = "\(parentName).\(method)"
+        let implementations: [(typeName: String, funcName: String, qualifiedMethod: String)]
         let baseFuncName: String
-        if functionSignatures[baseMethod] != nil || typeDecls[parentName]?.methods.contains(baseMethod) == true {
-            baseFuncName = llvmFunctionName(baseMethod)
+
+        if let parentName = sealedParent, let parentDecl = typeDecls[parentName] {
+            // Sealed class hierarchy dispatch
+            var impls: [(typeName: String, funcName: String, qualifiedMethod: String)] = []
+            for subclass in parentDecl.sealedSubclasses {
+                let subMethod = "\(subclass).\(method)"
+                if functionSignatures[subMethod] != nil || typeDecls[subclass]?.methods.contains(subMethod) == true {
+                    impls.append((typeName: subclass, funcName: llvmFunctionName(subMethod), qualifiedMethod: subMethod))
+                }
+            }
+            guard !impls.isEmpty else { return nil }
+
+            let baseMethod = "\(parentName).\(method)"
+            if functionSignatures[baseMethod] != nil || typeDecls[parentName]?.methods.contains(baseMethod) == true {
+                baseFuncName = llvmFunctionName(baseMethod)
+            } else {
+                baseFuncName = impls[0].funcName
+            }
+            implementations = impls
         } else {
-            // No base implementation — use first subclass as fallback
-            baseFuncName = implementations[0].funcName
+            // Interface polymorphism: multiple concrete types implement the same method
+            // Filter to only types with actual function implementations
+            var concreteImpls: [(typeName: String, funcName: String, qualifiedMethod: String)] = []
+            for impl in allImplementors {
+                let qm = impl.qualifiedMethod
+                if functionSignatures[qm] != nil {
+                    concreteImpls.append((typeName: impl.typeName, funcName: llvmFunctionName(qm), qualifiedMethod: qm))
+                }
+            }
+            guard concreteImpls.count > 1 else { return nil }
+            implementations = concreteImpls
+            baseFuncName = concreteImpls[0].funcName
         }
 
         var lines: [String] = []
