@@ -1490,6 +1490,58 @@ public final class LLVMCodeGen {
     /// Used by emitARCCleanup to conditionally release only initialized temps.
     private var arcFlags: [String: String] = [:]
 
+    /// Emit a "temp write barrier" for a retained heap value.
+    /// If the temp already holds a retained value (flag is set), release the old value first.
+    /// Then retain the new value and set the flag.
+    /// This makes loops safe: each iteration releases the previous retained value.
+    /// - Parameters:
+    ///   - dest: The temp alloca name (e.g., "%t5")
+    ///   - newValI64: The new value as i64 (for rockit_retain_value / rockit_release_value)
+    ///   - kind: The HeapKind for tracking in ownedHeapTemps
+    private func emitTempRetainBarrier(dest: String, newValI64: String, kind: HeapKind) -> [String] {
+        guard let flagName = arcFlags[dest] else {
+            // No flag alloca → just retain and track
+            return ["call void @rockit_retain_value(i64 \(newValI64))"]
+        }
+
+        var lines: [String] = []
+
+        // Check if temp already holds a retained value
+        let flagTmp = nextSSA()
+        let relLabel = "arc.wb.\(labelCounter)"
+        let doneLabel = "arc.wbd.\(labelCounter)"
+        labelCounter += 1
+
+        lines.append("\(flagTmp) = load i1, ptr \(flagName)")
+        lines.append("br i1 \(flagTmp), label %\(relLabel), label %\(doneLabel)")
+        lines.append("\(relLabel):")
+
+        // Release the old value currently in the temp
+        let oldValType = registerTypes[dest] ?? "i64"
+        let oldTmp = nextSSA()
+        lines.append("  \(oldTmp) = load \(oldValType), ptr \(addrOf(dest))")
+        if oldValType == "ptr" {
+            let oldI64 = nextSSA()
+            lines.append("  \(oldI64) = ptrtoint ptr \(oldTmp) to i64")
+            lines.append("  call void @rockit_release_value(i64 \(oldI64))")
+        } else {
+            lines.append("  call void @rockit_release_value(i64 \(oldTmp))")
+        }
+        lines.append("  br label %\(doneLabel)")
+        lines.append("\(doneLabel):")
+
+        // Retain the new value
+        lines.append("call void @rockit_retain_value(i64 \(newValI64))")
+
+        // Set the flag
+        lines.append("store i1 1, ptr \(flagName)")
+
+        // Track in ownedHeapTemps (only first occurrence matters for cleanup dedup)
+        ownedHeapTemps.append((dest, kind))
+
+        return lines
+    }
+
     /// Emit release calls for all owned heap temps except the return value.
     /// Called before every `ret` instruction to clean up function-local allocations.
     /// Uses boolean init flags to safely skip uninitialized temps.
@@ -2057,12 +2109,9 @@ public final class LLVMCodeGen {
             let resultTmp = nextSSA()
             lines.append("\(resultTmp) = call \(info.retType) @\(info.cName)(\(argList))")
             // ARC: retain values returned by collection get (borrowed from container)
+            // Uses temp write barrier to safely release previous value in loops
             if method == "get" && info.retType == "i64" {
-                lines.append("call void @rockit_retain_value(i64 \(resultTmp))")
-                ownedHeapTemps.append((dest, .unknown))
-                if let flag = arcFlags[dest] {
-                    lines.append("store i1 1, ptr \(flag)")
-                }
+                lines.append(contentsOf: emitTempRetainBarrier(dest: dest, newValI64: resultTmp, kind: .unknown))
             }
             lines.append(storeToTemp(dest, value: resultTmp, type: info.retType))
         } else {
@@ -2452,11 +2501,8 @@ public final class LLVMCodeGen {
         let destType = typeOf(dest)
         if destType == "ptr" {
             // ARC: retain the loaded field value (we're borrowing from the object)
-            lines.append("call void @rockit_retain_value(i64 \(rawTmp))")
-            ownedHeapTemps.append((dest, .unknown))
-            if let flag = arcFlags[dest] {
-                lines.append("store i1 1, ptr \(flag)")
-            }
+            // Uses temp write barrier to safely release previous value in loops
+            lines.append(contentsOf: emitTempRetainBarrier(dest: dest, newValI64: rawTmp, kind: .unknown))
             let castTmp = nextSSA()
             lines.append("\(castTmp) = inttoptr i64 \(rawTmp) to ptr")
             lines.append(storeToTemp(dest, value: castTmp, type: "ptr"))
