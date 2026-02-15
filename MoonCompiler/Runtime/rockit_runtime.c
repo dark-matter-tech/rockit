@@ -960,3 +960,90 @@ void rockit_actor_release(RockitActor* actor) {
         free(actor);
     }
 }
+
+// ── Async Runtime (Cooperative Task Scheduler) ──────────────────────────────
+
+#define ROCKIT_COROUTINE_SUSPENDED ((int64_t)-9999)
+#define ROCKIT_TASK_QUEUE_CAPACITY 4096
+
+typedef struct {
+    int64_t (*resume)(void* frame, int64_t result);
+    void*   frame;
+    int64_t result;
+} RockitTask;
+
+static struct {
+    RockitTask tasks[ROCKIT_TASK_QUEUE_CAPACITY];
+    int32_t head;
+    int32_t tail;
+    int32_t count;
+} g_scheduler = {0};
+
+void rockit_task_schedule(void* resume_fn, void* frame, int64_t result) {
+    if (g_scheduler.count >= ROCKIT_TASK_QUEUE_CAPACITY) {
+        fprintf(stderr, "rockit: task queue overflow\n");
+        exit(1);
+    }
+    RockitTask* t = &g_scheduler.tasks[g_scheduler.tail];
+    t->resume = (int64_t (*)(void*, int64_t))resume_fn;
+    t->frame = frame;
+    t->result = result;
+    g_scheduler.tail = (g_scheduler.tail + 1) % ROCKIT_TASK_QUEUE_CAPACITY;
+    g_scheduler.count++;
+}
+
+// Frame header: first fields of every continuation frame
+// struct { i32 state, i32 _pad, ptr parent_resume, ptr parent_frame }
+typedef struct {
+    int32_t state;
+    int32_t _pad;
+    int64_t (*parent_resume)(void*, int64_t);
+    void*   parent_frame;
+} RockitFrameHeader;
+
+void* rockit_frame_alloc(int64_t size_bytes) {
+    void* frame = calloc(1, (size_t)size_bytes);
+    return frame;
+}
+
+void rockit_frame_free(void* frame) {
+    free(frame);
+}
+
+int64_t rockit_await(void* child_resume_fn, void* child_frame,
+                     void* parent_resume_fn, void* parent_frame) {
+    // Set up parent continuation in child's frame header
+    RockitFrameHeader* child_hdr = (RockitFrameHeader*)child_frame;
+    child_hdr->parent_resume = (int64_t (*)(void*, int64_t))parent_resume_fn;
+    child_hdr->parent_frame = parent_frame;
+    // Schedule the child task
+    rockit_task_schedule(child_resume_fn, child_frame, 0);
+    return ROCKIT_COROUTINE_SUSPENDED;
+}
+
+void rockit_run_event_loop(void) {
+    while (g_scheduler.count > 0) {
+        RockitTask task = g_scheduler.tasks[g_scheduler.head];
+        g_scheduler.head = (g_scheduler.head + 1) % ROCKIT_TASK_QUEUE_CAPACITY;
+        g_scheduler.count--;
+
+        int64_t ret = task.resume(task.frame, task.result);
+
+        if (ret != ROCKIT_COROUTINE_SUSPENDED) {
+            // Task completed — resume parent if one exists
+            RockitFrameHeader* hdr = (RockitFrameHeader*)task.frame;
+            if (hdr->parent_resume) {
+                rockit_task_schedule(
+                    (void*)hdr->parent_resume,
+                    hdr->parent_frame,
+                    ret
+                );
+            }
+            rockit_frame_free(task.frame);
+        }
+    }
+}
+
+int64_t rockit_is_suspended(int64_t value) {
+    return value == ROCKIT_COROUTINE_SUSPENDED;
+}

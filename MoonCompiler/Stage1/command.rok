@@ -1067,6 +1067,15 @@ fun parsePrimary(p: Map): Map {
         return node
     }
 
+    // Await expression: await expr
+    if (tt == "KW_AWAIT") {
+        advance(p)
+        val operand = parseExpression(p, 0)
+        val node = makeNodeAt("awaitExpr", line, col)
+        mapPut(node, "operand", operand)
+        return node
+    }
+
     // Parenthesized expression
     if (tt == "LPAREN") {
         advance(p)
@@ -1523,7 +1532,7 @@ fun parseStatement(p: Map): Map {
     if (tt == "KW_TRY") { return parseTryCatch(p) }
 
     // Nested declarations
-    if (tt == "KW_FUN") { return parseFunDecl(p) }
+    if (tt == "KW_FUN" || tt == "KW_SUSPEND") { return parseFunDecl(p) }
     if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") { return parseClassDecl(p) }
     if (tt == "KW_INTERFACE") { return parseInterfaceDecl(p) }
     if (tt == "KW_ENUM") { return parseEnumDecl(p) }
@@ -1710,9 +1719,17 @@ fun parseExpressionStatement(p: Map): Map {
 fun parseFunDecl(p: Map): Map {
     val line = peekLine(p)
     val col = peekCol(p)
+    var isSuspend: Bool = false
+    if (check(p, "KW_SUSPEND")) {
+        advance(p)
+        isSuspend = true
+    }
     expect(p, "KW_FUN")
     var name: String = toString(mapGet(expect(p, "IDENT"), "value"))
     val node = makeNodeAt("funDecl", line, col)
+    if (isSuspend) {
+        mapPut(node, "isSuspend", true)
+    }
 
     // Extension function: fun TypeName.methodName(...)
     if (check(p, "DOT")) {
@@ -2172,7 +2189,7 @@ fun parseProgram(p: Map): Map {
             }
             mapPut(decl, "annotations", annotations)
             listAppend(decls, decl)
-        } else if (tt == "KW_FUN") {
+        } else if (tt == "KW_FUN" || tt == "KW_SUSPEND") {
             listAppend(decls, parseFunDecl(p))
         } else if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") {
             listAppend(decls, parseClassDecl(p))
@@ -3668,6 +3685,12 @@ fun tcInferExpr(tc: Map, expr: Map): String {
         return "Function"
     }
 
+    if (kind == "awaitExpr") {
+        val operand = mapGet(expr, "operand")
+        if (operand != null) { return tcInferExpr(tc, operand) }
+        return "Any"
+    }
+
     if (kind == "elvis") {
         val left = mapGet(expr, "left")
         val right = mapGet(expr, "right")
@@ -4116,6 +4139,12 @@ fun foldExpr(expr: Map): Map {
         return expr
     }
 
+    if (kind == "awaitExpr") {
+        val operand = foldExpr(mapGet(expr, "operand"))
+        mapPut(expr, "operand", operand)
+        return expr
+    }
+
     if (kind == "unary") {
         val operand = foldExpr(mapGet(expr, "operand"))
         mapPut(expr, "operand", operand)
@@ -4434,6 +4463,13 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "rockit_object_set_field", "void|ptr,i32,i64")
     mapPut(t, "rockit_object_is_type", "i64|ptr,ptr")
     mapPut(t, "rockit_object_get_type_name", "ptr|ptr")
+
+    // Async runtime
+    mapPut(t, "rockit_task_schedule", "void|ptr,ptr,i64")
+    mapPut(t, "rockit_frame_alloc", "ptr|i64")
+    mapPut(t, "rockit_frame_free", "void|ptr")
+    mapPut(t, "rockit_run_event_loop", "void|")
+    mapPut(t, "rockit_await", "i64|ptr,ptr,ptr,ptr")
 
     return t
 }
@@ -6691,6 +6727,11 @@ fun compileExpr(fs: Map, node: Map): Int {
         return dest
     }
 
+    if (kind == "awaitExpr") {
+        val operand = mapGet(node, "operand")
+        return compileExpr(fs, operand)
+    }
+
     if (kind == "lambda") {
         return compileLambda(fs, node)
     }
@@ -6749,6 +6790,8 @@ fun collectFreeVarsExpr(node: Map, names: Map): Unit {
                 i = i + 1
             }
         }
+    } else if (kind == "awaitExpr") {
+        collectFreeVarsExpr(mapGet(node, "operand"), names)
     } else if (kind == "elvis") {
         collectFreeVarsExpr(mapGet(node, "left"), names)
         collectFreeVarsExpr(mapGet(node, "right"), names)

@@ -176,4 +176,29 @@ RockitObject* rockit_actor_get_object(RockitActor* actor);
 /// Release an actor.
 void rockit_actor_release(RockitActor* actor);
 
+// ── Async Runtime (Cooperative Task Scheduler) ──────────────────────────────
+
+#define ROCKIT_COROUTINE_SUSPENDED ((int64_t)-9999)
+
+/// Allocate a continuation frame of the given size (zero-initialized).
+void* rockit_frame_alloc(int64_t size_bytes);
+
+/// Free a continuation frame.
+void rockit_frame_free(void* frame);
+
+/// Schedule a task for execution. resume_fn is a state machine function pointer,
+/// frame is its continuation frame, result is the value to pass on resume.
+void rockit_task_schedule(void* resume_fn, void* frame, int64_t result);
+
+/// Set up parent continuation in child frame and schedule the child.
+/// Returns ROCKIT_COROUTINE_SUSPENDED.
+int64_t rockit_await(void* child_resume_fn, void* child_frame,
+                     void* parent_resume_fn, void* parent_frame);
+
+/// Run the cooperative event loop until all tasks complete.
+void rockit_run_event_loop(void);
+
+/// Check if a return value indicates suspension.
+int64_t rockit_is_suspended(int64_t value);
+
 #endif // ROCKIT_RUNTIME_H

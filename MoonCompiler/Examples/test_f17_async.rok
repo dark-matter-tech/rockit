@@ -1,0 +1,22 @@
+// Test: async/await syntax support
+// Currently executes synchronously (await is transparent pass-through)
+// Runtime scheduler infrastructure is in place for full async later
+
+suspend fun fetchPayload(): String {
+    return "network payload"
+}
+
+suspend fun processPayload(): String {
+    val payload = await fetchPayload()
+    return stringConcat("processed: ", payload)
+}
+
+fun main(): Unit {
+    val result = await processPayload()
+    println(result)
+
+    val raw = await fetchPayload()
+    println(raw)
+
+    println("async test complete")
+}
