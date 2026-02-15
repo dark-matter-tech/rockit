@@ -12,16 +12,17 @@ jobs:
     container: swift:5.10.1-jammy
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: apt-get update && apt-get install -y git clang
 
-      - name: Install clang
-        run: apt-get update && apt-get install -y clang
-
-      - name: Cache Swift build
-        uses: actions/cache@v4
-        with:
-          path: MoonCompiler/.build
-          key: swift-build-${{ hashFiles('MoonCompiler/Package.swift') }}
+      - name: Checkout
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          git clone --depth 1 --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       # Step 1: Unit tests
       - name: Run unit tests
