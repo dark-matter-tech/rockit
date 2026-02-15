@@ -420,34 +420,30 @@ public final class TypeChecker {
     }
 
     private func gatherView(_ v: ViewDecl) {
-        // Views are registered as type declarations with loose typing
-        let info = TypeDeclInfo(name: v.name)
-        symbolTable.registerType(info)
-
-        let viewType = Type.classType(name: v.name, typeArguments: [])
-        let symbol = Symbol(name: v.name, type: viewType, kind: .typeDeclaration, span: v.span)
+        // Views are compiled as functions — register as function symbol
+        let paramTypes = v.parameters.map { p -> Type in
+            p.type.map { resolver.resolve($0) } ?? .error
+        }
+        let funcType = Type.function(parameterTypes: paramTypes, returnType: .unit)
+        let symbol = Symbol(name: v.name, type: funcType, kind: .function, span: v.span)
         if !symbolTable.define(symbol) {
             diagnostics.error("redeclaration of '\(v.name)'", at: v.span.start)
         }
     }
 
     private func gatherNavigation(_ n: NavigationDecl) {
-        let info = TypeDeclInfo(name: n.name)
-        symbolTable.registerType(info)
-
-        let navType = Type.classType(name: n.name, typeArguments: [])
-        let symbol = Symbol(name: n.name, type: navType, kind: .typeDeclaration, span: n.span)
+        // Navigations are compiled as parameterless functions
+        let funcType = Type.function(parameterTypes: [], returnType: .unit)
+        let symbol = Symbol(name: n.name, type: funcType, kind: .function, span: n.span)
         if !symbolTable.define(symbol) {
             diagnostics.error("redeclaration of '\(n.name)'", at: n.span.start)
         }
     }
 
     private func gatherTheme(_ t: ThemeDecl) {
-        let info = TypeDeclInfo(name: t.name)
-        symbolTable.registerType(info)
-
-        let themeType = Type.classType(name: t.name, typeArguments: [])
-        let symbol = Symbol(name: t.name, type: themeType, kind: .typeDeclaration, span: t.span)
+        // Themes are compiled as parameterless functions
+        let funcType = Type.function(parameterTypes: [], returnType: .unit)
+        let symbol = Symbol(name: t.name, type: funcType, kind: .function, span: t.span)
         if !symbolTable.define(symbol) {
             diagnostics.error("redeclaration of '\(t.name)'", at: t.span.start)
         }

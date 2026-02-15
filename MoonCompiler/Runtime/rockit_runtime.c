@@ -939,6 +939,14 @@ RockitString* toString(int64_t value) {
     return rockit_int_to_string(value);
 }
 
+// -- floatToString (used by float codegen) --
+
+RockitString* floatToString(double value) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%g", value);
+    return rockit_string_new(buf);
+}
+
 // ── Actor Runtime (Stage 0 — synchronous) ──────────────────────────────
 
 RockitActor* rockit_actor_create(const char* typeName, int32_t fieldCount) {

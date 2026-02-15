@@ -1,0 +1,32 @@
+// Test: floating point arithmetic and comparisons
+
+fun main(): Unit {
+    val pi = 3.14
+    val e = 2.718
+    val sum = pi + e
+    val diff = pi - e
+    val prod = pi * e
+
+    println("float test start")
+
+    // Basic values
+    println(floatToString(pi))
+    println(floatToString(e))
+
+    // Arithmetic
+    println(floatToString(sum))
+    println(floatToString(diff))
+
+    // Comparison
+    if (pi > e) {
+        println("pi > e")
+    } else {
+        println("pi <= e")
+    }
+
+    // Negative float
+    val neg = -3.14
+    println(floatToString(neg))
+
+    println("float test complete")
+}

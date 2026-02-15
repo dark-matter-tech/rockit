@@ -447,18 +447,36 @@ public final class MIRLowering {
         currentClassName = savedClassName
     }
 
-    // MARK: - View / Navigation / Theme (as class for Stage 0)
+    // MARK: - View / Navigation / Theme (compiled as functions)
 
     private func lowerView(_ v: ViewDecl) {
-        typeDecls.append(MIRTypeDecl(name: v.name))
+        // Lower view as a function with its params and body
+        let funcDecl = FunctionDecl(
+            annotations: [], modifiers: [], name: v.name,
+            typeParameters: [], parameters: v.parameters,
+            returnType: nil, body: .block(v.body), span: v.span
+        )
+        lowerFunction(funcDecl)
     }
 
     private func lowerNavigation(_ n: NavigationDecl) {
-        typeDecls.append(MIRTypeDecl(name: n.name))
+        // Lower navigation as a parameterless function
+        let funcDecl = FunctionDecl(
+            annotations: [], modifiers: [], name: n.name,
+            typeParameters: [], parameters: [],
+            returnType: nil, body: .block(n.body), span: n.span
+        )
+        lowerFunction(funcDecl)
     }
 
     private func lowerTheme(_ t: ThemeDecl) {
-        typeDecls.append(MIRTypeDecl(name: t.name))
+        // Lower theme as a parameterless function
+        let funcDecl = FunctionDecl(
+            annotations: [], modifiers: [], name: t.name,
+            typeParameters: [], parameters: [],
+            returnType: nil, body: .block(t.body), span: t.span
+        )
+        lowerFunction(funcDecl)
     }
 
     // MARK: - Block & Statement Lowering

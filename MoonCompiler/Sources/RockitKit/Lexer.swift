@@ -449,6 +449,19 @@ public final class Lexer {
                 case "\"": value.append("\"")
                 case "$":  value.append("$")
                 case "0":  value.append("\0")
+                case "u":
+                    if match("{") {
+                        var hex = ""
+                        while !isAtEnd && peek() != "}" {
+                            hex.append(Character(advance()))
+                        }
+                        if match("}"), let code = UInt32(hex, radix: 16),
+                           let scalar = Unicode.Scalar(code) {
+                            value.append(Character(scalar))
+                        } else {
+                            diagnostics.error("invalid unicode escape", at: loc(startLine, startCol))
+                        }
+                    }
                 default:
                     value.append("\\")
                     value.append(Character(escaped))
