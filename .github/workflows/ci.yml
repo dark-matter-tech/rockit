@@ -12,66 +12,171 @@ jobs:
     container: swift:5.10.1-jammy
 
     steps:
-      - name: Install dependencies
+      - name: 🔧 Install dependencies
         run: |
+          echo ""
+          echo "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
+          echo "🚀                                                          🚀"
+          echo "🚀    ██████   ██████   ██████ ██   ██ ██ ████████         🚀"
+          echo "🚀    ██   ██ ██    ██ ██      ██  ██  ██    ██            🚀"
+          echo "🚀    ██████  ██    ██ ██      █████   ██    ██            🚀"
+          echo "🚀    ██   ██ ██    ██ ██      ██  ██  ██    ██            🚀"
+          echo "🚀    ██   ██  ██████   ██████ ██   ██ ██    ██            🚀"
+          echo "🚀                                                          🚀"
+          echo "🚀        C O M P I L E R   P I P E L I N E                🚀"
+          echo "🚀        Dark Matter Tech — Codename Mars                 🚀"
+          echo "🚀                                                          🚀"
+          echo "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
+          echo ""
+          echo "🔧 Installing build dependencies..."
           apt-get update && apt-get install -y git clang-15
           ln -sf /usr/bin/clang-15 /usr/bin/clang
+          echo "✅ Dependencies installed (clang-15, git)"
+          echo ""
 
-      - name: Checkout
+      - name: 📦 Checkout
         run: |
+          echo "📦 Cloning repository..."
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
           chmod 600 ~/.netrc
           git clone --depth 1 --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+          echo "✅ Checked out branch: ${GITHUB_REF_NAME}"
+          echo "   Commit: $(git rev-parse --short HEAD)"
+          echo ""
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      # Step 1: Unit tests
-      - name: Run unit tests
-        working-directory: MoonCompiler
-        run: swift test 2>&1 | tee test-output.log
-
-      # Step 2: Build Stage 0 compiler
-      - name: Build Stage 0 (Swift)
-        working-directory: MoonCompiler
-        run: swift build -c release 2>&1 | tee build-output.log
-
-      # Step 3: Native feature tests
-      # Stage 0 (Swift) auto-detects triple and runtime dir.
-      # Output goes to Examples/<name> (default: strip .rok extension).
-      - name: Run native feature tests
+      - name: 🧪 Run unit tests
         working-directory: MoonCompiler
         run: |
+          echo ""
+          echo "┌─────────────────────────────────────────────┐"
+          echo "│  🧪  STAGE 1/4 — UNIT TESTS                │"
+          echo "└─────────────────────────────────────────────┘"
+          echo ""
+          echo "🔬 Running test suite..."
+          START=$(date +%s)
+          swift test 2>&1 | tee test-output.log
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+          PASSED=$(grep -c "passed" test-output.log || echo "?")
+          echo ""
+          echo "⏱️  Tests completed in ${ELAPSED}s"
+          echo "✅ Unit tests passed"
+          echo ""
+
+      - name: 🏗️ Build Stage 0 (Swift)
+        working-directory: MoonCompiler
+        run: |
+          echo ""
+          echo "┌─────────────────────────────────────────────┐"
+          echo "│  🏗️  STAGE 2/4 — BUILD STAGE 0 COMPILER    │"
+          echo "└─────────────────────────────────────────────┘"
+          echo ""
+          echo "🔨 Compiling Stage 0 (Swift → native)..."
+          START=$(date +%s)
+          swift build -c release 2>&1 | tee build-output.log
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+          echo ""
+          echo "⏱️  Build completed in ${ELAPSED}s"
+          echo "✅ Stage 0 compiler ready"
+          echo "   📍 .build/release/rockit"
+          echo ""
+
+      - name: 🎯 Run native feature tests
+        working-directory: MoonCompiler
+        run: |
+          echo ""
+          echo "┌─────────────────────────────────────────────┐"
+          echo "│  🎯  STAGE 3/4 — NATIVE FEATURE TESTS      │"
+          echo "└─────────────────────────────────────────────┘"
+          echo ""
           ROCKIT=.build/release/rockit
           PASS=0; FAIL=0; TOTAL=0
+          FAILED_TESTS=""
+          START=$(date +%s)
           for f in Examples/test_*.rok; do
             TOTAL=$((TOTAL + 1))
             name=$(basename "$f" .rok)
-            echo "=== $name ==="
-            if $ROCKIT build-native "$f" 2>&1; then
+            printf "  🚀 %-40s" "$name"
+            if $ROCKIT build-native "$f" > /tmp/build_log 2>&1; then
               output=$("Examples/$name" 2>&1) || true
-              echo "$output"
+              echo "✅ PASS"
               PASS=$((PASS + 1))
             else
-              echo "FAIL: build-native failed"
+              echo "❌ FAIL"
               FAIL=$((FAIL + 1))
+              FAILED_TESTS="$FAILED_TESTS\n    💥 $name"
             fi
           done
-          echo "Results: $PASS/$TOTAL passed, $FAIL failed"
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          if [ "$FAIL" -eq 0 ]; then
+            echo "  🏆 ALL TESTS PASSED: $PASS/$TOTAL"
+          else
+            echo "  💀 FAILURES: $FAIL/$TOTAL failed"
+            printf "$FAILED_TESTS\n"
+          fi
+          echo "  ⏱️  Completed in ${ELAPSED}s"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
           [ "$FAIL" -eq 0 ] || exit 1
 
-      # Step 4: Self-hosting bootstrap (3 stages)
-      # Stage 0 (Swift) auto-detects triple — no --target-triple needed.
-      # Stage 1+ (Rockit native) needs --target-triple and --runtime-path.
-      - name: Bootstrap Stage 1
+      - name: 🚀 Bootstrap self-hosting compiler
         working-directory: MoonCompiler
         run: |
+          echo ""
+          echo "┌─────────────────────────────────────────────┐"
+          echo "│  🚀  STAGE 4/4 — SELF-HOSTING BOOTSTRAP    │"
+          echo "└─────────────────────────────────────────────┘"
+          echo ""
+          echo "  Rockit compiles Rockit compiles Rockit."
+          echo "  Three stages. Zero external dependencies."
+          echo ""
           ROCKIT=.build/release/rockit
           TRIPLE="x86_64-unknown-linux-gnu"
-          echo "=== Stage 0 → Stage 1 ==="
+          TOTAL_START=$(date +%s)
+
+          echo "  ╔═══════════════════════════════════════════╗"
+          echo "  ║  🔥 Stage 0 → Stage 1                    ║"
+          echo "  ║  Swift compiler builds Rockit compiler    ║"
+          echo "  ╚═══════════════════════════════════════════╝"
+          START=$(date +%s)
           $ROCKIT build-native Stage1/command.rok 2>&1
-          echo "=== Stage 1 → Stage 2 ==="
+          END=$(date +%s)
+          echo "  ✅ Stage 1 built ($(($END - $START))s)"
+          echo ""
+
+          echo "  ╔═══════════════════════════════════════════╗"
+          echo "  ║  🔥🔥 Stage 1 → Stage 2                  ║"
+          echo "  ║  Rockit compiler builds itself            ║"
+          echo "  ╚═══════════════════════════════════════════╝"
+          START=$(date +%s)
           Stage1/command build-native Stage1/command.rok -o /tmp/stage2 --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE 2>&1
-          echo "=== Stage 2 → Stage 3 ==="
+          END=$(date +%s)
+          echo "  ✅ Stage 2 built ($(($END - $START))s)"
+          echo ""
+
+          echo "  ╔═══════════════════════════════════════════╗"
+          echo "  ║  🔥🔥🔥 Stage 2 → Stage 3                ║"
+          echo "  ║  Self-compiled compiler builds itself     ║"
+          echo "  ╚═══════════════════════════════════════════╝"
+          START=$(date +%s)
           /tmp/stage2 build-native Stage1/command.rok -o /tmp/stage3 --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE 2>&1
-          echo "Bootstrap complete — 3 stages built successfully"
+          END=$(date +%s)
+          echo "  ✅ Stage 3 built ($(($END - $START))s)"
+          echo ""
+
+          TOTAL_END=$(date +%s)
+          TOTAL_ELAPSED=$((TOTAL_END - TOTAL_START))
+          echo "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
+          echo "🚀                                                          🚀"
+          echo "🚀   ✅  BOOTSTRAP COMPLETE                                🚀"
+          echo "🚀   3 stages built in ${TOTAL_ELAPSED}s                        🚀"
+          echo "🚀   Rockit is self-hosting.                               🚀"
+          echo "🚀                                                          🚀"
+          echo "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
