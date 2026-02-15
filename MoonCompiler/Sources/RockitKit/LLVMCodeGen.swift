@@ -1476,8 +1476,9 @@ public final class LLVMCodeGen {
     private enum HeapKind {
         case string   // rockit_string_release
         case object   // rockit_release
-        case list     // rockit_release_value (i64 pointer-as-int from listCreate)
-        case map      // rockit_release_value (i64 pointer-as-int from mapCreate)
+        case list     // rockit_list_release
+        case map      // rockit_map_release
+        case unknown  // rockit_release_value (type unknown at compile time, e.g. getField/listGet/mapGet)
     }
 
     /// Temps that own newly-allocated heap objects and need release at function exit.
@@ -1554,6 +1555,8 @@ public final class LLVMCodeGen {
                 lines.append("  call void @rockit_list_release(ptr \(valPtr))")
             case .map:
                 lines.append("  call void @rockit_map_release(ptr \(valPtr))")
+            case .unknown:
+                lines.append("  call void @rockit_release_value(i64 \(valI64))")
             }
 
             lines.append("  br label %\(skipLabel)")
@@ -1808,6 +1811,15 @@ public final class LLVMCodeGen {
                     dests.insert(dest)
                 case .stringConcat(let dest, _):
                     dests.insert(dest)
+                case .getField(let dest, _, _):
+                    // getField may return a heap value (string, object, list, map)
+                    dests.insert(dest)
+                case .virtualCall(let dest, _, let method, _):
+                    guard let dest = dest else { continue }
+                    // Collection get returns a borrowed value we'll retain
+                    if method == "get" {
+                        dests.insert(dest)
+                    }
                 case .call(let dest, let callee, _):
                     guard let dest = dest else { continue }
                     if heapKindForFunction(callee) != nil {
@@ -2044,6 +2056,14 @@ public final class LLVMCodeGen {
         if let dest = dest, info.retType != "void" {
             let resultTmp = nextSSA()
             lines.append("\(resultTmp) = call \(info.retType) @\(info.cName)(\(argList))")
+            // ARC: retain values returned by collection get (borrowed from container)
+            if method == "get" && info.retType == "i64" {
+                lines.append("call void @rockit_retain_value(i64 \(resultTmp))")
+                ownedHeapTemps.append((dest, .unknown))
+                if let flag = arcFlags[dest] {
+                    lines.append("store i1 1, ptr \(flag)")
+                }
+            }
             lines.append(storeToTemp(dest, value: resultTmp, type: info.retType))
         } else {
             lines.append("call void @\(info.cName)(\(argList))")
@@ -2431,6 +2451,12 @@ public final class LLVMCodeGen {
         // Convert to the dest's expected type
         let destType = typeOf(dest)
         if destType == "ptr" {
+            // ARC: retain the loaded field value (we're borrowing from the object)
+            lines.append("call void @rockit_retain_value(i64 \(rawTmp))")
+            ownedHeapTemps.append((dest, .unknown))
+            if let flag = arcFlags[dest] {
+                lines.append("store i1 1, ptr \(flag)")
+            }
             let castTmp = nextSSA()
             lines.append("\(castTmp) = inttoptr i64 \(rawTmp) to ptr")
             lines.append(storeToTemp(dest, value: castTmp, type: "ptr"))
