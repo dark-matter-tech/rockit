@@ -16,18 +16,80 @@ jobs:
         run: |
           echo ""
           echo "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
-          echo "🚀                                                          🚀"
-          echo "🚀    ██████   ██████   ██████ ██   ██ ██ ████████         🚀"
-          echo "🚀    ██   ██ ██    ██ ██      ██  ██  ██    ██            🚀"
-          echo "🚀    ██████  ██    ██ ██      █████   ██    ██            🚀"
-          echo "🚀    ██   ██ ██    ██ ██      ██  ██  ██    ██            🚀"
-          echo "🚀    ██   ██  ██████   ██████ ██   ██ ██    ██            🚀"
-          echo "🚀                                                          🚀"
-          echo "🚀        C O M P I L E R   P I P E L I N E                🚀"
-          echo "🚀        Dark Matter Tech — Codename Mars                 🚀"
-          echo "🚀                                                          🚀"
+          echo "🚀                                                        🚀"
+          echo "🚀    ██████   ██████   ██████ ██   ██ ██ ████████        🚀"
+          echo "🚀    ██   ██ ██    ██ ██      ██  ██  ██    ██           🚀"
+          echo "🚀    ██████  ██    ██ ██      █████   ██    ██           🚀"
+          echo "🚀    ██   ██ ██    ██ ██      ██  ██  ██    ██           🚀"
+          echo "🚀    ██   ██  ██████   ██████ ██   ██ ██    ██           🚀"
+          echo "🚀                                                        🚀"
+          echo "🚀        C O M P I L E R   P I P E L I N E               🚀"
+          echo "🚀        Dark Matter Tech — Codename Mars                🚀"
+          echo "🚀                                                        🚀"
           echo "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
           echo ""
+
+          # === ROCKET LAUNCH SEQUENCE ===
+          echo "  Initiating launch sequence..."
+          sleep 0.3
+          echo ""
+          echo "  T-3..."
+          sleep 0.3
+          echo "  T-2..."
+          sleep 0.3
+          echo "  T-1..."
+          sleep 0.3
+          echo ""
+          echo "        /\\"
+          echo "       /  \\"
+          echo "      / RK \\"
+          echo "     /______\\"
+          echo "    |  ||||  |"
+          echo "    +--------+"
+          echo "       ^^^^"
+          echo "     ON THE PAD"
+          sleep 0.5
+          echo ""
+          echo "        /\\"
+          echo "       /  \\"
+          echo "      / RK \\"
+          echo "     /______\\"
+          echo "    |  ||||  |"
+          echo "    +--------+"
+          echo "     \\######/"
+          echo "      \\####/"
+          echo "       \\##/"
+          echo "     IGNITION!"
+          sleep 0.5
+          echo ""
+          echo "           *"
+          echo "        . /\\ ."
+          echo "       * /  \\ *"
+          echo "        / RK \\"
+          echo "       /______\\"
+          echo "       +------+"
+          echo "        \\####/"
+          echo "         \\##/"
+          echo "          \\/  "
+          echo "       . * . *"
+          echo "      * . * . *"
+          echo "     . * . * . *"
+          echo "      LIFTOFF!"
+          sleep 0.5
+          echo ""
+          echo "              *        .    *"
+          echo "         .       *  .     .   *"
+          echo "       *    .  *    .  *    ."
+          echo "                  /\\"
+          echo "                 /RK\\"
+          echo "                +----+"
+          echo "                 \\##/"
+          echo "       .    *    .    *    .    *"
+          echo "    *    .    *    .    *    .   "
+          echo "     WE HAVE CLEARED THE TOWER"
+          sleep 0.3
+          echo ""
+
           echo "🔧 Installing build dependencies..."
           apt-get update && apt-get install -y git clang-15
           ln -sf /usr/bin/clang-15 /usr/bin/clang
@@ -52,7 +114,7 @@ jobs:
         run: |
           echo ""
           echo "┌─────────────────────────────────────────────┐"
-          echo "│  🧪  STAGE 1/4 — UNIT TESTS                │"
+          echo "│  🧪  STAGE 1/4 — UNIT TESTS                 │"
           echo "└─────────────────────────────────────────────┘"
           echo ""
           echo "🔬 Running test suite..."
@@ -62,8 +124,23 @@ jobs:
           ELAPSED=$((END - START))
           PASSED=$(grep -c "passed" test-output.log || echo "?")
           echo ""
-          echo "⏱️  Tests completed in ${ELAPSED}s"
-          echo "✅ Unit tests passed"
+          # --- progress bar animation ---
+          echo "  [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%"
+          sleep 0.08
+          echo "  [████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 20%"
+          sleep 0.08
+          echo "  [████████████████░░░░░░░░░░░░░░░░░░░░░░░░░] 40%"
+          sleep 0.08
+          echo "  [████████████████████████░░░░░░░░░░░░░░░░░░] 60%"
+          sleep 0.08
+          echo "  [████████████████████████████████░░░░░░░░░░] 80%"
+          sleep 0.08
+          echo "  [████████████████████████████████████████░░] 95%"
+          sleep 0.08
+          echo "  [██████████████████████████████████████████] 100%"
+          echo ""
+          echo "  ⏱️  Tests completed in ${ELAPSED}s"
+          echo "  ✅ Unit tests passed"
           echo ""
 
       - name: 🏗️ Build Stage 0 (Swift)
@@ -71,7 +148,7 @@ jobs:
         run: |
           echo ""
           echo "┌─────────────────────────────────────────────┐"
-          echo "│  🏗️  STAGE 2/4 — BUILD STAGE 0 COMPILER    │"
+          echo "│  🏗️  STAGE 2/4 — BUILD STAGE 0 COMPILER     │"
           echo "└─────────────────────────────────────────────┘"
           echo ""
           echo "🔨 Compiling Stage 0 (Swift → native)..."
@@ -80,9 +157,34 @@ jobs:
           END=$(date +%s)
           ELAPSED=$((END - START))
           echo ""
-          echo "⏱️  Build completed in ${ELAPSED}s"
-          echo "✅ Stage 0 compiler ready"
-          echo "   📍 .build/release/rockit"
+          # --- anvil animation ---
+          echo "       _____"
+          echo "      |     |    Forging the compiler..."
+          echo "      |  S  |"
+          echo "      | W I |"
+          echo "      | F T |"
+          echo "      |_____|"
+          echo "     /       \\"
+          echo "    /  #####  \\"
+          echo "   /___________\\"
+          echo "   |  |||||||  |"
+          echo "   +===========+"
+          sleep 0.3
+          echo ""
+          # --- progress bar ---
+          echo "  [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%"
+          sleep 0.08
+          echo "  [██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 25%"
+          sleep 0.08
+          echo "  [████████████████████░░░░░░░░░░░░░░░░░░░░░░] 50%"
+          sleep 0.08
+          echo "  [██████████████████████████████░░░░░░░░░░░░] 75%"
+          sleep 0.08
+          echo "  [██████████████████████████████████████████] 100%"
+          echo ""
+          echo "  ⏱️  Build completed in ${ELAPSED}s"
+          echo "  ✅ Stage 0 compiler ready"
+          echo "  📍 .build/release/rockit"
           echo ""
 
       - name: 🎯 Run native feature tests
@@ -90,7 +192,7 @@ jobs:
         run: |
           echo ""
           echo "┌─────────────────────────────────────────────┐"
-          echo "│  🎯  STAGE 3/4 — NATIVE FEATURE TESTS      │"
+          echo "│  🎯  STAGE 3/4 — NATIVE FEATURE TESTS       │"
           echo "└─────────────────────────────────────────────┘"
           echo ""
           ROCKIT=.build/release/rockit
@@ -178,7 +280,7 @@ jobs:
         run: |
           echo ""
           echo "┌─────────────────────────────────────────────┐"
-          echo "│  🚀  STAGE 4/4 — SELF-HOSTING BOOTSTRAP    │"
+          echo "│  🚀  STAGE 4/4 — SELF-HOSTING BOOTSTRAP     │"
           echo "└─────────────────────────────────────────────┘"
           echo ""
           echo "  Rockit compiles Rockit compiles Rockit."
@@ -188,8 +290,11 @@ jobs:
           TRIPLE="x86_64-unknown-linux-gnu"
           TOTAL_START=$(date +%s)
 
+          # ============================================================
+          # STAGE 0 -> STAGE 1
+          # ============================================================
           echo "  ╔═══════════════════════════════════════════╗"
-          echo "  ║  🔥 Stage 0 → Stage 1                    ║"
+          echo "  ║  🔥 Stage 0 → Stage 1                     ║"
           echo "  ║  Swift compiler builds Rockit compiler    ║"
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
@@ -197,9 +302,22 @@ jobs:
           END=$(date +%s)
           echo "  ✅ Stage 1 built ($(($END - $START))s)"
           echo ""
+          # --- Tower: Foundation ---
+          sleep 0.2
+          echo "       ┌─────────────┐"
+          echo "       │   STAGE 1   │"
+          echo "       ├─────────────┤"
+          echo "       │ ░░░░░░░░░░░ │"
+          echo "       │ ░░░░░░░░░░░ │"
+          echo "  ═════╧═════════════╧═════"
+          echo ""
+          sleep 0.3
 
+          # ============================================================
+          # STAGE 1 -> STAGE 2
+          # ============================================================
           echo "  ╔═══════════════════════════════════════════╗"
-          echo "  ║  🔥🔥 Stage 1 → Stage 2                  ║"
+          echo "  ║  🔥🔥 Stage 1 → Stage 2                   ║"
           echo "  ║  Rockit compiler builds itself            ║"
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
@@ -207,9 +325,27 @@ jobs:
           END=$(date +%s)
           echo "  ✅ Stage 2 built ($(($END - $START))s)"
           echo ""
+          # --- Tower: Second Floor ---
+          sleep 0.2
+          echo "       ┌─────────────┐"
+          echo "       │   STAGE 2   │"
+          echo "       ├─────────────┤"
+          echo "       │ ▓▓▓▓▓▓▓▓▓▓▓ │"
+          echo "       │ ▓▓▓▓▓▓▓▓▓▓▓ │"
+          echo "       ├─────────────┤"
+          echo "       │   STAGE 1   │"
+          echo "       ├─────────────┤"
+          echo "       │ ░░░░░░░░░░░ │"
+          echo "       │ ░░░░░░░░░░░ │"
+          echo "  ═════╧═════════════╧═════"
+          echo ""
+          sleep 0.3
 
+          # ============================================================
+          # STAGE 2 -> STAGE 3
+          # ============================================================
           echo "  ╔═══════════════════════════════════════════╗"
-          echo "  ║  🔥🔥🔥 Stage 2 → Stage 3                ║"
+          echo "  ║  🔥🔥🔥 Stage 2 → Stage 3                 ║"
           echo "  ║  Self-compiled compiler builds itself     ║"
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
@@ -217,13 +353,57 @@ jobs:
           END=$(date +%s)
           echo "  ✅ Stage 3 built ($(($END - $START))s)"
           echo ""
+          # --- Tower: Complete with spire ---
+          sleep 0.2
+          echo "            /\\"
+          echo "           /  \\"
+          echo "          / RK \\"
+          echo "         /______\\"
+          echo "       ┌─────────────┐"
+          echo "       │   STAGE 3   │"
+          echo "       ├─────────────┤"
+          echo "       │ ███████████ │"
+          echo "       │ ███████████ │"
+          echo "       ├─────────────┤"
+          echo "       │   STAGE 2   │"
+          echo "       ├─────────────┤"
+          echo "       │ ▓▓▓▓▓▓▓▓▓▓▓ │"
+          echo "       │ ▓▓▓▓▓▓▓▓▓▓▓ │"
+          echo "       ├─────────────┤"
+          echo "       │   STAGE 1   │"
+          echo "       ├─────────────┤"
+          echo "       │ ░░░░░░░░░░░ │"
+          echo "       │ ░░░░░░░░░░░ │"
+          echo "  ═════╧═════════════╧═════"
+          sleep 0.5
+          echo ""
+
+          # === FIREWORKS CELEBRATION ===
+          echo "  *   .    *    .   *    .    *   .    *"
+          sleep 0.15
+          echo "    *    .    *    .    *    .    *    ."
+          sleep 0.15
+          echo "  .   *    .   *   .   *    .   *   .  "
+          sleep 0.15
+          echo "     *  .  *  . *  .  *  .  *  .  *  . "
+          sleep 0.15
+          echo "  *    .    *    .     *    .    *    . "
+          sleep 0.15
+          echo ""
 
           TOTAL_END=$(date +%s)
           TOTAL_ELAPSED=$((TOTAL_END - TOTAL_START))
           echo "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
-          echo "🚀                                                          🚀"
-          echo "🚀   ✅  BOOTSTRAP COMPLETE                                🚀"
-          echo "🚀   3 stages built in ${TOTAL_ELAPSED}s                        🚀"
-          echo "🚀   Rockit is self-hosting.                               🚀"
-          echo "🚀                                                          🚀"
+          echo "🚀                                                        🚀"
+          echo "🚀   ✅  BOOTSTRAP COMPLETE                               🚀"
+          printf "🚀   %-53s🚀\n" "3 stages built in ${TOTAL_ELAPSED}s"
+          echo "🚀   Rockit is self-hosting.                              🚀"
+          echo "🚀                                                        🚀"
+          echo "🚀   Stage 0 (Swift) ─── compiled ──▶ Stage 1 (Rockit)    🚀"
+          echo "🚀   Stage 1 ─────────── compiled ──▶ Stage 2             🚀"
+          echo "🚀   Stage 2 ─────────── compiled ──▶ Stage 3             🚀"
+          echo "🚀   Stage 2 == Stage 3  ✅  Fixed point reached.         🚀"
+          echo "🚀                                                        🚀"
+          echo "🚀   Zero external dependencies. Pure Rockit.             🚀"
+          echo "🚀                                                        🚀"
           echo "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
