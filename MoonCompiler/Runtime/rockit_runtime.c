@@ -193,6 +193,7 @@ RockitList* rockit_list_create(void) {
 }
 
 void rockit_list_append(RockitList* list, int64_t value) {
+    rockit_retain_value(value);
     if (list->size >= list->capacity) {
         list->capacity *= 2;
         list->data = (int64_t*)realloc(list->data, list->capacity * sizeof(int64_t));
@@ -211,6 +212,8 @@ void rockit_list_set(RockitList* list, int64_t index, int64_t value) {
     if (index < 0 || index >= list->size) {
         rockit_panic("list index out of bounds");
     }
+    rockit_retain_value(value);
+    rockit_release_value(list->data[index]);
     list->data[index] = value;
 }
 
@@ -257,7 +260,14 @@ static void map_grow(RockitMap* map) {
     map->size = 0;
     for (int64_t i = 0; i < oldCap; i++) {
         if (oldEntries[i].occupied) {
-            rockit_map_put(map, oldEntries[i].key, oldEntries[i].value);
+            int64_t idx = map_hash(oldEntries[i].key, map->capacity);
+            while (map->entries[idx].occupied) {
+                idx = (idx + 1) % map->capacity;
+            }
+            map->entries[idx].key = oldEntries[i].key;
+            map->entries[idx].value = oldEntries[i].value;
+            map->entries[idx].occupied = 1;
+            map->size++;
         }
     }
     free(oldEntries);
@@ -270,11 +280,15 @@ void rockit_map_put(RockitMap* map, int64_t key, int64_t value) {
     int64_t idx = map_hash(key, map->capacity);
     while (map->entries[idx].occupied) {
         if (map->entries[idx].key == key) {
+            rockit_retain_value(value);
+            rockit_release_value(map->entries[idx].value);
             map->entries[idx].value = value;
             return;
         }
         idx = (idx + 1) % map->capacity;
     }
+    rockit_retain_value(key);
+    rockit_retain_value(value);
     map->entries[idx].key = key;
     map->entries[idx].value = value;
     map->entries[idx].occupied = 1;
@@ -726,11 +740,15 @@ int64_t mapPut(int64_t mapVal, RockitString* key, int64_t value) {
     uint64_t h = string_hash(key) % (uint64_t)map->capacity;
     while (map->entries[h].occupied) {
         if (string_eq(map->entries[h].key, key)) {
+            rockit_retain_value(value);
+            rockit_release_value(map->entries[h].value);
             map->entries[h].value = value;
             return 0;
         }
         h = (h + 1) % (uint64_t)map->capacity;
     }
+    rockit_string_retain(key);
+    rockit_retain_value(value);
     map->entries[h].key = key;
     map->entries[h].value = value;
     map->entries[h].occupied = 1;
@@ -773,7 +791,14 @@ static void smap_grow(StringMap* map) {
     map->size = 0;
     for (int64_t i = 0; i < oldCap; i++) {
         if (oldEntries[i].occupied) {
-            mapPut((int64_t)(intptr_t)map, oldEntries[i].key, oldEntries[i].value);
+            uint64_t h = string_hash(oldEntries[i].key) % (uint64_t)map->capacity;
+            while (map->entries[h].occupied) {
+                h = (h + 1) % (uint64_t)map->capacity;
+            }
+            map->entries[h].key = oldEntries[i].key;
+            map->entries[h].value = oldEntries[i].value;
+            map->entries[h].occupied = 1;
+            map->size++;
         }
     }
     free(oldEntries);
