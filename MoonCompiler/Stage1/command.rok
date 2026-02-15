@@ -86,6 +86,18 @@ fun buildKeywordMap(): Map {
     return kw
 }
 
+// String-aware list contains (C runtime listContains uses pointer equality)
+fun listContainsStr(list: List, target: String): Bool {
+    var i: Int = 0
+    while (i < listSize(list)) {
+        if (toString(listGet(list, i)) == target) {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
 // ---------------------------------------------------------------------------
 // Lexer state — passed as a Map for mutability
 // ---------------------------------------------------------------------------
@@ -3688,7 +3700,7 @@ fun tcCheckWhenExhaustiveness(tc: Map, node: Map, branches: List): Unit {
                     var ei: Int = 0
                     while (ei < listSize(enumEntries)) {
                         val ename = toString(listGet(enumEntries, ei))
-                        if (listContains(coveredEntries, ename)) {
+                        if (listContainsStr(coveredEntries, ename)) {
                             anyMatch = true
                         }
                         ei = ei + 1
@@ -3698,7 +3710,7 @@ fun tcCheckWhenExhaustiveness(tc: Map, node: Map, branches: List): Unit {
                         var mi: Int = 0
                         while (mi < listSize(enumEntries)) {
                             val ename = toString(listGet(enumEntries, mi))
-                            if (!listContains(coveredEntries, ename)) {
+                            if (!listContainsStr(coveredEntries, ename)) {
                                 tcWarn(tc, stringConcat("'when' missing branch for '", stringConcat(cname, stringConcat(".", stringConcat(ename, "'")))), node)
                             }
                             mi = mi + 1
@@ -4141,6 +4153,31 @@ fun eliminateDeadFunctions(compiler: Map): Unit {
                                     mapPut(reachable, cval, true)
                                     listAppend(worklist, cval)
                                 }
+                            }
+                        }
+                    }
+                } else if (byte == 81) {
+                    // OP_VCALL: dest(2), objReg(2), methodIdx(2), argCount(2), args...
+                    // Mark all Class.method functions matching the method name
+                    if (bi + 6 < listSize(bytecode)) {
+                        val midxHi = toInt(listGet(bytecode, bi + 5))
+                        val midxLo = toInt(listGet(bytecode, bi + 6))
+                        val midx = midxHi * 256 + midxLo
+                        if (midx < listSize(pool)) {
+                            val constEntry = listGet(pool, midx)
+                            val mname = toString(mapGet(constEntry, "value"))
+                            val suffix = stringConcat(".", mname)
+                            // Mark all ClassName.methodName as reachable
+                            var fni: Int = 0
+                            while (fni < listSize(nameKeys)) {
+                                val fn = toString(listGet(nameKeys, fni))
+                                if (endsWith(fn, suffix)) {
+                                    if (mapGet(reachable, fn) == null) {
+                                        mapPut(reachable, fn, true)
+                                        listAppend(worklist, fn)
+                                    }
+                                }
+                                fni = fni + 1
                             }
                         }
                     }
@@ -5947,7 +5984,7 @@ fun compileExpr(fs: Map, node: Map): Int {
         val methodClass = mapGet(fs, "className")
         if (methodClass != null) {
             val classFields = mapGet(fs, "classFields")
-            if (listContains(classFields, name)) {
+            if (listContainsStr(classFields, name)) {
                 val thisSlot = toInt(mapGet(mapGet(fs, "locals"), "this"))
                 val thisReg = allocReg(fs)
                 emitLoad(fs, thisReg, thisSlot)
@@ -6798,7 +6835,7 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
                     var si: Int = 0
                     while (si < listSize(subs)) {
                         val subName = toString(listGet(subs, si))
-                        if (!listContains(coveredTypes, subName)) {
+                        if (!listContainsStr(coveredTypes, subName)) {
                             allCovered = false
                         }
                         si = si + 1
@@ -6808,7 +6845,7 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
                         var mi: Int = 0
                         while (mi < listSize(subs)) {
                             val subName = toString(listGet(subs, mi))
-                            if (!listContains(coveredTypes, subName)) {
+                            if (!listContainsStr(coveredTypes, subName)) {
                                 val warning = stringConcat("warning: 'when' on sealed class '", stringConcat(sealedName, stringConcat("' missing branch for '", stringConcat(subName, "'"))))
                                 println(warning)
                             }
@@ -6893,7 +6930,7 @@ fun compileStmt(fs: Map, node: Map): Unit {
                 val methodClass = mapGet(fs, "className")
                 if (methodClass != null) {
                     val classFields = mapGet(fs, "classFields")
-                    if (listContains(classFields, name)) {
+                    if (listContainsStr(classFields, name)) {
                         val thisSlot = toInt(mapGet(mapGet(fs, "locals"), "this"))
                         val thisReg = allocReg(fs)
                         emitLoad(fs, thisReg, thisSlot)
@@ -7709,7 +7746,7 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
     val isData = mapGet(decl, "isData") == true
     if (isData) {
         // Check if user already defined toString
-        if (!listContains(methods, "toString")) {
+        if (!listContainsStr(methods, "toString")) {
             listAppend(methods, "toString")
             // Build synthetic toString body:
             // return "ClassName(field1=<val1>, field2=<val2>)"
@@ -7832,7 +7869,7 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
         }
 
         // Auto-generate equals method
-        if (!listContains(methods, "equals")) {
+        if (!listContainsStr(methods, "equals")) {
             listAppend(methods, "equals")
             // Build: fun equals(other): Bool { return field1==other.field1 && ... }
             val eqStmts = listCreate()
