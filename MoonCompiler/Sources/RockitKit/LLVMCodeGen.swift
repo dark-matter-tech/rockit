@@ -2882,7 +2882,13 @@ extension LLVMCodeGen {
         let lexer = Lexer(source: source, fileName: fileName, diagnostics: diagnostics)
         let tokens = lexer.tokenize()
         let parser = Parser(tokens: tokens, diagnostics: diagnostics)
-        let ast = parser.parse()
+        let parsedAST = parser.parse()
+
+        // Resolve imports
+        let sourceDir = (fileName as NSString).deletingLastPathComponent
+        let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
+        let ast = importResolver.resolve(parsedAST)
+
         let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
         let typeResult = checker.check()
 

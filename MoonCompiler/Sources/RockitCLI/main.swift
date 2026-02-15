@@ -140,7 +140,11 @@ func checkCommand(file: String, dumpTypes: Bool) {
     let lexer = Lexer(source: source, fileName: file, diagnostics: diagnostics)
     let tokens = lexer.tokenize()
     let parser = Parser(tokens: tokens, diagnostics: diagnostics)
-    let ast = parser.parse()
+    let parsedAST = parser.parse()
+
+    let sourceDir = (file as NSString).deletingLastPathComponent
+    let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
+    let ast = importResolver.resolve(parsedAST)
 
     let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
     let result = checker.check()
@@ -688,7 +692,12 @@ func emitLLVMCommand(file: String) {
     let lexer = Lexer(source: source, fileName: file, diagnostics: diagnostics)
     let tokens = lexer.tokenize()
     let parser = Parser(tokens: tokens, diagnostics: diagnostics)
-    let ast = parser.parse()
+    let parsedAST = parser.parse()
+
+    let sourceDir = (file as NSString).deletingLastPathComponent
+    let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
+    let ast = importResolver.resolve(parsedAST)
+
     let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
     let typeResult = checker.check()
 
