@@ -84,6 +84,56 @@ public final class LLVMCodeGen {
             functionSignatures[f.name] = f.returnType
         }
 
+        // Pre-pass: find which function parameters are used as callIndirect targets.
+        // This enables cross-function tracing: if foo's 3rd param is called indirectly,
+        // then any call to foo marks its 3rd argument as an indirect call target.
+        callableParams = [:]
+        for f in module.functions {
+            var callIndirectTemps = Set<String>()
+            for block in f.blocks {
+                for inst in block.instructions {
+                    if case .callIndirect(_, let funcRef, _) = inst {
+                        callIndirectTemps.insert(funcRef)
+                    }
+                }
+            }
+            if callIndirectTemps.isEmpty { continue }
+            // Trace backward through load/store to find which params reach callIndirect
+            var targets = callIndirectTemps
+            var changed = true
+            while changed {
+                changed = false
+                for block in f.blocks {
+                    for inst in block.instructions {
+                        switch inst {
+                        case .load(let dest, let src):
+                            if targets.contains(dest) && !targets.contains(src) {
+                                targets.insert(src)
+                                changed = true
+                            }
+                        case .store(let dest, let src):
+                            if targets.contains(dest) && !targets.contains(src) {
+                                targets.insert(src)
+                                changed = true
+                            }
+                        default:
+                            break
+                        }
+                    }
+                }
+            }
+            // Map parameter names to indices
+            var indices = Set<Int>()
+            for (i, (name, _)) in f.parameters.enumerated() {
+                if targets.contains("param.\(name)") {
+                    indices.insert(i)
+                }
+            }
+            if !indices.isEmpty {
+                callableParams[f.name] = indices
+            }
+        }
+
         // Pre-pass: correct method return types by analyzing function bodies
         // MIR lowering may emit .unit for methods that actually return values
         for f in module.functions where f.returnType == .unit {
@@ -497,12 +547,50 @@ public final class LLVMCodeGen {
         // Reset per-function ARC tracking
         ownedHeapTemps = []
 
-        // Pre-pass: identify temps used as callIndirect function refs
+        // Pre-pass: identify temps used as callIndirect function refs.
+        // Trace backward through load/store chains so constString temps that
+        // flow into callIndirect via intermediate copies are also included.
         indirectCallTargets = []
         for block in function.blocks {
             for inst in block.instructions {
                 if case .callIndirect(_, let funcRef, _) = inst {
                     indirectCallTargets.insert(funcRef)
+                }
+            }
+        }
+        // Also mark args passed to callable parameter positions in other functions.
+        for block in function.blocks {
+            for inst in block.instructions {
+                if case .call(_, let callee, let args) = inst,
+                   let indices = callableParams[callee] {
+                    for idx in indices where idx < args.count {
+                        indirectCallTargets.insert(args[idx])
+                    }
+                }
+            }
+        }
+        // Fixed-point: expand targets through load/store chains.
+        // load(dest, src): if dest is target, add src
+        // store(dest, src): if dest is target, add src
+        var changed = true
+        while changed {
+            changed = false
+            for block in function.blocks {
+                for inst in block.instructions {
+                    switch inst {
+                    case .load(let dest, let src):
+                        if indirectCallTargets.contains(dest) && !indirectCallTargets.contains(src) {
+                            indirectCallTargets.insert(src)
+                            changed = true
+                        }
+                    case .store(let dest, let src):
+                        if indirectCallTargets.contains(dest) && !indirectCallTargets.contains(src) {
+                            indirectCallTargets.insert(src)
+                            changed = true
+                        }
+                    default:
+                        break
+                    }
                 }
             }
         }
@@ -1067,9 +1155,8 @@ public final class LLVMCodeGen {
             return [storeToTemp(dest, value: value ? "1" : "0", type: "i1")]
 
         case .constString(let dest, let value):
-            // Lambda references: only convert to function pointer when this temp is
-            // actually used as a callIndirect target (not just a string that happens
-            // to match a function name like "main").
+            // Lambda/function references: convert to function pointer when this temp
+            // flows into a callIndirect target (directly or through load/store/call chains).
             if moduleFunctionNames.contains(value) && indirectCallTargets.contains(dest) {
                 let funcName = llvmFunctionName(value)
                 return [storeToTemp(dest, value: "@\(funcName)", type: "ptr")]
@@ -1360,6 +1447,10 @@ public final class LLVMCodeGen {
     /// Only constString values for these temps should be converted to function pointers.
     private var indirectCallTargets: Set<String> = []
 
+    /// Maps function name → set of parameter indices that are used as callIndirect targets.
+    /// Used for cross-function tracing of function references passed as arguments.
+    private var callableParams: [String: Set<Int>] = [:]
+
     /// Actual LLVM return type for the current function (may differ from MIR's declared type).
     private var currentReturnType: String = "void"
 
@@ -1380,14 +1471,12 @@ public final class LLVMCodeGen {
     /// Emit release calls for all owned heap temps except the return value.
     /// Called before every `ret` instruction to clean up function-local allocations.
     ///
-    /// NOTE: Function-exit cleanup is currently disabled because it causes
-    /// premature deallocation when values are passed to runtime functions
-    /// (mapPut, listAppend, etc.) that store references without retaining them.
-    /// Enabling this requires either escape analysis or runtime-side retains
-    /// in all collection functions. Write barriers on setField and constructor
-    /// retains are still active and handle object field management correctly.
+    /// NOTE: Function-exit cleanup is currently disabled. While heap temp allocas
+    /// are zero-initialized and MIR resultSlots are initialized on all paths,
+    /// some heap objects have shared ownership (e.g., toString may return an existing
+    /// string, strings get stored into collections/fields) that makes blanket release
+    /// at function exit unsafe without full escape analysis.
     private func emitARCCleanup(returnTemp: String?) -> [String] {
-        // Disabled for now — see note above
         return []
     }
 
@@ -1714,7 +1803,9 @@ public final class LLVMCodeGen {
         case "i64":
             // In Stage 1 code, i64 may actually be a string pointer stored as integer.
             // Use the runtime's toString which handles both cases.
-            ownedHeapTemps.append((allocaName: dest, kind: .string))
+            // NOT tracked as owned: toString may return an existing string pointer
+            // without retaining (heuristic-based detection), so releasing at exit
+            // would free a string we don't own.
             return [
                 "\(tmp) = load i64, ptr \(addrOf(arg))",
                 "\(resultTmp) = call ptr @toString(i64 \(tmp))",
