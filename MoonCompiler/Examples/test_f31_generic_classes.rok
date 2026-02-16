@@ -1,0 +1,60 @@
+// Test: Generic classes, interfaces, and bounded type parameters
+
+class Box<T>(val value: T) {
+    fun get(): T {
+        return value
+    }
+}
+
+class Pair<A, B>(val first: A, val second: B) {
+    fun getFirst(): A {
+        return first
+    }
+    fun getSecond(): B {
+        return second
+    }
+}
+
+// Generic interface
+interface Container<T> {
+    fun getValue(): T
+    fun describe(): String
+}
+
+class IntContainer(val n: Int) : Container {
+    fun getValue(): Int {
+        return n
+    }
+    fun describe(): String {
+        return "IntContainer"
+    }
+}
+
+// Generic identity function with type parameter
+fun <T> identity(x: T): T {
+    return x
+}
+
+fun main() {
+    // Generic class with Int
+    val intBox = Box(42)
+    println(toString(intBox.get()))
+
+    // Generic class with String
+    val strBox = Box("hello")
+    println(strBox.get())
+
+    // Generic pair
+    val pair = Pair(10, 20)
+    println(toString(pair.getFirst()))
+    println(toString(pair.getSecond()))
+
+    // Generic interface implementation
+    val ic = IntContainer(99)
+    println(ic.describe())
+    println(toString(ic.getValue()))
+
+    // Generic identity function
+    val x = identity(7)
+    println(toString(x))
+}

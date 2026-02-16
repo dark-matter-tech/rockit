@@ -2237,13 +2237,21 @@ public final class LLVMCodeGen {
     private func resolveMethodName(_ method: String) -> String {
         // If already qualified (contains "."), use as-is
         if method.contains(".") { return method }
-        // Search type declarations for a method matching this name
+        // Search type declarations for a method matching this name.
+        // Prefer concrete classes (those with fields) over interfaces (no fields).
+        var interfaceMatch: String? = nil
         for (typeName, decl) in typeDecls {
             if decl.methods.contains("\(typeName).\(method)") {
-                return "\(typeName).\(method)"
+                if !decl.fields.isEmpty || decl.isActor {
+                    // Concrete class — return immediately
+                    return "\(typeName).\(method)"
+                } else {
+                    // Interface — save as fallback
+                    interfaceMatch = "\(typeName).\(method)"
+                }
             }
         }
-        return method
+        return interfaceMatch ?? method
     }
 
     /// Check if a method is a known collection builtin and emit the C runtime call directly.
@@ -2301,9 +2309,15 @@ public final class LLVMCodeGen {
     }
 
     private func emitVirtualCall(dest: String?, object: String, method: String, args: [String]) -> [String] {
-        // Try collection method dispatch first
-        if let result = emitCollectionMethod(dest: dest, object: object, method: method, args: args) {
-            return result
+        // Check if this is a user-defined method BEFORE trying collection dispatch.
+        // Otherwise, generic method names like "get" get hijacked to rockit_list_get.
+        let isUserMethod = resolveMethodName(method) != method
+
+        if !isUserMethod {
+            // Try collection method dispatch
+            if let result = emitCollectionMethod(dest: dest, object: object, method: method, args: args) {
+                return result
+            }
         }
 
         // Check if this method needs dynamic dispatch (polymorphic resolution)
