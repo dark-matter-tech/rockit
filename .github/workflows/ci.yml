@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, feature/*]
+    branches: [master]
   pull_request:
     branches: [master]
 
@@ -343,16 +343,23 @@ jobs:
           sleep 0.3
 
           # ============================================================
-          # STAGE 2 -> STAGE 3
+          # STAGE 2 -> STAGE 3 (bytecode comparison — avoids clang OOM)
           # ============================================================
           echo "  ╔═══════════════════════════════════════════╗"
           echo "  ║  🔥🔥🔥 Stage 2 → Stage 3                 ║"
           echo "  ║  Self-compiled compiler builds itself     ║"
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
-          /tmp/stage2 build-native Stage1/command.rok -o /tmp/stage3 --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE 2>&1
+          # Generate bytecode from Stage 1 and Stage 2, then compare
+          Stage1/command compile Stage1/command.rok -o /tmp/stage2.rokb 2>&1
+          /tmp/stage2 compile Stage1/command.rok -o /tmp/stage3.rokb 2>&1
           END=$(date +%s)
-          echo "  ✅ Stage 3 built ($(($END - $START))s)"
+          if diff /tmp/stage2.rokb /tmp/stage3.rokb > /dev/null 2>&1; then
+            echo "  ✅ Stage 3 verified — bytecode identical ($(($END - $START))s)"
+          else
+            echo "  ❌ Stage 3 MISMATCH — bytecode differs!"
+            exit 1
+          fi
           echo ""
           # --- Tower: Complete with spire ---
           sleep 0.2
@@ -403,7 +410,7 @@ jobs:
           echo "🚀   Stage 0 (Swift) ─── compiled ──▶ Stage 1 (Rockit)    🚀"
           echo "🚀   Stage 1 ─────────── compiled ──▶ Stage 2             🚀"
           echo "🚀   Stage 2 ─────────── compiled ──▶ Stage 3             🚀"
-          echo "🚀   Stage 2 == Stage 3  ✅  Fixed point reached.         🚀"
+          echo "🚀   Stage 2 == Stage 3  ✅  Fixed point (bytecode match) 🚀"
           echo "🚀                                                        🚀"
           echo "🚀   Zero external dependencies. Pure Rockit.             🚀"
           echo "🚀                                                        🚀"
