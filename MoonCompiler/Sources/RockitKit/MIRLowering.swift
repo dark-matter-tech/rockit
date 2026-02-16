@@ -34,6 +34,12 @@ public final class MIRLowering {
     /// Interface declarations indexed by name (for default method inheritance)
     private var interfaceDecls: [String: InterfaceDecl] = [:]
 
+    /// Function declarations indexed by name (for default parameter injection)
+    private var functionDeclarations: [String: FunctionDecl] = [:]
+
+    /// Member properties with default values, indexed by type name
+    private var memberPropertyDefaults: [String: [(String, Expression)]] = [:]
+
     public init(typeCheckResult: TypeCheckResult) {
         self.result = typeCheckResult
         self.diagnostics = typeCheckResult.diagnostics
@@ -41,13 +47,62 @@ public final class MIRLowering {
 
     /// Lower the entire AST to a MIR module.
     public func lower() -> MIRModule {
-        // Pre-scan for extension functions and interface declarations
+        // Pre-scan for extension functions, interface declarations, and function declarations
         for decl in result.ast.declarations {
-            if case .function(let f) = decl, let receiverType = f.receiverType {
-                extensionFunctions.insert("\(receiverType).\(f.name)")
+            if case .function(let f) = decl {
+                if let receiverType = f.receiverType {
+                    extensionFunctions.insert("\(receiverType).\(f.name)")
+                }
+                functionDeclarations[f.name] = f
             }
             if case .interfaceDecl(let i) = decl {
                 interfaceDecls[i.name] = i
+            }
+            // Also scan class/actor members for method declarations and member defaults
+            if case .classDecl(let c) = decl {
+                var defaults: [(String, Expression)] = []
+                for member in c.members {
+                    if case .function(let f) = member {
+                        functionDeclarations["\(c.name).\(f.name)"] = f
+                    }
+                    if case .property(let p) = member, let init_ = p.initializer {
+                        defaults.append((p.name, init_))
+                    }
+                }
+                if !defaults.isEmpty {
+                    memberPropertyDefaults[c.name] = defaults
+                }
+                // Also scan nested classes (sealed subclasses)
+                for member in c.members {
+                    if case .classDecl(let nested) = member {
+                        var nestedDefaults: [(String, Expression)] = []
+                        for nestedMember in nested.members {
+                            if case .function(let f) = nestedMember {
+                                functionDeclarations["\(nested.name).\(f.name)"] = f
+                            }
+                            if case .property(let p) = nestedMember, let init_ = p.initializer {
+                                nestedDefaults.append((p.name, init_))
+                            }
+                        }
+                        if !nestedDefaults.isEmpty {
+                            memberPropertyDefaults[nested.name] = nestedDefaults
+                        }
+                    }
+                }
+            }
+            if case .actorDecl(let a) = decl {
+                var defaults: [(String, Expression)] = []
+                for member in a.members {
+                    if case .function(let f) = member {
+                        functionDeclarations["\(a.name).\(f.name)"] = f
+                    }
+                    if case .property(let p) = member, let init_ = p.initializer {
+                        defaults.append((p.name, init_))
+                    }
+                }
+                if !defaults.isEmpty {
+                    memberPropertyDefaults[a.name] = defaults
+                }
             }
         }
 
@@ -99,6 +154,10 @@ public final class MIRLowering {
         // Extension functions get an implicit 'this' parameter
         if let receiverType = f.receiverType {
             let mirType = MIRType.reference(receiverType)
+            params.append(("this", mirType))
+        } else if let className = currentClassName {
+            // Class/actor methods get an implicit 'this' parameter
+            let mirType = MIRType.reference(className)
             params.append(("this", mirType))
         }
 
@@ -1035,6 +1094,19 @@ public final class MIRLowering {
             if let slot = locals[name] {
                 return builder.emitLoad(src: slot)
             }
+            // Check if this is a bare field reference in a method body
+            if currentClassName != nil,
+               typeDecls.first(where: { $0.name == currentClassName })?.fields.contains(where: { $0.0 == name }) == true {
+                let thisTemp: String
+                if let thisSlot = locals["this"] {
+                    thisTemp = builder.emitLoad(src: thisSlot)
+                } else {
+                    thisTemp = builder.emitLoad(src: "this")
+                }
+                let fieldTemp = builder.newTemp()
+                builder.emit(.getField(dest: fieldTemp, object: thisTemp, fieldName: name))
+                return fieldTemp
+            }
             // Global or unresolved — emit a load from the name directly
             return builder.emitLoad(src: "global.\(name)")
 
@@ -1341,6 +1413,13 @@ public final class MIRLowering {
             if let sym = result.symbolTable.lookup(name), sym.kind == .typeDeclaration {
                 let dest = builder.newTemp()
                 builder.emit(.newObject(dest: dest, typeName: name, args: argTemps))
+                // Initialize member properties with default values
+                if let defaults = memberPropertyDefaults[name] {
+                    for (fieldName, defaultExpr) in defaults {
+                        let defaultVal = lowerExpression(defaultExpr)
+                        builder.emit(.setField(object: dest, fieldName: fieldName, value: defaultVal))
+                    }
+                }
                 return dest
             }
 
@@ -1352,12 +1431,24 @@ public final class MIRLowering {
                 return dest
             }
 
+            // Inject default parameter values for missing arguments
+            var allArgTemps = argTemps
+            if let funcDecl = functionDeclarations[name],
+               allArgTemps.count < funcDecl.parameters.count {
+                for i in allArgTemps.count..<funcDecl.parameters.count {
+                    if let defaultExpr = funcDecl.parameters[i].defaultValue {
+                        let defaultTemp = lowerExpression(defaultExpr)
+                        allArgTemps.append(defaultTemp)
+                    }
+                }
+            }
+
             // Pack vararg arguments into a list if this is a vararg function
             let finalArgs: [String]
             if let varargIdx = result.varargFunctions[name] {
-                finalArgs = packVarargs(argTemps: argTemps, varargIndex: varargIdx)
+                finalArgs = packVarargs(argTemps: allArgTemps, varargIndex: varargIdx)
             } else {
-                finalArgs = argTemps
+                finalArgs = allArgTemps
             }
 
             // Regular function call — resolve overloads by arity

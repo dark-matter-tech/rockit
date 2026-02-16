@@ -605,9 +605,7 @@ public final class LLVMCodeGen {
         var lines: [String] = []
 
         // Detect if this is a method (name contains ".", e.g. "Point.sum")
-        // Extension functions already have "this" as an explicit parameter, so don't add implicit this
-        let hasExplicitThis = function.parameters.contains(where: { $0.0 == "this" })
-        let isMethod = function.name.contains(".") && !hasExplicitThis
+        let isMethod = function.name.contains(".")
         let className: String? = function.name.contains(".") ? String(function.name.split(separator: ".").first!) : nil
         currentClassName = className
 
@@ -639,6 +637,8 @@ public final class LLVMCodeGen {
         }
 
         for (name, type) in function.parameters {
+            // Skip explicit 'this' in method parameters — already handled above
+            if name == "this" && isMethod { continue }
             let lt: String
             if let inferred = inferredParams[name] {
                 lt = inferred
@@ -677,6 +677,8 @@ public final class LLVMCodeGen {
 
             // Allocas for parameters (so we can store/load them like locals)
             for (name, type) in function.parameters {
+                // Skip explicit 'this' — already handled above
+                if name == "this" && isMethod { continue }
                 let lt: String
                 if let inferred = inferredParams[name] {
                     lt = inferred

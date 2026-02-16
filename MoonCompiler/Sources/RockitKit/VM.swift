@@ -37,6 +37,9 @@ public final class VM {
     /// Type field name → field index mapping for fast field access.
     private var typeFieldIndices: [String: [String: Int]] = [:]
 
+    /// Parent type map: typeName → parentTypeName (for polymorphic dispatch).
+    private var parentTypeMap: [String: String] = [:]
+
     /// Exception handler stack for try/catch.
     private var exceptionHandlers: [(catchPC: Int, exceptionReg: UInt16, frameIndex: Int)] = []
 
@@ -71,7 +74,7 @@ public final class VM {
             functionTable[name] = i
         }
 
-        // Type table + field indices
+        // Type table + field indices + parent type map
         for (i, t) in module.types.enumerated() {
             let typeName = constantString(t.nameIndex)
             typeTable[typeName] = i
@@ -80,6 +83,9 @@ public final class VM {
                 fieldMap[constantString(nameIdx)] = fi
             }
             typeFieldIndices[typeName] = fieldMap
+            if let parentIdx = t.parentTypeIndex {
+                parentTypeMap[typeName] = constantString(parentIdx)
+            }
         }
     }
 
@@ -828,16 +834,24 @@ public final class VM {
         let obj = callStack[frameIdx].registers[Int(objReg)]
         let methodName = constantString(methodIdx)
 
-        // Resolve the method as a function
-        // Try fully-qualified name first (TypeName.method), then bare method name
+        // Resolve the method: try runtime type first, walk parent chain, then bare name
         let resolvedName: String
-        if let funcIndex = functionTable[methodName] {
+        if case .objectRef(let objId) = obj,
+           let runtimeTypeName = arcHeap.typeName(of: objId) {
+            // Walk the type hierarchy: runtime type → parent → grandparent → ...
+            var currentType: String? = runtimeTypeName
+            var found: String? = nil
+            while let typeName = currentType {
+                let qualified = "\(typeName).\(methodName)"
+                if functionTable[qualified] != nil {
+                    found = qualified
+                    break
+                }
+                currentType = parentTypeMap[typeName]
+            }
+            resolvedName = found ?? methodName
+        } else if functionTable[methodName] != nil {
             resolvedName = methodName
-            _ = funcIndex  // used below
-        } else if case .objectRef(let objId) = obj,
-                  let runtimeTypeName = arcHeap.typeName(of: objId),
-                  functionTable["\(runtimeTypeName).\(methodName)"] != nil {
-            resolvedName = "\(runtimeTypeName).\(methodName)"
         } else {
             resolvedName = methodName
         }
@@ -946,7 +960,13 @@ public final class VM {
         case (.string, "String"):                   return true
         case (.null, _):                            return false
         case (.objectRef(let id), _):
-            return arcHeap.typeName(of: id) == typeName
+            // Walk the type hierarchy for subtype checks
+            var currentType: String? = arcHeap.typeName(of: id)
+            while let ct = currentType {
+                if ct == typeName { return true }
+                currentType = parentTypeMap[ct]
+            }
+            return false
         default: return false
         }
     }
