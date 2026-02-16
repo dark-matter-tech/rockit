@@ -110,7 +110,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: 🧪 Run unit tests
-        working-directory: MoonCompiler
+        working-directory: RockitCompiler
         run: |
           echo ""
           echo "┌─────────────────────────────────────────────┐"
@@ -144,7 +144,7 @@ jobs:
           echo ""
 
       - name: 🏗️ Build Stage 0 (Swift)
-        working-directory: MoonCompiler
+        working-directory: RockitCompiler
         run: |
           echo ""
           echo "┌─────────────────────────────────────────────┐"
@@ -188,7 +188,7 @@ jobs:
           echo ""
 
       - name: 🎯 Run native feature tests
-        working-directory: MoonCompiler
+        working-directory: RockitCompiler
         run: |
           echo ""
           echo "┌─────────────────────────────────────────────┐"
@@ -276,7 +276,7 @@ jobs:
           [ "$FAIL" -eq 0 ] || exit 1
 
       - name: 🚀 Bootstrap self-hosting compiler
-        working-directory: MoonCompiler
+        working-directory: RockitCompiler
         run: |
           echo ""
           echo "┌─────────────────────────────────────────────┐"

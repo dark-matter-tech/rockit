@@ -6,7 +6,7 @@
 *.o
 *.ll
 *.rokb
-MoonCompiler/--dump-llvm
-MoonCompiler/Examples/test_*
-!MoonCompiler/Examples/test_*.rok
-MoonCompiler/Stage1/command
+RockitCompiler/--dump-llvm
+RockitCompiler/Examples/test_*
+!RockitCompiler/Examples/test_*.rok
+RockitCompiler/Stage1/command

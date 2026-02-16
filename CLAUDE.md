@@ -98,7 +98,7 @@ Key language properties:
 ## Project Structure
 
 ```
-MoonCompiler/
+RockitCompiler/
 ├── Package.swift                    # Swift Package Manager manifest
 ├── CLAUDE.md                        # This file
 ├── README.md                        # Compiler README
