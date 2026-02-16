@@ -1309,6 +1309,18 @@ fun collectFreeVarsStmt(node: Map, names: Map): Unit {
                 }
             }
         }
+    } else if (kind == "concurrent") {
+        val body = mapGet(node, "body")
+        if (body != null) {
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) {
+                var i: Int = 0
+                while (i < listSize(stmts)) {
+                    collectFreeVarsStmt(listGet(stmts, i), names)
+                    i = i + 1
+                }
+            }
+        }
     } else {
         // Unknown statement kind — might be a bare expression (e.g., binary, call, identifier)
         collectFreeVarsExpr(node, names)
@@ -2312,6 +2324,12 @@ fun compileStmt(fs: Map, node: Map): Unit {
         if (fparams != null) {
             mapPut(mapGet(compiler, "funcSignatures"), mangledName, fparams)
         }
+        return
+    }
+
+    // concurrent block — compile body sequentially (cooperative single-threaded)
+    if (kind == "concurrent") {
+        compileBlock(fs, mapGet(node, "body"))
         return
     }
 

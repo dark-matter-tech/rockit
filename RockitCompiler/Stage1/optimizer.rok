@@ -164,6 +164,12 @@ fun foldStmt(stmt: Map): Map {
     } else if (kind == "block") {
         val stmts = mapGet(stmt, "stmts")
         if (stmts != null) { foldStmtList(stmts) }
+    } else if (kind == "concurrent") {
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) { foldStmtList(stmts) }
+        }
     } else {
         // Might be a bare expression
         return foldExpr(stmt)

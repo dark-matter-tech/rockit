@@ -892,6 +892,14 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
         val stmts = mapGet(stmt, "stmts")
         if (stmts != null) { tcCheckStmts(tc, stmts) }
         tcPopScope(tc)
+    } else if (kind == "concurrent") {
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            tcPushScope(tc)
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) { tcCheckStmts(tc, stmts) }
+            tcPopScope(tc)
+        }
     } else {
         // Bare expression statement
         tcInferExpr(tc, stmt)
