@@ -262,6 +262,8 @@ public final class CodeGen {
             return 7   // op(1) + catchOffset(4) + exceptionReg(2)
         case .tryEnd:
             return 1   // op(1)
+        case .awaitCall(_, _, let args):
+            return 7 + 2 * args.count  // same layout as call
         }
     }
 
@@ -503,6 +505,15 @@ public final class CodeGen {
 
         case .tryEnd:
             emitter.emitOpcode(.tryEnd)
+
+        case .awaitCall(let dest, let function, let args):
+            emitter.emitOpcode(.awaitCall)
+            emitter.emitUInt16(dest.map { resolveRegister($0) } ?? CodeGen.noDestSentinel)
+            emitter.emitUInt16(pool.intern(function, kind: .funcName))
+            emitter.emitUInt16(UInt16(args.count))
+            for arg in args {
+                emitter.emitUInt16(resolveRegister(arg))
+            }
         }
     }
 
@@ -932,6 +943,16 @@ public final class CodeGen {
 
             case .unreachable:
                 lines.append("  \(offset): \(op)")
+
+            case .awaitCall:
+                let dest = readUInt16(bytes, at: &pc)
+                let funcIdx = readUInt16(bytes, at: &pc)
+                let argCount = readUInt16(bytes, at: &pc)
+                var argRegs: [String] = []
+                for _ in 0..<argCount { argRegs.append("r\(readUInt16(bytes, at: &pc))") }
+                let funcName = Int(funcIdx) < pool.count ? pool[Int(funcIdx)].value : "?\(funcIdx)"
+                let destStr = dest == CodeGen.noDestSentinel ? "_" : "r\(dest)"
+                lines.append("  \(offset): \(op) \(destStr), \(funcName)(\(argRegs.joined(separator: ", ")))")
             }
         }
 

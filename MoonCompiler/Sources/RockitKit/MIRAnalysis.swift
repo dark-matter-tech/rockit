@@ -62,6 +62,8 @@ extension MIRInstruction {
             return d
         case .tryEnd:
             return nil
+        case .awaitCall(let d, _, _):
+            return d
         }
     }
 
@@ -120,6 +122,8 @@ extension MIRInstruction {
             return [d]
         case .tryEnd:
             return []
+        case .awaitCall(_, _, let args):
+            return args
         }
     }
 
@@ -128,7 +132,7 @@ extension MIRInstruction {
         switch self {
         case .store, .setField:
             return true
-        case .call, .callIndirect, .virtualCall:
+        case .call, .callIndirect, .virtualCall, .awaitCall:
             return true
         case .newObject:
             return true

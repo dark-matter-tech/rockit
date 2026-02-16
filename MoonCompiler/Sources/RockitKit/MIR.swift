@@ -162,6 +162,9 @@ public enum MIRInstruction {
     // Exception handling
     case tryBegin(catchLabel: String, exceptionDest: String)
     case tryEnd
+
+    // Concurrency
+    case awaitCall(dest: String?, function: String, args: [String])
 }
 
 extension MIRInstruction: CustomStringConvertible {
@@ -242,6 +245,13 @@ extension MIRInstruction: CustomStringConvertible {
             return "try_begin catch=\(catchLabel) exc=\(dest)"
         case .tryEnd:
             return "try_end"
+
+        case .awaitCall(let d, let f, let a):
+            let args = a.joined(separator: ", ")
+            if let d = d {
+                return "\(d) = await \(f)(\(args))"
+            }
+            return "await \(f)(\(args))"
         }
     }
 }

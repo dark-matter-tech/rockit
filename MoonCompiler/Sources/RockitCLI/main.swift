@@ -361,22 +361,170 @@ func runCommand(file: String, trace: Bool, gcStats: Bool) {
 
 // MARK: - REPL
 
+/// Count unmatched braces in a string, skipping braces inside string literals.
+func countUnmatchedBraces(_ text: String) -> Int {
+    var count = 0
+    var inString = false
+    var prevChar: Character = "\0"
+    for ch in text {
+        if ch == "\"" && prevChar != "\\" {
+            inString = !inString
+        } else if !inString {
+            if ch == "{" { count += 1 }
+            else if ch == "}" { count -= 1 }
+        }
+        prevChar = ch
+    }
+    return count
+}
+
 func replCommand() {
     print("Rockit REPL v\(version)")
-    print("Type expressions or statements. Type :quit to exit.\n")
+    print("Type expressions or statements. Type :help for commands.\n")
 
     // Accumulate top-level declarations (fun, class, etc.)
     var topDecls = ""
     // Accumulate statements that go inside main (val/var decls, etc.)
     var mainBody = ""
+    // Input history
+    var history: [String] = []
+    // Input counter
+    var inputCount = 0
 
     while true {
-        print("rockit> ", terminator: "")
+        inputCount += 1
+        print("rockit[\(inputCount)]> ", terminator: "")
         guard let line = readLine() else { break }
         let trimmed = line.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { continue }
-        if trimmed == ":quit" || trimmed == ":q" { break }
-        if trimmed == ":reset" { topDecls = ""; mainBody = ""; print("State cleared."); continue }
+        if trimmed.isEmpty { continue; }
+
+        // REPL commands
+        if trimmed.hasPrefix(":") {
+            let cmd = trimmed.lowercased()
+            if cmd == ":quit" || cmd == ":q" { break }
+            if cmd == ":reset" {
+                topDecls = ""
+                mainBody = ""
+                print("State cleared.")
+                continue
+            }
+            if cmd == ":help" || cmd == ":h" {
+                print("""
+                REPL Commands:
+                  :help, :h         Show this help
+                  :quit, :q         Exit the REPL
+                  :reset            Clear all definitions and state
+                  :type <expr>      Show the type of an expression
+                  :ast <expr>       Show the AST of an expression
+                  :env              Show defined symbols
+                  :history          Show input history
+                  :source           Show accumulated source code
+                """)
+                continue
+            }
+            if cmd == ":env" {
+                if topDecls.isEmpty && mainBody.isEmpty {
+                    print("(no definitions)")
+                } else {
+                    if !topDecls.isEmpty {
+                        print("── Top-level declarations ──")
+                        // Extract declaration names
+                        for declLine in topDecls.components(separatedBy: "\n") {
+                            let dl = declLine.trimmingCharacters(in: .whitespaces)
+                            if dl.hasPrefix("fun ") || dl.hasPrefix("class ") || dl.hasPrefix("data class ") ||
+                               dl.hasPrefix("sealed class ") || dl.hasPrefix("enum ") ||
+                               dl.hasPrefix("interface ") || dl.hasPrefix("object ") {
+                                // Print up to the opening brace or paren
+                                if let braceIdx = dl.firstIndex(of: "{") {
+                                    print("  \(dl[dl.startIndex..<braceIdx].trimmingCharacters(in: .whitespaces))")
+                                } else if let parenIdx = dl.firstIndex(of: "(") {
+                                    let prefix = dl[dl.startIndex..<parenIdx]
+                                    print("  \(prefix)(...)")
+                                } else {
+                                    print("  \(dl)")
+                                }
+                            }
+                        }
+                    }
+                    if !mainBody.isEmpty {
+                        print("── Variables ──")
+                        for bodyLine in mainBody.components(separatedBy: "\n") {
+                            let bl = bodyLine.trimmingCharacters(in: .whitespaces)
+                            if bl.hasPrefix("val ") || bl.hasPrefix("var ") {
+                                // Print the val/var declaration
+                                if let eqIdx = bl.firstIndex(of: "=") {
+                                    print("  \(bl[bl.startIndex..<eqIdx].trimmingCharacters(in: .whitespaces))")
+                                } else {
+                                    print("  \(bl)")
+                                }
+                            }
+                        }
+                    }
+                }
+                continue
+            }
+            if cmd == ":history" {
+                if history.isEmpty {
+                    print("(no history)")
+                } else {
+                    for (i, entry) in history.enumerated() {
+                        let display = entry.contains("\n") ? entry.components(separatedBy: "\n").first! + " ..." : entry
+                        print("  [\(i + 1)] \(display)")
+                    }
+                }
+                continue
+            }
+            if cmd == ":source" {
+                if topDecls.isEmpty && mainBody.isEmpty {
+                    print("(no source)")
+                } else {
+                    let source = topDecls + "fun main(): Unit {\n\(mainBody)}\n"
+                    print(source)
+                }
+                continue
+            }
+            if trimmed.hasPrefix(":type ") {
+                let expr = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                if expr.isEmpty { print("Usage: :type <expression>"); continue }
+                // Wrap expression, type-check, extract type from symbol table
+                let source = topDecls + "fun main(): Unit {\n\(mainBody)  val __repl_type_query__ = \(expr)\n}\n"
+                let diagnostics = DiagnosticEngine()
+                let lexer = Lexer(source: source, fileName: "<repl>", diagnostics: diagnostics)
+                let tokens = lexer.tokenize()
+                let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+                let ast = parser.parse()
+                let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+                let result = checker.check()
+                if diagnostics.hasErrors {
+                    diagnostics.dump()
+                } else {
+                    if let sym = result.symbolTable.lookup("__repl_type_query__") {
+                        print("\(sym.type)")
+                    } else {
+                        print("Could not determine type")
+                    }
+                }
+                continue
+            }
+            if trimmed.hasPrefix(":ast ") {
+                let expr = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                if expr.isEmpty { print("Usage: :ast <expression>"); continue }
+                let source = topDecls + "fun main(): Unit {\n\(mainBody)  \(expr)\n}\n"
+                let diagnostics = DiagnosticEngine()
+                let lexer = Lexer(source: source, fileName: "<repl>", diagnostics: diagnostics)
+                let tokens = lexer.tokenize()
+                let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+                let ast = parser.parse()
+                if diagnostics.hasErrors {
+                    diagnostics.dump()
+                } else {
+                    print(ast)
+                }
+                continue
+            }
+            print("Unknown command: \(trimmed). Type :help for available commands.")
+            continue
+        }
 
         // Check if this is a top-level declaration (fun, class, etc.)
         let isTopDecl = trimmed.hasPrefix("fun ") || trimmed.hasPrefix("class ") ||
@@ -384,16 +532,18 @@ func replCommand() {
                         trimmed.hasPrefix("enum ") || trimmed.hasPrefix("interface ") ||
                         trimmed.hasPrefix("object ")
 
-        // Multi-line support: if line has unmatched braces, keep reading
+        // Multi-line support: string-aware brace counting
         var fullInput = line
-        var braceCount = 0
-        for ch in fullInput { if ch == "{" { braceCount += 1 } else if ch == "}" { braceCount -= 1 } }
+        var braceCount = countUnmatchedBraces(fullInput)
         while braceCount > 0 {
             print("  ... ", terminator: "")
             guard let continuation = readLine() else { break }
             fullInput += "\n" + continuation
-            for ch in continuation { if ch == "{" { braceCount += 1 } else if ch == "}" { braceCount -= 1 } }
+            braceCount = countUnmatchedBraces(fullInput)
         }
+
+        // Add to history
+        history.append(fullInput)
 
         let isValVar = trimmed.hasPrefix("val ") || trimmed.hasPrefix("var ")
 

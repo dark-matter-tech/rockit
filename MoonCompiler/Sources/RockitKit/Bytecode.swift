@@ -70,6 +70,9 @@ public enum Opcode: UInt8 {
     case tryEnd         = 0xB1
     case throwOp        = 0xB2
 
+    // Concurrency
+    case awaitCall      = 0xC0
+
     // Terminators
     case ret            = 0xE0
     case retVoid        = 0xE1
@@ -121,6 +124,7 @@ extension Opcode: CustomStringConvertible {
         case .tryBegin:     return "TRY_BEGIN"
         case .tryEnd:       return "TRY_END"
         case .throwOp:      return "THROW"
+        case .awaitCall:    return "AWAIT_CALL"
         case .ret:          return "RET"
         case .retVoid:      return "RET_VOID"
         case .jump:         return "JUMP"

@@ -1441,6 +1441,11 @@ public final class Parser {
             return parseParenExpression()
         case .leftBrace:
             return .lambda(parseLambdaExpression())
+        case .kwConcurrent:
+            advance()
+            let body = parseBlock()
+            return .concurrentBlock(body: body.statements,
+                                    span: span(from: start.span.start, to: body.span.end))
         case .dot:
             // Enum shorthand: .primary, .headline
             advance()
@@ -1871,6 +1876,7 @@ public final class Parser {
         case .safeCast(_, _, let s): return s
         case .nonNullAssert(_, let s): return s
         case .awaitExpr(_, let s): return s
+        case .concurrentBlock(_, let s): return s
         case .elvis(_, _, let s): return s
         case .range(_, _, _, let s): return s
         case .parenthesized(_, let s): return s

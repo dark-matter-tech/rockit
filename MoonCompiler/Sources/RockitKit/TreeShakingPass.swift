@@ -147,7 +147,8 @@ internal final class TreeShakingPass: MIRPass {
         for block in function.blocks {
             for inst in block.instructions {
                 switch inst {
-                case .call(_, let function, _):
+                case .call(_, let function, _),
+                     .awaitCall(_, let function, _):
                     funcs.insert(function)
                 case .callIndirect:
                     break  // Can't statically determine target

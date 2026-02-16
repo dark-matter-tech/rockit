@@ -1187,9 +1187,14 @@ public final class MIRLowering {
             return lowerNonNullAssert(expr: expr)
 
         case .awaitExpr(let expr, _):
-            // For now, await just evaluates the expression (no actual suspension)
-            // Actor message sends will be lowered as synchronous calls in Stage 0
-            return lowerExpression(expr)
+            return lowerAwaitExpr(expr: expr)
+
+        case .concurrentBlock(let body, _):
+            // Stage 0: execute body statements sequentially
+            for stmt in body {
+                lowerStatement(stmt)
+            }
+            return builder.emitConstNull()
 
         // Elvis
         case .elvis(let left, let right, _):
@@ -1468,6 +1473,66 @@ public final class MIRLowering {
         let dest = builder.newTemp()
         builder.emit(.callIndirect(dest: dest, functionRef: calleeTemp, args: argTemps))
         return dest
+    }
+
+    // MARK: - Await
+
+    /// Lower an await expression. If the inner expression is a function call,
+    /// emit an `awaitCall` MIR instruction. Otherwise, fall through to regular lowering.
+    private func lowerAwaitExpr(expr: Expression) -> String {
+        // Unwrap: await someCall(args) → awaitCall(dest, funcName, args)
+        if case .call(let callee, let arguments, let trailingLambda, _) = expr {
+            // For simple function calls (identifier callee), emit awaitCall
+            if case .identifier(let name, _) = callee {
+                let argTemps = arguments.map { lowerExpression($0.value) }
+
+                // Inject default parameter values
+                var allArgTemps = argTemps
+                if let funcDecl = functionDeclarations[name],
+                   allArgTemps.count < funcDecl.parameters.count {
+                    for i in allArgTemps.count..<funcDecl.parameters.count {
+                        if let defaultExpr = funcDecl.parameters[i].defaultValue {
+                            let defaultTemp = lowerExpression(defaultExpr)
+                            allArgTemps.append(defaultTemp)
+                        }
+                    }
+                }
+
+                // Pack varargs
+                let finalArgs: [String]
+                if let varargIdx = result.varargFunctions[name] {
+                    finalArgs = packVarargs(argTemps: allArgTemps, varargIndex: varargIdx)
+                } else {
+                    finalArgs = allArgTemps
+                }
+
+                // Resolve overloads
+                let resolvedName: String
+                if result.functionOverloads[name] != nil {
+                    resolvedName = "\(name)$\(finalArgs.count)"
+                } else {
+                    resolvedName = name
+                }
+
+                let dest = builder.newTemp()
+                builder.emit(.awaitCall(dest: dest, function: resolvedName, args: finalArgs))
+                return dest
+            }
+
+            // For method calls on objects, emit awaitCall with qualified name
+            if case .memberAccess(let obj, let method, _) = callee {
+                let objTemp = lowerExpression(obj)
+                let argTemps = arguments.map { lowerExpression($0.value) }
+                let dest = builder.newTemp()
+                // Emit as awaitCall with virtual dispatch semantics
+                // The VM will handle this as a virtual await
+                builder.emit(.awaitCall(dest: dest, function: "vcall.\(method)", args: [objTemp] + argTemps))
+                return dest
+            }
+        }
+
+        // Fallback: await on a non-call expression — just evaluate it
+        return lowerExpression(expr)
     }
 
     // MARK: - Vararg Packing
@@ -1875,6 +1940,8 @@ public final class MIRLowering {
             collectFreeVars(expr: r, into: &names)
         case .nonNullAssert(let e, _): collectFreeVars(expr: e, into: &names)
         case .awaitExpr(let e, _): collectFreeVars(expr: e, into: &names)
+        case .concurrentBlock(let body, _):
+            for stmt in body { collectFreeVars(stmt: stmt, into: &names) }
         case .range(let s, let e, _, _):
             collectFreeVars(expr: s, into: &names)
             collectFreeVars(expr: e, into: &names)

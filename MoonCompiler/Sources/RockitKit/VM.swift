@@ -55,6 +55,9 @@ public final class VM {
     /// Total instructions executed (for stats).
     private var instructionCount: Int = 0
 
+    /// Cooperative scheduler for structured concurrency.
+    private let scheduler = Scheduler()
+
     public init(module: BytecodeModule, config: RuntimeConfig = .default, builtins: BuiltinRegistry? = nil) {
         self.module = module
         self.config = config
@@ -502,6 +505,12 @@ public final class VM {
                     let condition = callStack[frameIdx].registers[Int(condReg)]
                     callStack[frameIdx].pc = condition.isTruthy ? Int(thenTarget) : Int(elseTarget)
 
+                // MARK: Concurrency
+                case .awaitCall:
+                    try executeAwaitCall(bytecode, frame: frameIdx)
+                    if callStack.isEmpty { return }
+                    continue
+
                 case .unreachable:
                     throw VMError.unreachable
                 } // end switch
@@ -743,6 +752,76 @@ public final class VM {
 
         // Execute the called function
         try executeLoop()
+    }
+
+    // MARK: - Await Call
+
+    /// Execute an await call — creates a child coroutine via the Scheduler,
+    /// runs it synchronously (Stage 0), and stores the result.
+    private func executeAwaitCall(_ bytecode: [UInt8], frame frameIdx: Int) throws {
+        let destReg = readUInt16(bytecode, frame: frameIdx)
+        let funcIdx = readUInt16(bytecode, frame: frameIdx)
+        let argCount = readUInt16(bytecode, frame: frameIdx)
+
+        var args: [Value] = []
+        for _ in 0..<argCount {
+            let argReg = readUInt16(bytecode, frame: frameIdx)
+            args.append(callStack[frameIdx].registers[Int(argReg)])
+        }
+
+        let funcName = constantString(funcIdx)
+
+        // Check builtins first (builtins are always synchronous)
+        if let builtin = builtins.lookup(funcName) {
+            let result = try builtin(args)
+            if destReg != 0xFFFF {
+                callStack[frameIdx].registers[Int(destReg)] = result
+                arc.retain(result)
+            }
+            return
+        }
+
+        // Module function
+        guard let targetIdx = functionTable[funcName] else {
+            throw VMError.unknownFunction(name: funcName)
+        }
+
+        guard callStack.count < config.maxCallStackDepth else {
+            throw VMError.stackOverflow(depth: callStack.count)
+        }
+
+        // Create a coroutine via the Scheduler for structured concurrency tracking
+        let coroutine = scheduler.spawn(
+            functionIndex: targetIdx,
+            functionName: funcName,
+            arguments: args
+        )
+        coroutine.start()
+
+        // Execute synchronously (Stage 0 — cooperative, single-threaded)
+        let targetFunc = module.functions[targetIdx]
+        let returnReg: UInt16? = destReg != 0xFFFF ? destReg : nil
+
+        var newFrame = CallFrame(
+            functionIndex: targetIdx,
+            registerCount: Int(targetFunc.registerCount),
+            returnRegister: returnReg,
+            functionName: funcName
+        )
+
+        for (i, arg) in args.prefix(Int(targetFunc.parameterCount)).enumerated() {
+            newFrame.registers[i] = arg
+            arc.retain(arg)
+        }
+
+        callStack.append(newFrame)
+
+        // Execute the awaited function
+        try executeLoop()
+
+        // Mark coroutine as completed in the scheduler
+        let resultVal = lastReturnValue
+        scheduler.complete(coroutine, with: resultVal)
     }
 
     // MARK: - Indirect Call

@@ -1112,6 +1112,8 @@ public final class LLVMCodeGen {
                     tempTypes[d] = "ptr"
                 case .tryEnd:
                     break
+                case .awaitCall(let d, _, _):
+                    if let d = d { tempTypes[d] = "i64" }
                 }
             }
         }
@@ -1482,6 +1484,10 @@ public final class LLVMCodeGen {
             ]
         case .tryEnd:
             return ["call void @rockit_exc_pop()"]
+
+        case .awaitCall(let dest, let function, let args):
+            // In native codegen, awaitCall is a synchronous call (Stage 0)
+            return emitCall(dest: dest, function: function, args: args)
         }
     }
 

@@ -564,6 +564,7 @@ public indirect enum Expression {
 
     // Concurrency
     case awaitExpr(Expression, span: SourceSpan)
+    case concurrentBlock(body: [Statement], span: SourceSpan)
 
     // Elvis
     case elvis(left: Expression, right: Expression, span: SourceSpan)
@@ -1027,6 +1028,9 @@ extension Expression {
             return "\(pad)NonNullAssert(!!)\n\(e.dump(indent: indent + 1))"
         case .awaitExpr(let e, _):
             return "\(pad)Await\n\(e.dump(indent: indent + 1))"
+        case .concurrentBlock(let body, _):
+            let stmts = body.map { $0.dump(indent: indent + 1) }.joined(separator: "\n")
+            return "\(pad)Concurrent\n\(stmts)"
         case .elvis(let l, let r, _):
             return "\(pad)Elvis(?:)\n\(l.dump(indent: indent + 1))\n\(r.dump(indent: indent + 1))"
         case .range(let s, let e, let incl, _):

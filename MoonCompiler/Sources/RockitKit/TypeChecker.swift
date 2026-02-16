@@ -34,6 +34,8 @@ public final class TypeChecker {
     private var functionOverloads: [String: Set<Int>] = [:]
     /// Tracks functions with vararg parameters: funcName -> vararg param index
     private var varargFunctions: [String: Int] = [:]
+    /// Tracks the current enclosing actor name (nil when outside an actor)
+    private var currentActorName: String? = nil
 
     public init(ast: SourceFile, diagnostics: DiagnosticEngine) {
         self.ast = ast
@@ -673,11 +675,14 @@ public final class TypeChecker {
     }
 
     private func checkActor(_ a: ActorDecl) {
+        let previousActor = currentActorName
+        currentActorName = a.name
         symbolTable.pushScope()
         for member in a.members {
             checkDeclaration(member)
         }
         symbolTable.popScope()
+        currentActorName = previousActor
     }
 
     private func checkView(_ v: ViewDecl) {
@@ -971,6 +976,14 @@ public final class TypeChecker {
             // For Stage 0, we just check the inner expression
             return checkExpression(expr)
 
+        case .concurrentBlock(let body, _):
+            // concurrent { ... } executes statements concurrently
+            // For Stage 0, type check the body; the block yields Unit
+            for stmt in body {
+                checkStatement(stmt)
+            }
+            return .unit
+
         // Elvis
         case .elvis(let left, let right, let span):
             return checkElvis(left: left, right: right, span: span)
@@ -1122,6 +1135,13 @@ public final class TypeChecker {
         if let typeName = baseType.typeName,
            let typeInfo = symbolTable.lookupType(typeName) {
             if let memberSym = typeInfo.members.first(where: { $0.name == member }) {
+                // Actor isolation: prevent direct field access from outside the actor
+                if case .actorType(let actorName) = baseType,
+                   currentActorName != actorName,
+                   case .variable = memberSym.kind {
+                    diagnostics.error("cannot access actor field '\(member)' from outside actor '\(actorName)'; use a method instead", at: span.start)
+                    return .error
+                }
                 let resultType = memberSym.type
                 return nullSafe ? resultType.asNullable : resultType
             }
@@ -1661,6 +1681,7 @@ extension Expression {
              .safeCast(_, _, let span),
              .nonNullAssert(_, let span),
              .awaitExpr(_, let span),
+             .concurrentBlock(_, let span),
              .elvis(_, _, let span),
              .range(_, _, _, let span),
              .parenthesized(_, let span):
