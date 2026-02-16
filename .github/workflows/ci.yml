@@ -102,8 +102,9 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
           chmod 600 ~/.netrc
-          git clone --depth 1 --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
-          echo "✅ Checked out branch: ${GITHUB_REF_NAME}"
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          git clone --depth 1 --branch "${BRANCH}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+          echo "✅ Checked out branch: ${BRANCH}"
           echo "   Commit: $(git rev-parse --short HEAD)"
           echo ""
         env:
