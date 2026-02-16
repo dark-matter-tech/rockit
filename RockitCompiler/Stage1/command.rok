@@ -9746,7 +9746,7 @@ fun main(): Unit {
         }
 
         // Invoke clang
-        val clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
+        val clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
         val exitCode = systemExec(clangCmd)
         // Clean up temp .ll file
         fileDelete(llFile)
