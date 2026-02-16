@@ -440,6 +440,90 @@ public final class BuiltinRegistry {
             guard let first = args.first else { return .string("Nothing") }
             return .string(first.typeName)
         }
+
+        // ── Probe Test Framework — Assertions ─────────────────────────────
+
+        register(name: "assert") { args in
+            guard let first = args.first else {
+                throw VMError.userException(message: "assert: expected boolean argument")
+            }
+            let condition: Bool
+            switch first {
+            case .bool(let b): condition = b
+            case .int(let i): condition = i != 0
+            default: condition = false
+            }
+            if !condition {
+                let message = args.count >= 2 ? args[1].description : "Assertion failed"
+                throw VMError.userException(message: "ASSERTION FAILED: \(message)")
+            }
+            return .unit
+        }
+
+        register(name: "assertEquals") { args in
+            guard args.count >= 2 else {
+                throw VMError.userException(message: "assertEquals: expected 2 arguments")
+            }
+            if args[0] != args[1] {
+                let message = args.count >= 3 ? args[2].description : ""
+                let detail = message.isEmpty ? "" : " — \(message)"
+                throw VMError.userException(
+                    message: "ASSERTION FAILED: expected \(args[0]) to equal \(args[1])\(detail)")
+            }
+            return .unit
+        }
+
+        register(name: "assertNotEquals") { args in
+            guard args.count >= 2 else {
+                throw VMError.userException(message: "assertNotEquals: expected 2 arguments")
+            }
+            if args[0] == args[1] {
+                let message = args.count >= 3 ? args[2].description : ""
+                let detail = message.isEmpty ? "" : " — \(message)"
+                throw VMError.userException(
+                    message: "ASSERTION FAILED: expected \(args[0]) to not equal \(args[1])\(detail)")
+            }
+            return .unit
+        }
+
+        register(name: "assertTrue") { args in
+            guard let first = args.first, case .bool(let b) = first, b else {
+                let message = args.count >= 2 ? args[1].description : "Expected true"
+                throw VMError.userException(message: "ASSERTION FAILED: \(message)")
+            }
+            return .unit
+        }
+
+        register(name: "assertFalse") { args in
+            guard let first = args.first else {
+                throw VMError.userException(message: "assertFalse: expected boolean argument")
+            }
+            if case .bool(let b) = first, b {
+                let message = args.count >= 2 ? args[1].description : "Expected false"
+                throw VMError.userException(message: "ASSERTION FAILED: \(message)")
+            }
+            return .unit
+        }
+
+        register(name: "assertNull") { args in
+            guard let first = args.first else {
+                throw VMError.userException(message: "assertNull: expected argument")
+            }
+            if first != .null {
+                throw VMError.userException(message: "ASSERTION FAILED: expected null, got \(first)")
+            }
+            return .unit
+        }
+
+        register(name: "assertNotNull") { args in
+            guard let first = args.first else {
+                throw VMError.userException(message: "assertNotNull: expected argument")
+            }
+            if first == .null {
+                throw VMError.userException(message: "ASSERTION FAILED: expected non-null value")
+            }
+            return .unit
+        }
     }
 
     // MARK: - Collection Builtins

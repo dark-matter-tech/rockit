@@ -536,13 +536,17 @@ func initCommand(name: String) {
 
         // tests/test_main.rok
         let testRok = """
-        fun test_hello(): Unit {
+        @Test
+        fun testHello() {
             val expected = "Hello, Rockit!"
-            println("PASS: test_hello")
+            assertEquals(expected, "Hello, Rockit!")
         }
 
-        fun main(): Unit {
-            test_hello()
+        @Test
+        fun testArithmetic() {
+            assertEquals(2 + 2, 4)
+            assertTrue(10 > 5)
+            assertFalse(1 == 2)
         }
         """
         try testRok.write(toFile: projectDir + "/tests/test_main.rok", atomically: true, encoding: .utf8)
@@ -560,7 +564,7 @@ func initCommand(name: String) {
     }
 }
 
-// MARK: - Test Command
+// MARK: - Test Command (Probe Test Framework)
 
 func testCommand(file: String?) {
     let fm = FileManager.default
@@ -591,15 +595,14 @@ func testCommand(file: String?) {
         }
     }
 
-    var passed = 0
-    var failed = 0
+    var totalPassed = 0
+    var totalFailed = 0
+    var totalSkipped = 0
 
     for testFile in testFiles {
-        print("Running \(testFile)...")
-
         guard let source = try? String(contentsOfFile: testFile, encoding: .utf8) else {
-            print("  error: could not read \(testFile)")
-            failed += 1
+            print("  SKIP  \(testFile) (could not read)")
+            totalSkipped += 1
             continue
         }
 
@@ -612,31 +615,154 @@ func testCommand(file: String?) {
         let typeResult = checker.check()
 
         if diagnostics.hasErrors {
+            print("  FAIL  \(testFile) (compilation errors)")
             diagnostics.dump()
-            failed += 1
+            totalFailed += 1
             continue
         }
 
-        let lowering = MIRLowering(typeCheckResult: typeResult)
-        let mir = lowering.lower()
-        let optimizer = MIROptimizer()
-        let optimized = optimizer.optimize(mir)
-        let codeGen = CodeGen()
-        let module = codeGen.generate(optimized)
-        let vm = VM(module: module, config: RuntimeConfig())
+        // Discover @Test annotated functions
+        let testFunctions = discoverTestFunctions(ast: ast)
 
-        do {
-            try vm.run()
-            passed += 1
-        } catch {
-            let st = vm.captureStackTrace(error: error as! VMError)
-            print(st)
-            failed += 1
+        if testFunctions.isEmpty {
+            // No @Test functions — run file as a whole (legacy mode)
+            let lowering = MIRLowering(typeCheckResult: typeResult)
+            let mir = lowering.lower()
+            let optimizer = MIROptimizer()
+            let optimized = optimizer.optimize(mir)
+            let codeGen = CodeGen()
+            let module = codeGen.generate(optimized)
+            let vm = VM(module: module, config: RuntimeConfig())
+
+            do {
+                try vm.run()
+                print("  PASS  \(testFile)")
+                totalPassed += 1
+            } catch {
+                let st = vm.captureStackTrace(error: error as! VMError)
+                print("  FAIL  \(testFile)")
+                print(st)
+                totalFailed += 1
+            }
+        } else {
+            // Run each @Test function individually
+            let fileName = (testFile as NSString).lastPathComponent
+            // Strip existing main() to allow test wrapper main
+            let sourceWithoutMain = stripMainFunction(source)
+            for testFn in testFunctions {
+                // Generate a wrapper main() that calls this test function
+                let wrapperSource = sourceWithoutMain + "\nfun main() { \(testFn)() }\n"
+
+                let wDiag = DiagnosticEngine()
+                let wLexer = Lexer(source: wrapperSource, fileName: testFile, diagnostics: wDiag)
+                let wTokens = wLexer.tokenize()
+                let wParser = Parser(tokens: wTokens, diagnostics: wDiag)
+                let wAst = wParser.parse()
+                let wChecker = TypeChecker(ast: wAst, diagnostics: wDiag)
+                let wResult = wChecker.check()
+
+                if wDiag.hasErrors {
+                    print("  FAIL  \(fileName)::\(testFn) (compilation error)")
+                    totalFailed += 1
+                    continue
+                }
+
+                let lowering = MIRLowering(typeCheckResult: wResult)
+                let mir = lowering.lower()
+                let optimizer = MIROptimizer()
+                let optimized = optimizer.optimize(mir)
+                let codeGen = CodeGen()
+                let module = codeGen.generate(optimized)
+                let vm = VM(module: module, config: RuntimeConfig())
+
+                do {
+                    try vm.run()
+                    print("  PASS  \(fileName)::\(testFn)")
+                    totalPassed += 1
+                } catch {
+                    if let vmErr = error as? VMError {
+                        print("  FAIL  \(fileName)::\(testFn) — \(vmErr)")
+                    } else {
+                        print("  FAIL  \(fileName)::\(testFn) — \(error)")
+                    }
+                    totalFailed += 1
+                }
+            }
         }
     }
 
-    print("\n\(testFiles.count) test file(s): \(passed) passed, \(failed) failed")
-    if failed > 0 { exit(1) }
+    let total = totalPassed + totalFailed + totalSkipped
+    print("\n\(total) test(s): \(totalPassed) passed, \(totalFailed) failed, \(totalSkipped) skipped")
+    if totalFailed > 0 { exit(1) }
+}
+
+/// Parse a simple fuel.toml file into a dictionary of key-value pairs.
+func parseFuelToml(_ path: String) -> [String: String] {
+    guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
+        return [:]
+    }
+    var result: [String: String] = [:]
+    for line in contents.components(separatedBy: "\n") {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty || trimmed.hasPrefix("#") || trimmed.hasPrefix("[") { continue }
+        let parts = trimmed.components(separatedBy: "=")
+        if parts.count >= 2 {
+            let key = parts[0].trimmingCharacters(in: .whitespaces)
+            var value = parts.dropFirst().joined(separator: "=")
+                .trimmingCharacters(in: .whitespaces)
+            // Strip quotes
+            if value.hasPrefix("\"") && value.hasSuffix("\"") {
+                value = String(value.dropFirst().dropLast())
+            }
+            result[key] = value
+        }
+    }
+    return result
+}
+
+/// Strip the main() function from source code (for test wrapper injection).
+func stripMainFunction(_ source: String) -> String {
+    // Find "fun main(" and remove the entire function body
+    guard let range = source.range(of: "fun main(") else { return source }
+    let before = source[source.startIndex..<range.lowerBound]
+
+    // Find the matching closing brace
+    let afterStart = range.lowerBound
+    var depth = 0
+    var foundOpenBrace = false
+    var endIdx = source.endIndex
+    var idx = source.index(after: afterStart)
+    while idx < source.endIndex {
+        let ch = source[idx]
+        if ch == "{" {
+            depth += 1
+            foundOpenBrace = true
+        } else if ch == "}" {
+            depth -= 1
+            if foundOpenBrace && depth == 0 {
+                endIdx = source.index(after: idx)
+                break
+            }
+        }
+        idx = source.index(after: idx)
+    }
+
+    let after = source[endIdx..<source.endIndex]
+    return String(before) + String(after)
+}
+
+/// Discover functions with @Test annotation in the AST.
+func discoverTestFunctions(ast: SourceFile) -> [String] {
+    var testFunctions: [String] = []
+    for decl in ast.declarations {
+        if case .function(let fn) = decl {
+            let hasTestAnnotation = fn.annotations.contains { $0.name == "Test" }
+            if hasTestAnnotation {
+                testFunctions.append(fn.name)
+            }
+        }
+    }
+    return testFunctions
 }
 
 // MARK: - Build Native
@@ -845,12 +971,21 @@ case "lower":
     lowerCommand(file: args[2], dumpMIR: dumpMIR, dumpUnoptimized: dumpUnopt)
 
 case "build":
-    guard args.count >= 3 else {
-        print("error: build requires a file argument")
+    let buildFile: String
+    if args.count >= 3 && !args[2].hasPrefix("--") {
+        buildFile = args[2]
+    } else if FileManager.default.fileExists(atPath: "fuel.toml") {
+        buildFile = "src/main.rok"
+        let manifest = parseFuelToml("fuel.toml")
+        if let name = manifest["name"] {
+            print("Building \(name)...")
+        }
+    } else {
+        print("error: build requires a file argument (or run from a Fuel project)")
         exit(1)
     }
     let dumpBytecode = args.contains("--dump-bytecode")
-    buildCommand(file: args[2], dumpBytecode: dumpBytecode)
+    buildCommand(file: buildFile, dumpBytecode: dumpBytecode)
 
 case "build-native":
     guard args.count >= 3 else {

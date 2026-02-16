@@ -252,6 +252,15 @@ public final class SymbolTable {
             ("panic",  .function(parameterTypes: [], returnType: .nothing)),
             ("typeOf", .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .string)),
 
+            // Probe Test Framework — Assertions
+            ("assert",          .function(parameterTypes: [.bool], returnType: .unit)),
+            ("assertEquals",    .function(parameterTypes: [.typeParameter(name: "T", bound: nil), .typeParameter(name: "T", bound: nil)], returnType: .unit)),
+            ("assertNotEquals", .function(parameterTypes: [.typeParameter(name: "T", bound: nil), .typeParameter(name: "T", bound: nil)], returnType: .unit)),
+            ("assertTrue",      .function(parameterTypes: [.bool], returnType: .unit)),
+            ("assertFalse",     .function(parameterTypes: [.bool], returnType: .unit)),
+            ("assertNull",      .function(parameterTypes: [.nullable(.typeParameter(name: "T", bound: nil))], returnType: .unit)),
+            ("assertNotNull",   .function(parameterTypes: [.nullable(.typeParameter(name: "T", bound: nil))], returnType: .unit)),
+
             // Collection constructors
             ("listOf",  .function(parameterTypes: [], returnType: .classType(name: "List", typeArguments: []))),
             ("mapOf",   .function(parameterTypes: [], returnType: .classType(name: "Map", typeArguments: []))),
