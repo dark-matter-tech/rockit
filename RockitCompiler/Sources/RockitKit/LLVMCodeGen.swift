@@ -257,23 +257,7 @@ public final class LLVMCodeGen {
     // MARK: - Target Triple
 
     private func targetTriple() -> String {
-        // Detect host triple at runtime to avoid version mismatch warnings
-        #if arch(arm64) && os(macOS)
-        let arch = "arm64-apple-macosx"
-        #elseif arch(x86_64) && os(macOS)
-        let arch = "x86_64-apple-macosx"
-        #elseif arch(x86_64) && os(Linux)
-        return "x86_64-unknown-linux-gnu"
-        #elseif arch(arm64) && os(Linux)
-        return "aarch64-unknown-linux-gnu"
-        #else
-        return "x86_64-unknown-linux-gnu"
-        #endif
-
-        #if os(macOS)
-        let version = ProcessInfo.processInfo.operatingSystemVersion
-        return "\(arch)\(version.majorVersion).0.0"
-        #endif
+        Platform.hostTargetTriple()
     }
 
     // MARK: - String Collection
@@ -444,7 +428,7 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare void @rockit_exc_pop()")
         externalDecls.insert("declare void @rockit_exc_throw(i64)")
         externalDecls.insert("declare i64 @rockit_exc_get()")
-        externalDecls.insert("declare i32 @_setjmp(ptr) #0")
+        externalDecls.insert(Platform.setjmpDeclaration)
         // Actor runtime
         externalDecls.insert("declare ptr @rockit_actor_create(ptr, i32)")
         externalDecls.insert("declare ptr @rockit_actor_get_object(ptr)")
@@ -484,6 +468,7 @@ public final class LLVMCodeGen {
         // Meta
         externalDecls.insert("declare i64 @evalRockit(ptr)")
         externalDecls.insert("declare i64 @systemExec(ptr)")
+        externalDecls.insert("declare i64 @fileDelete(ptr)")
         // Polymorphic toString (handles both raw ints and string pointers)
         externalDecls.insert("declare ptr @toString(i64)")
         // String comparison (content-based, not pointer-based)
@@ -1476,7 +1461,7 @@ public final class LLVMCodeGen {
             ssaCounter += 1
             return [
                 "\(bufTmp) = call ptr @rockit_exc_push()",
-                "\(jmpRet) = call i32 @_setjmp(ptr \(bufTmp)) #0",
+                Platform.setjmpCall(result: jmpRet, bufPtr: bufTmp),
                 "\(caught) = icmp ne i32 \(jmpRet), 0",
                 "br i1 \(caught), label %\(llvmLabel(catchLabel)), label %\(tryBodyLabel)",
                 "",
@@ -3221,12 +3206,17 @@ extension LLVMCodeGen {
             return llPath
         }
 
+        // Find clang
+        guard let clangPath = Platform.findClang() else {
+            throw LLVMCodeGenError.clangNotFound
+        }
+
         // Compile C runtime
-        let runtimeObjPath = NSTemporaryDirectory() + "rockit_runtime.o"
-        let runtimeSrcPath = runtimeDir + "/rockit_runtime.c"
+        let runtimeObjPath = Platform.tempFilePath("rockit_runtime" + Platform.objectFileExtension)
+        let runtimeSrcPath = Platform.pathJoin(runtimeDir, "rockit_runtime.c")
 
         let compileRuntime = Process()
-        compileRuntime.executableURL = URL(fileURLWithPath: "/usr/bin/clang")
+        compileRuntime.executableURL = URL(fileURLWithPath: clangPath)
         compileRuntime.arguments = ["-c", "-O1", "-I", runtimeDir, runtimeSrcPath, "-o", runtimeObjPath]
         try compileRuntime.run()
         compileRuntime.waitUntilExit()
@@ -3235,16 +3225,17 @@ extension LLVMCodeGen {
         }
 
         // Compile + link
+        let finalOutputPath = Platform.withExeExtension(outputPath)
         let link = Process()
-        link.executableURL = URL(fileURLWithPath: "/usr/bin/clang")
-        link.arguments = ["-O1", llPath, runtimeObjPath, "-o", outputPath]
+        link.executableURL = URL(fileURLWithPath: clangPath)
+        link.arguments = ["-O1", llPath, runtimeObjPath, "-o", finalOutputPath]
         try link.run()
         link.waitUntilExit()
         guard link.terminationStatus == 0 else {
             throw LLVMCodeGenError.linkFailed
         }
 
-        return outputPath
+        return finalOutputPath
     }
 }
 
@@ -3254,6 +3245,7 @@ public enum LLVMCodeGenError: Error, CustomStringConvertible {
     case frontendErrors(Int)
     case runtimeCompileFailed
     case linkFailed
+    case clangNotFound
 
     public var description: String {
         switch self {
@@ -3263,6 +3255,8 @@ public enum LLVMCodeGenError: Error, CustomStringConvertible {
             return "failed to compile C runtime"
         case .linkFailed:
             return "failed to link native binary"
+        case .clangNotFound:
+            return "clang not found. Install LLVM/Clang and ensure it is on your PATH"
         }
     }
 }

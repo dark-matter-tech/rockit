@@ -655,7 +655,7 @@ func replCommand() {
 
 func initCommand(name: String) {
     let fm = FileManager.default
-    let projectDir = fm.currentDirectoryPath + "/" + name
+    let projectDir = Platform.pathJoin(fm.currentDirectoryPath, name)
 
     guard !fm.fileExists(atPath: projectDir) else {
         print("error: directory '\(name)' already exists")
@@ -663,8 +663,8 @@ func initCommand(name: String) {
     }
 
     do {
-        try fm.createDirectory(atPath: projectDir + "/src", withIntermediateDirectories: true)
-        try fm.createDirectory(atPath: projectDir + "/tests", withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: Platform.pathJoin(projectDir, "src"), withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: Platform.pathJoin(projectDir, "tests"), withIntermediateDirectories: true)
 
         // fuel.toml
         let fuelToml = """
@@ -674,7 +674,7 @@ func initCommand(name: String) {
 
         [dependencies]
         """
-        try fuelToml.write(toFile: projectDir + "/fuel.toml", atomically: true, encoding: .utf8)
+        try fuelToml.write(toFile: Platform.pathJoin(projectDir, "fuel.toml"), atomically: true, encoding: .utf8)
 
         // src/main.rok
         let mainRok = """
@@ -682,7 +682,7 @@ func initCommand(name: String) {
             println("Hello, Rockit!")
         }
         """
-        try mainRok.write(toFile: projectDir + "/src/main.rok", atomically: true, encoding: .utf8)
+        try mainRok.write(toFile: Platform.pathJoin(projectDir, "src", "main.rok"), atomically: true, encoding: .utf8)
 
         // tests/test_main.rok
         let testRok = """
@@ -699,7 +699,7 @@ func initCommand(name: String) {
             assertFalse(1 == 2)
         }
         """
-        try testRok.write(toFile: projectDir + "/tests/test_main.rok", atomically: true, encoding: .utf8)
+        try testRok.write(toFile: Platform.pathJoin(projectDir, "tests", "test_main.rok"), atomically: true, encoding: .utf8)
 
         print("Created new Rockit project '\(name)'")
         print("  \(name)/fuel.toml")
@@ -729,7 +729,7 @@ func testCommand(file: String?) {
         testFiles = [file]
     } else {
         // Find all .rok files in tests/ directory
-        let testsDir = fm.currentDirectoryPath + "/tests"
+        let testsDir = Platform.pathJoin(fm.currentDirectoryPath, "tests")
         guard fm.fileExists(atPath: testsDir) else {
             print("error: no tests/ directory found")
             exit(1)
@@ -737,7 +737,7 @@ func testCommand(file: String?) {
         if let items = try? fm.contentsOfDirectory(atPath: testsDir) {
             testFiles = items.filter { $0.hasSuffix(".rok") }
                              .sorted()
-                             .map { testsDir + "/" + $0 }
+                             .map { Platform.pathJoin(testsDir, $0) }
         }
         if testFiles.isEmpty {
             print("No test files found in tests/")
@@ -928,12 +928,13 @@ func buildNativeCommand(file: String, dumpLLVM: Bool) {
         exit(1)
     }
 
-    let outputPath: String
+    let basePath: String
     if file.hasSuffix(".rok") {
-        outputPath = String(file.dropLast(4))
+        basePath = String(file.dropLast(4))
     } else {
-        outputPath = file + ".native"
+        basePath = file + ".native"
     }
+    let outputPath = Platform.withExeExtension(basePath)
 
     // Find Runtime/ directory relative to the executable or working directory
     let runtimeDir = findRuntimeDir()
@@ -1012,7 +1013,7 @@ func runNativeCommand(file: String) {
         exit(1)
     }
 
-    let outputPath = NSTemporaryDirectory() + "rockit_native_\(ProcessInfo.processInfo.processIdentifier)"
+    let outputPath = Platform.tempFilePath("rockit_native_\(ProcessInfo.processInfo.processIdentifier)")
     let runtimeDir = findRuntimeDir()
 
     do {
@@ -1045,37 +1046,38 @@ func runNativeCommand(file: String) {
 /// Find the Runtime/ directory containing C runtime source files.
 func findRuntimeDir() -> String {
     let fm = FileManager.default
+    let runtimeFile = "rockit_runtime.c"
 
     // Check ROCKIT_RUNTIME_DIR environment variable first
     if let envDir = ProcessInfo.processInfo.environment["ROCKIT_RUNTIME_DIR"],
-       fm.fileExists(atPath: envDir + "/rockit_runtime.c") {
+       fm.fileExists(atPath: Platform.pathJoin(envDir, runtimeFile)) {
         return envDir
     }
 
     // Try relative to current working directory
     let cwd = fm.currentDirectoryPath
-    let cwdRuntime = cwd + "/Runtime"
-    if fm.fileExists(atPath: cwdRuntime + "/rockit_runtime.c") {
+    let cwdRuntime = Platform.pathJoin(cwd, "Runtime")
+    if fm.fileExists(atPath: Platform.pathJoin(cwdRuntime, runtimeFile)) {
         return cwdRuntime
     }
 
     // Try relative to the executable
     let execPath = CommandLine.arguments[0]
     let execDir = (execPath as NSString).deletingLastPathComponent
-    let execRuntime = execDir + "/../Runtime"
-    if fm.fileExists(atPath: execRuntime + "/rockit_runtime.c") {
+    let execRuntime = Platform.pathJoin(execDir, "..", "Runtime")
+    if fm.fileExists(atPath: Platform.pathJoin(execRuntime, runtimeFile)) {
         return execRuntime
     }
 
     // Try the project source tree (common during development)
-    let devRuntime = execDir + "/../../Runtime"
-    if fm.fileExists(atPath: devRuntime + "/rockit_runtime.c") {
+    let devRuntime = Platform.pathJoin(execDir, "..", "..", "Runtime")
+    if fm.fileExists(atPath: Platform.pathJoin(devRuntime, runtimeFile)) {
         return devRuntime
     }
 
-    // Try installed location (/usr/local/lib/rockit/runtime/)
-    let installedRuntime = execDir + "/../lib/rockit/runtime"
-    if fm.fileExists(atPath: installedRuntime + "/rockit_runtime.c") {
+    // Try installed location
+    let installedRuntime = Platform.pathJoin(execDir, "..", "lib", "rockit", "runtime")
+    if fm.fileExists(atPath: Platform.pathJoin(installedRuntime, runtimeFile)) {
         return installedRuntime
     }
 

@@ -161,6 +161,10 @@ int64_t rockit_exc_get(void);      // Get the thrown exception value
 
 void rockit_panic(const char* message);
 
+// ── File Operations ─────────────────────────────────────────────────────
+
+int64_t fileDelete(RockitString* path);
+
 // ── Actor Runtime (Stage 0 — synchronous) ──────────────────────────────
 
 /// In Stage 0, actors are implemented as regular objects.

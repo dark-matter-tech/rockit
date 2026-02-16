@@ -982,6 +982,13 @@ int64_t systemExec(RockitString* cmd) {
     return (int64_t)system(cmd->data);
 }
 
+// -- File deletion (cross-platform, replaces shell `rm -f`) --
+
+int64_t fileDelete(RockitString* path) {
+    if (!path) return 0;
+    return remove(path->data) == 0 ? 1 : 0;
+}
+
 // -- toString wrapper (used by Stage 1) --
 
 RockitString* toString(int64_t value) {

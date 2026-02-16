@@ -6,8 +6,10 @@ import PackageDescription
 
 let package = Package(
     name: "RockitCompiler",
+    // platforms is only meaningful for Apple targets.
+    // On Linux and Windows, SPM ignores this field.
     platforms: [
-        .macOS(.v14)
+        .macOS(.v13)
     ],
     products: [
         .executable(name: "rockit", targets: ["RockitCLI"]),

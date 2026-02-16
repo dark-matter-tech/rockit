@@ -646,11 +646,27 @@ public final class BuiltinRegistry {
                 )
             }
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", cmd]
+            process.executableURL = URL(fileURLWithPath: Platform.shellExecutable)
+            process.arguments = [Platform.shellFlag, cmd]
             try process.run()
             process.waitUntilExit()
             return .int(Int64(process.terminationStatus))
+        }
+
+        register(name: "fileDelete") { args in
+            guard case .string(let path) = args.first else {
+                throw VMError.typeMismatch(
+                    expected: "String",
+                    actual: args.first?.typeName ?? "nothing",
+                    operation: "fileDelete"
+                )
+            }
+            let success = FileManager.default.isDeletableFile(atPath: path)
+            if success {
+                try? FileManager.default.removeItem(atPath: path)
+                return .int(1)
+            }
+            return .int(0)
         }
     }
 
