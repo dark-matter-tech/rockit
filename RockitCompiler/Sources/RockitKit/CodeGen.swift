@@ -264,6 +264,8 @@ public final class CodeGen {
             return 1   // op(1)
         case .awaitCall(_, _, let args):
             return 7 + 2 * args.count  // same layout as call
+        case .concurrentBegin, .concurrentEnd:
+            return 3  // op(1) + scopeId(2)
         }
     }
 
@@ -514,6 +516,14 @@ public final class CodeGen {
             for arg in args {
                 emitter.emitUInt16(resolveRegister(arg))
             }
+
+        case .concurrentBegin(let scopeId):
+            emitter.emitOpcode(.concurrentBegin)
+            emitter.emitUInt16(pool.intern(scopeId, kind: .string))
+
+        case .concurrentEnd(let scopeId):
+            emitter.emitOpcode(.concurrentEnd)
+            emitter.emitUInt16(pool.intern(scopeId, kind: .string))
         }
     }
 
@@ -953,6 +963,11 @@ public final class CodeGen {
                 let funcName = Int(funcIdx) < pool.count ? pool[Int(funcIdx)].value : "?\(funcIdx)"
                 let destStr = dest == CodeGen.noDestSentinel ? "_" : "r\(dest)"
                 lines.append("  \(offset): \(op) \(destStr), \(funcName)(\(argRegs.joined(separator: ", ")))")
+
+            case .concurrentBegin, .concurrentEnd:
+                let scopeIdx = readUInt16(bytes, at: &pc)
+                let scopeName = Int(scopeIdx) < pool.count ? pool[Int(scopeIdx)].value : "?\(scopeIdx)"
+                lines.append("  \(offset): \(op) \(scopeName)")
             }
         }
 

@@ -36,6 +36,12 @@ public final class TypeChecker {
     private var varargFunctions: [String: Int] = [:]
     /// Tracks the current enclosing actor name (nil when outside an actor)
     private var currentActorName: String? = nil
+    /// Tracks the current enclosing class name (nil when outside a class)
+    private var currentClassName: String? = nil
+    /// Tracks whether we are inside a suspend or async function (or concurrent block)
+    private var inSuspendContext: Bool = false
+    /// Names of functions declared with `suspend` or `async` modifier
+    private var suspendFunctions: Set<String> = []
 
     public init(ast: SourceFile, diagnostics: DiagnosticEngine) {
         self.ast = ast
@@ -122,6 +128,10 @@ public final class TypeChecker {
         }
         let funcType = Type.function(parameterTypes: paramTypes, returnType: returnType)
         let arity = paramTypes.count
+        // Track suspend/async functions
+        if f.modifiers.contains(.suspend) || f.modifiers.contains(.async) {
+            suspendFunctions.insert(f.name)
+        }
         // Track vararg parameter index
         if let varargIdx = f.parameters.firstIndex(where: { $0.isVararg }) {
             varargFunctions[f.name] = varargIdx
@@ -505,6 +515,12 @@ public final class TypeChecker {
     private func checkFunction(_ f: FunctionDecl) {
         symbolTable.pushScope()
 
+        // Track suspend context
+        let previousSuspendContext = inSuspendContext
+        if f.modifiers.contains(.suspend) || f.modifiers.contains(.async) {
+            inSuspendContext = true
+        }
+
         // Register type parameters
         for tp in f.typeParameters {
             let bound: Type? = tp.upperBound.map { resolver.resolve($0) }
@@ -546,6 +562,7 @@ public final class TypeChecker {
             }
         }
 
+        inSuspendContext = previousSuspendContext
         symbolTable.popScope()
     }
 
@@ -580,6 +597,8 @@ public final class TypeChecker {
     }
 
     private func checkClass(_ c: ClassDecl) {
+        let previousClass = currentClassName
+        currentClassName = c.name
         symbolTable.pushScope()
 
         // Register type parameters
@@ -644,6 +663,7 @@ public final class TypeChecker {
         }
 
         symbolTable.popScope()
+        currentClassName = previousClass
     }
 
     private func checkInterface(_ i: InterfaceDecl) {
@@ -896,12 +916,22 @@ public final class TypeChecker {
             diagnostics.error("unresolved reference '\(name)'", at: span.start)
             return .error
 
-        case .this:
-            // In class context, `this` refers to the enclosing class type
-            // For Stage 0, return .error if we can't determine it
+        case .this(let span):
+            if let className = currentClassName {
+                return .classType(name: className, typeArguments: [])
+            } else if let actorName = currentActorName {
+                return .actorType(name: actorName)
+            }
+            diagnostics.error("'this' used outside of a class or actor", at: span.start)
             return .error
 
-        case .super:
+        case .super(let span):
+            if let className = currentClassName,
+               let typeInfo = symbolTable.lookupType(className),
+               let parent = typeInfo.superTypes.first {
+                return .classType(name: parent, typeArguments: [])
+            }
+            diagnostics.error("'super' used outside of a class", at: span.start)
             return .error
 
         // Binary
@@ -971,17 +1001,21 @@ public final class TypeChecker {
             }
             return exprType.unwrapNullable
 
-        case .awaitExpr(let expr, _):
-            // await unwraps the result of an async expression
-            // For Stage 0, we just check the inner expression
+        case .awaitExpr(let expr, let span):
+            // await must be inside a suspend/async function or concurrent block
+            if !inSuspendContext {
+                diagnostics.error("'await' can only be used inside a suspend or async function, or a concurrent block", at: span.start)
+            }
             return checkExpression(expr)
 
         case .concurrentBlock(let body, _):
-            // concurrent { ... } executes statements concurrently
-            // For Stage 0, type check the body; the block yields Unit
+            // concurrent { ... } creates a suspend context for its body
+            let previousSuspendContext = inSuspendContext
+            inSuspendContext = true
             for stmt in body {
                 checkStatement(stmt)
             }
+            inSuspendContext = previousSuspendContext
             return .unit
 
         // Elvis
@@ -1165,6 +1199,11 @@ public final class TypeChecker {
 
     private func checkCall(callee: Expression, arguments: [CallArgument], trailingLambda: LambdaExpr?, span: SourceSpan) -> Type {
         let calleeType = checkExpression(callee)
+
+        // Warn if calling a suspend function without await
+        if case .identifier(let name, _) = callee, suspendFunctions.contains(name), !inSuspendContext {
+            diagnostics.warning("call to suspend function '\(name)' without 'await'", at: span.start)
+        }
 
         // Check arguments and collect their types
         var argTypes: [Type] = []

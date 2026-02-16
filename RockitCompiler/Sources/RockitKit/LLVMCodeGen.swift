@@ -1099,6 +1099,8 @@ public final class LLVMCodeGen {
                     break
                 case .awaitCall(let d, _, _):
                     if let d = d { tempTypes[d] = "i64" }
+                case .concurrentBegin, .concurrentEnd:
+                    break
                 }
             }
         }
@@ -1473,6 +1475,10 @@ public final class LLVMCodeGen {
         case .awaitCall(let dest, let function, let args):
             // In native codegen, awaitCall is a synchronous call (Stage 0)
             return emitCall(dest: dest, function: function, args: args)
+
+        case .concurrentBegin, .concurrentEnd:
+            // In native codegen, concurrent blocks are no-ops (Stage 0)
+            return []
         }
     }
 
@@ -3228,7 +3234,11 @@ extension LLVMCodeGen {
         let finalOutputPath = Platform.withExeExtension(outputPath)
         let link = Process()
         link.executableURL = URL(fileURLWithPath: clangPath)
-        link.arguments = ["-O1", llPath, runtimeObjPath, "-o", finalOutputPath]
+        var linkArgs = ["-O1", llPath, runtimeObjPath, "-o", finalOutputPath]
+        #if os(Linux)
+        linkArgs += ["-lm"]  // Linux requires explicit libm for math functions
+        #endif
+        link.arguments = linkArgs
         try link.run()
         link.waitUntilExit()
         guard link.terminationStatus == 0 else {

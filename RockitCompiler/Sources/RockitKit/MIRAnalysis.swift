@@ -64,6 +64,8 @@ extension MIRInstruction {
             return nil
         case .awaitCall(let d, _, _):
             return d
+        case .concurrentBegin, .concurrentEnd:
+            return nil
         }
     }
 
@@ -124,6 +126,8 @@ extension MIRInstruction {
             return []
         case .awaitCall(_, _, let args):
             return args
+        case .concurrentBegin, .concurrentEnd:
+            return []
         }
     }
 
@@ -139,6 +143,8 @@ extension MIRInstruction {
         case .nullCheck:
             return true
         case .tryBegin, .tryEnd:
+            return true
+        case .concurrentBegin, .concurrentEnd:
             return true
         default:
             return false

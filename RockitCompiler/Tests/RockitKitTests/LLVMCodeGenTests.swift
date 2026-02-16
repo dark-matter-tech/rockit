@@ -619,10 +619,10 @@ final class LLVMCodeGenTests: XCTestCase {
 
     func testAwaitParsesAsPassthrough() {
         let ir = emitLLVM("""
-        fun compute(): Int {
+        suspend fun compute(): Int {
             return 42
         }
-        fun main(): Unit {
+        suspend fun main(): Unit {
             val result = await compute()
             println(result)
         }

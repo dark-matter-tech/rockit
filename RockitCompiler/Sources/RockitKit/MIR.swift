@@ -165,6 +165,8 @@ public enum MIRInstruction {
 
     // Concurrency
     case awaitCall(dest: String?, function: String, args: [String])
+    case concurrentBegin(scopeId: String)
+    case concurrentEnd(scopeId: String)
 }
 
 extension MIRInstruction: CustomStringConvertible {
@@ -252,6 +254,11 @@ extension MIRInstruction: CustomStringConvertible {
                 return "\(d) = await \(f)(\(args))"
             }
             return "await \(f)(\(args))"
+
+        case .concurrentBegin(let id):
+            return "concurrent_begin \(id)"
+        case .concurrentEnd(let id):
+            return "concurrent_end \(id)"
         }
     }
 }

@@ -71,7 +71,9 @@ public enum Opcode: UInt8 {
     case throwOp        = 0xB2
 
     // Concurrency
-    case awaitCall      = 0xC0
+    case awaitCall        = 0xC0
+    case concurrentBegin  = 0xC1
+    case concurrentEnd    = 0xC2
 
     // Terminators
     case ret            = 0xE0
@@ -124,7 +126,9 @@ extension Opcode: CustomStringConvertible {
         case .tryBegin:     return "TRY_BEGIN"
         case .tryEnd:       return "TRY_END"
         case .throwOp:      return "THROW"
-        case .awaitCall:    return "AWAIT_CALL"
+        case .awaitCall:        return "AWAIT_CALL"
+        case .concurrentBegin:  return "CONCURRENT_BEGIN"
+        case .concurrentEnd:    return "CONCURRENT_END"
         case .ret:          return "RET"
         case .retVoid:      return "RET_VOID"
         case .jump:         return "JUMP"

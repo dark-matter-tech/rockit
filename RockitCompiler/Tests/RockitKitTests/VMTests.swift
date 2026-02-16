@@ -789,4 +789,52 @@ final class VMTests: XCTestCase {
         """)
         XCTAssertEqual(output, ["Woof", "Meow"])
     }
+
+    // MARK: - Structured Concurrency Tests
+
+    func testAwaitCallReturnsValue() throws {
+        let output = try runCapturing("""
+        suspend fun compute(): Int {
+            return 42
+        }
+        suspend fun main(): Unit {
+            val result = await compute()
+            println(result)
+        }
+        """)
+        XCTAssertEqual(output, ["42"])
+    }
+
+    func testConcurrentBlockExecutesAllTasks() throws {
+        let output = try runCapturing("""
+        suspend fun taskA(): Int {
+            return 1
+        }
+        suspend fun taskB(): Int {
+            return 2
+        }
+        suspend fun main(): Unit {
+            concurrent {
+                val a = await taskA()
+                val b = await taskB()
+                println(a)
+                println(b)
+            }
+        }
+        """)
+        XCTAssertEqual(output, ["1", "2"])
+    }
+
+    func testAwaitPassthroughForNonSuspend() throws {
+        let output = try runCapturing("""
+        suspend fun double(x: Int): Int {
+            return x * 2
+        }
+        suspend fun main(): Unit {
+            val result = await double(21)
+            println(result)
+        }
+        """)
+        XCTAssertEqual(output, ["42"])
+    }
 }

@@ -58,6 +58,15 @@ public final class VM {
     /// Cooperative scheduler for structured concurrency.
     private let scheduler = Scheduler()
 
+    /// Stack of active concurrent scopes. Each scope collects spawned coroutines.
+    private var concurrentScopes: [ConcurrentScope] = []
+
+    /// A concurrent scope tracks coroutines spawned between concurrentBegin and concurrentEnd.
+    private struct ConcurrentScope {
+        let scopeIdx: UInt16
+        var spawnedCoroutines: [Coroutine] = []
+    }
+
     public init(module: BytecodeModule, config: RuntimeConfig = .default, builtins: BuiltinRegistry? = nil) {
         self.module = module
         self.config = config
@@ -511,6 +520,14 @@ public final class VM {
                     if callStack.isEmpty { return }
                     continue
 
+                case .concurrentBegin:
+                    let scopeIdx = readUInt16(bytecode, frame: frameIdx)
+                    pushConcurrentScope(scopeIdx)
+
+                case .concurrentEnd:
+                    let scopeIdx = readUInt16(bytecode, frame: frameIdx)
+                    try executeConcurrentScope(scopeIdx)
+
                 case .unreachable:
                     throw VMError.unreachable
                 } // end switch
@@ -822,6 +839,25 @@ public final class VM {
         // Mark coroutine as completed in the scheduler
         let resultVal = lastReturnValue
         scheduler.complete(coroutine, with: resultVal)
+    }
+
+    // MARK: - Concurrent Scopes
+
+    private func pushConcurrentScope(_ scopeIdx: UInt16) {
+        concurrentScopes.append(ConcurrentScope(scopeIdx: scopeIdx))
+    }
+
+    private func executeConcurrentScope(_ scopeIdx: UInt16) throws {
+        guard let scope = concurrentScopes.last, scope.scopeIdx == scopeIdx else {
+            throw VMError.invalidBytecode(detail: "concurrent scope mismatch")
+        }
+        // Execute all spawned coroutines sequentially (Stage 0 — single-threaded)
+        for coroutine in scope.spawnedCoroutines {
+            coroutine.start()
+            // The coroutine's function was already pushed onto the call stack
+            // by executeAwaitCall; here we just track them
+        }
+        concurrentScopes.removeLast()
     }
 
     // MARK: - Indirect Call

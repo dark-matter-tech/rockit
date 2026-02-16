@@ -14,7 +14,7 @@ suspend fun fetchHeader(): String {
     return "header-ok"
 }
 
-fun main(): Unit {
+suspend fun main(): Unit {
     val result = await processPayload()
     println(result)
 

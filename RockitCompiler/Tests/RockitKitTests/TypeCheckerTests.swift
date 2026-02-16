@@ -628,4 +628,84 @@ final class TypeCheckerTests: XCTestCase {
         """
         _ = checkOK(source)
     }
+
+    // MARK: - Structured Concurrency Tests
+
+    func testAwaitInsideSuspendFunctionIsOK() {
+        let source = """
+        suspend fun fetchData(): Int {
+            return 42
+        }
+        suspend fun main(): Unit {
+            val x = await fetchData()
+        }
+        """
+        _ = checkOK(source)
+    }
+
+    func testAwaitInsideAsyncFunctionIsOK() {
+        let source = """
+        async fun fetchData(): Int {
+            return 42
+        }
+        async fun main(): Unit {
+            val x = await fetchData()
+        }
+        """
+        _ = checkOK(source)
+    }
+
+    func testAwaitOutsideSuspendContextIsError() {
+        assertError("""
+        suspend fun fetchData(): Int {
+            return 42
+        }
+        fun main(): Unit {
+            val x = await fetchData()
+        }
+        """, contains: "'await' can only be used inside a suspend or async function")
+    }
+
+    func testAwaitInsideConcurrentBlockIsOK() {
+        let source = """
+        suspend fun fetchData(): Int {
+            return 42
+        }
+        fun main(): Unit {
+            concurrent {
+                val x = await fetchData()
+            }
+        }
+        """
+        _ = checkOK(source)
+    }
+
+    func testCallingSuspendFunctionWithoutAwaitWarns() {
+        let (_, diag) = typeCheck("""
+        suspend fun fetchData(): Int {
+            return 42
+        }
+        fun main(): Unit {
+            fetchData()
+        }
+        """)
+        let warnings = diag.diagnostics.filter { $0.severity == .warning }
+        XCTAssertTrue(
+            warnings.contains(where: { $0.message.contains("without 'await'") }),
+            "Expected warning about calling suspend function without await, got: \(warnings.map { $0.message })"
+        )
+    }
+
+    func testSuspendFunctionCallingSuspendIsOK() {
+        let source = """
+        suspend fun inner(): Int {
+            return 42
+        }
+        suspend fun outer(): Int {
+            val x = await inner()
+            return x
+        }
+        """
+        _ = checkOK(source)
+    }
 }

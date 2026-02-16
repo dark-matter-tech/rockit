@@ -31,6 +31,9 @@ public final class MIRLowering {
     /// Counter for unique lambda names
     private var lambdaCounter: Int = 0
 
+    /// Counter for unique concurrent scope IDs
+    private var concurrentScopeCounter: Int = 0
+
     /// Interface declarations indexed by name (for default method inheritance)
     private var interfaceDecls: [String: InterfaceDecl] = [:]
 
@@ -1190,10 +1193,13 @@ public final class MIRLowering {
             return lowerAwaitExpr(expr: expr)
 
         case .concurrentBlock(let body, _):
-            // Stage 0: execute body statements sequentially
+            let scopeId = "concurrent_\(concurrentScopeCounter)"
+            concurrentScopeCounter += 1
+            builder.emit(.concurrentBegin(scopeId: scopeId))
             for stmt in body {
                 lowerStatement(stmt)
             }
+            builder.emit(.concurrentEnd(scopeId: scopeId))
             return builder.emitConstNull()
 
         // Elvis
