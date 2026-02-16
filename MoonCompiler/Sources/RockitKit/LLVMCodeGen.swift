@@ -1055,16 +1055,36 @@ public final class LLVMCodeGen {
                             tempTypes[d] = "i64"
                         }
                     }
-                case .getField(let d, _, let fieldName):
-                    // Try to infer field type from type declarations
-                    // For now default to i64 (most fields are Int)
+                case .getField(let d, let obj, let fieldName):
+                    // Try to infer field type from the object's type declaration
                     var resolved = false
-                    for (_, decl) in typeDecls {
-                        if let field = decl.fields.first(where: { $0.0 == fieldName }) {
+                    // First, try to determine the object's type from its temp type
+                    if let objType = tempTypes[obj], objType == "ptr" {
+                        // If the object is a method (Name.method), use the class name
+                        let objClassName: String?
+                        if obj.hasPrefix("param.this") || obj == "this" {
+                            objClassName = function.name.contains(".") ?
+                                String(function.name.split(separator: ".").first!) : nil
+                        } else {
+                            // Check if obj was created by newObject
+                            objClassName = nil
+                        }
+                        if let cn = objClassName, let decl = typeDecls[cn],
+                           let field = decl.fields.first(where: { $0.0 == fieldName }) {
                             let lt = llvmType(field.1)
                             tempTypes[d] = lt != "void" ? lt : "i64"
                             resolved = true
-                            break
+                        }
+                    }
+                    // Fallback: search all type declarations
+                    if !resolved {
+                        for (_, decl) in typeDecls {
+                            if let field = decl.fields.first(where: { $0.0 == fieldName }) {
+                                let lt = llvmType(field.1)
+                                tempTypes[d] = lt != "void" ? lt : "i64"
+                                resolved = true
+                                break
+                            }
                         }
                     }
                     if !resolved { tempTypes[d] = "i64" }
@@ -1994,6 +2014,9 @@ public final class LLVMCodeGen {
             return .list
         case "rockit_map_create", "mapCreate":
             return .map
+        // Collection get ops return borrowed values that may be heap objects
+        case "listGet", "mapGet", "listRemoveAt", "mapKeys":
+            return .unknown
         default:
             return nil
         }
@@ -2036,6 +2059,10 @@ public final class LLVMCodeGen {
                     }
                     // mapOf/mutableMapOf → emitMapOf → map creation
                     if callee == "mapOf" || callee == "mutableMapOf" {
+                        dests.insert(dest)
+                    }
+                    // Collection get ops return borrowed references that may be heap objects
+                    if callee == "listGet" || callee == "mapGet" || callee == "listRemoveAt" || callee == "mapKeys" {
                         dests.insert(dest)
                     }
                     // toString → may or may not track depending on arg type at emission time

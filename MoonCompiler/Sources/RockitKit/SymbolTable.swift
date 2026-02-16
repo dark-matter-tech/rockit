@@ -38,6 +38,8 @@ public struct Symbol {
 public struct TypeDeclInfo {
     public let name: String
     public let typeParameters: [String]
+    /// Variance annotation per type parameter (nil = invariant, .out = covariant, .in = contravariant)
+    public let typeParameterVariances: [Variance?]
     public var sealedSubclasses: [String]
     public var enumEntries: [String]
     public var members: [Symbol]
@@ -45,11 +47,13 @@ public struct TypeDeclInfo {
     public var defaultMethods: Set<String>
 
     public init(name: String, typeParameters: [String] = [],
+                typeParameterVariances: [Variance?] = [],
                 sealedSubclasses: [String] = [], enumEntries: [String] = [],
                 members: [Symbol] = [], superTypes: [String] = [],
                 defaultMethods: Set<String> = []) {
         self.name = name
         self.typeParameters = typeParameters
+        self.typeParameterVariances = typeParameterVariances
         self.sealedSubclasses = sealedSubclasses
         self.enumEntries = enumEntries
         self.members = members

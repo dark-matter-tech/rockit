@@ -172,6 +172,7 @@ public final class TypeChecker {
     private func gatherClass(_ c: ClassDecl) {
         // Register the class as a type declaration
         let typeParamNames = c.typeParameters.map { $0.name }
+        let typeParamVariances = c.typeParameters.map { $0.variance }
         let superTypeNames = c.superTypes.compactMap { superType -> String? in
             if case .simple(let name, _, _) = superType { return name }
             return nil
@@ -180,6 +181,7 @@ public final class TypeChecker {
         var info = TypeDeclInfo(
             name: c.name,
             typeParameters: typeParamNames,
+            typeParameterVariances: typeParamVariances,
             superTypes: superTypeNames
         )
 
@@ -272,6 +274,7 @@ public final class TypeChecker {
 
     private func gatherInterface(_ i: InterfaceDecl) {
         let typeParamNames = i.typeParameters.map { $0.name }
+        let typeParamVariances = i.typeParameters.map { $0.variance }
         let superTypeNames = i.superTypes.compactMap { st -> String? in
             if case .simple(let name, _, _) = st { return name }
             return nil
@@ -280,6 +283,7 @@ public final class TypeChecker {
         var info = TypeDeclInfo(
             name: i.name,
             typeParameters: typeParamNames,
+            typeParameterVariances: typeParamVariances,
             superTypes: superTypeNames
         )
 
@@ -1148,9 +1152,14 @@ public final class TypeChecker {
             argTypes.append(checkExpression(arg.value))
         }
 
-        // Check trailing lambda
+        // Check trailing lambda with context inference from callee's last parameter type
         if let lambda = trailingLambda {
-            let _ = checkLambda(lambda)
+            if case .function(let paramTypes, _) = calleeType,
+               let lastParamType = paramTypes.last {
+                let _ = checkLambda(lambda, expectedType: lastParamType)
+            } else {
+                let _ = checkLambda(lambda)
+            }
         }
 
         if calleeType.isError { return .error }
@@ -1165,7 +1174,7 @@ public final class TypeChecker {
             }
             // Substitute type parameters if the return type contains them
             if returnType.isTypeParameter {
-                let substituted = substituteTypeParams(paramTypes: paramTypes, argTypes: argTypes, returnType: returnType)
+                let substituted = substituteTypeParams(paramTypes: paramTypes, argTypes: argTypes, returnType: returnType, span: span)
                 return substituted
             }
             return returnType
@@ -1193,14 +1202,54 @@ public final class TypeChecker {
 
     /// Build a type parameter binding map by matching param types to arg types,
     /// then substitute in the return type.
-    private func substituteTypeParams(paramTypes: [Type], argTypes: [Type], returnType: Type) -> Type {
+    /// When `span` is provided, emits diagnostics for bound violations.
+    private func substituteTypeParams(paramTypes: [Type], argTypes: [Type], returnType: Type, span: SourceSpan? = nil) -> Type {
         var bindings: [String: Type] = [:]
         for (paramType, argType) in zip(paramTypes, argTypes) {
             if case .typeParameter(let name, _) = paramType, !argType.isError {
                 bindings[name] = argType
             }
         }
+        // Task 5: Verify each concrete type satisfies the type parameter's upper bound
+        if let span = span {
+            for (paramType, _) in zip(paramTypes, argTypes) {
+                if case .typeParameter(let name, let bound) = paramType,
+                   let bound = bound,
+                   let concrete = bindings[name],
+                   !concrete.isError {
+                    if !satisfiesBound(concrete: concrete, bound: bound) {
+                        diagnostics.error(
+                            "type '\(concrete)' does not satisfy bound '\(bound)' for type parameter '\(name)'",
+                            at: span.start
+                        )
+                    }
+                }
+            }
+        }
         return substitute(returnType, bindings: bindings)
+    }
+
+    /// Check if a concrete type satisfies an upper bound constraint.
+    /// For example, if bound is `Comparable`, checks that concrete implements `Comparable`.
+    private func satisfiesBound(concrete: Type, bound: Type) -> Bool {
+        if concrete == bound { return true }
+        if concrete.isError || bound.isError { return true }
+        // Type parameters satisfy any bound (deferred checking)
+        if concrete.isTypeParameter { return true }
+        // Check if the concrete type's supertypes include the bound
+        if let boundName = bound.typeName,
+           let concreteName = concrete.typeName,
+           let typeInfo = symbolTable.lookupType(concreteName) {
+            if typeInfo.superTypes.contains(boundName) { return true }
+            // Walk the supertype chain transitively
+            for superName in typeInfo.superTypes {
+                let superType = Type.classType(name: superName, typeArguments: [])
+                if satisfiesBound(concrete: superType, bound: bound) { return true }
+            }
+        }
+        // Numeric types satisfy numeric bounds
+        if concrete.isNumeric && bound.isNumeric { return true }
+        return false
     }
 
     /// Substitute type parameters in a type using a binding map.
@@ -1439,28 +1488,56 @@ public final class TypeChecker {
 
     // MARK: - Lambda
 
+    /// Check a lambda expression, optionally using an expected function type
+    /// to infer parameter types (Task 7: closure context inference).
     @discardableResult
-    private func checkLambda(_ le: LambdaExpr) -> Type {
+    private func checkLambda(_ le: LambdaExpr, expectedType: Type? = nil) -> Type {
         symbolTable.pushScope()
 
-        let paramTypes: [Type] = le.parameters.map { param in
-            let type: Type = param.type.map { resolver.resolve($0) } ?? .error
+        // Task 7: Infer parameter types from expected function type
+        let expectedParams: [Type]?
+        if let expectedType = expectedType, case .function(let ep, _) = expectedType {
+            expectedParams = ep
+        } else {
+            expectedParams = nil
+        }
+
+        let paramTypes: [Type] = le.parameters.enumerated().map { (i, param) in
+            let type: Type
+            if let typeNode = param.type {
+                type = resolver.resolve(typeNode)
+            } else if let ep = expectedParams, i < ep.count {
+                type = ep[i]
+            } else {
+                type = .error
+            }
             symbolTable.define(Symbol(name: param.name, type: type, kind: .parameter, span: param.span))
             return type
         }
 
-        for stmt in le.body {
-            checkStatement(stmt)
+        // Task 6: Infer return type from last expression in body
+        var returnType: Type = .unit
+        if !le.body.isEmpty {
+            for stmt in le.body.dropLast() {
+                checkStatement(stmt)
+            }
+            if let last = le.body.last {
+                if case .expression(let expr) = last {
+                    returnType = checkExpression(expr)
+                } else {
+                    checkStatement(last)
+                }
+            }
         }
 
         symbolTable.popScope()
 
-        // If parameters have no types, this is an untyped lambda — return .error for now
+        // If parameters have no types and couldn't be inferred, return .error
         if paramTypes.contains(where: { $0.isError }) && !le.parameters.isEmpty {
             return .error
         }
 
-        return .function(parameterTypes: paramTypes, returnType: .unit)
+        return .function(parameterTypes: paramTypes, returnType: returnType)
     }
 
     // MARK: - Elvis
@@ -1502,6 +1579,43 @@ public final class TypeChecker {
         // Nullable compatibility: T is compatible with T?
         if case .nullable(let inner) = target {
             return typesCompatible(source: source, target: inner)
+        }
+
+        // Task 8: Variance-aware generic type compatibility
+        // List<Dog> assignable to List<Animal> when out variance
+        if case .classType(let sName, let sArgs) = source,
+           case .classType(let tName, let tArgs) = target,
+           sName == tName, sArgs.count == tArgs.count, !sArgs.isEmpty {
+            if let typeInfo = symbolTable.lookupType(sName) {
+                for (i, (sArg, tArg)) in zip(sArgs, tArgs).enumerated() {
+                    if sArg == tArg { continue }
+                    let variance: Variance? = i < typeInfo.typeParameterVariances.count
+                        ? typeInfo.typeParameterVariances[i] : nil
+                    switch variance {
+                    case .out:
+                        // Covariant: source arg must be subtype of target arg
+                        if !typesCompatible(source: sArg, target: tArg) { return false }
+                    case .in:
+                        // Contravariant: target arg must be subtype of source arg
+                        if !typesCompatible(source: tArg, target: sArg) { return false }
+                    case nil:
+                        // Invariant: must be exact match
+                        return false
+                    }
+                }
+                return true
+            }
+        }
+
+        // Subtype compatibility: Dog assignable to Animal (via supertype chain)
+        if let sourceName = source.typeName,
+           let targetName = target.typeName,
+           let sourceInfo = symbolTable.lookupType(sourceName) {
+            if sourceInfo.superTypes.contains(targetName) { return true }
+            for superName in sourceInfo.superTypes {
+                let superType = Type.classType(name: superName, typeArguments: [])
+                if typesCompatible(source: superType, target: target) { return true }
+            }
         }
 
         return false
