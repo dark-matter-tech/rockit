@@ -25,11 +25,42 @@
         </value>
     </option>
 
-    <!-- Literal keywords: true, false, null — blue, bold -->
-    <option name="ROCKIT_LITERAL_KEYWORD">
+    <!-- Boolean literals: true, false — orange/amber, bold -->
+    <option name="ROCKIT_BOOLEAN_LITERAL">
         <value>
-            <option name="FOREGROUND" value="0033b3"/>
+            <option name="FOREGROUND" value="e57c00"/>
             <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- Null literal — red, bold -->
+    <option name="ROCKIT_NULL_LITERAL">
+        <value>
+            <option name="FOREGROUND" value="c62828"/>
+            <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- Optional operators: ?, ?., ?: — dark cyan, bold -->
+    <option name="ROCKIT_OPTIONAL_OPERATOR">
+        <value>
+            <option name="FOREGROUND" value="00838f"/>
+            <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- Force unwrap: !! — red, bold -->
+    <option name="ROCKIT_FORCE_UNWRAP">
+        <value>
+            <option name="FOREGROUND" value="c62828"/>
+            <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- Boolean-prefixed identifiers: isActive, hasAccess, etc. — amber -->
+    <option name="ROCKIT_BOOLEAN_IDENTIFIER">
+        <value>
+            <option name="FOREGROUND" value="e57c00"/>
         </value>
     </option>
 

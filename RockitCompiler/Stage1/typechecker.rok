@@ -1174,3 +1174,4 @@ fun typeCheckWithFile(ast: Map, sourceFile: String): Map {
     tcCheckBodies(tc)
     return tc
 }
+

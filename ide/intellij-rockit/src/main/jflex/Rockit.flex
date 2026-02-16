@@ -16,6 +16,20 @@ import static com.intellij.psi.TokenType.WHITE_SPACE;
 
 %{
     private int commentDepth = 0;
+    private int interpBraceDepth = 0;
+    private int interpReturnState = YYINITIAL;
+
+    private static final String[] BOOL_PREFIXES = {"is", "has", "can", "should", "was", "will", "did", "does"};
+
+    private IElementType identifierOrBoolean() {
+        String s = yytext().toString();
+        for (String p : BOOL_PREFIXES) {
+            if (s.length() > p.length() && s.startsWith(p) && Character.isUpperCase(s.charAt(p.length()))) {
+                return BOOLEAN_IDENTIFIER;
+            }
+        }
+        return IDENTIFIER;
+    }
 %}
 
 // Helpers
@@ -36,18 +50,18 @@ FLOAT_EXP      = {DEC_INT} [eE] [+-]? {DEC_INT}
 
 IDENTIFIER     = {LETTER} {ID_CHAR}*
 
-%state STRING MULTILINE_STRING BLOCK_COMMENT_STATE
+%state STRING MULTILINE_STRING BLOCK_COMMENT_STATE INTERP_ID INTERP_EXPR
 
 %%
 
+// === INTERP_EXPR-specific: brace depth tracking (must come before shared rules) ===
+<INTERP_EXPR> {
+    "{"                         { interpBraceDepth++; return LBRACE; }
+    "}"                         { interpBraceDepth--; if (interpBraceDepth == 0) { yybegin(interpReturnState); return STRING_INTERPOLATION; } return RBRACE; }
+}
+
+// === YYINITIAL-specific: string/comment starts, braces without depth tracking ===
 <YYINITIAL> {
-    // Whitespace
-    {WHITE}+                    { return WHITE_SPACE; }
-    {NEWLINE}                   { return NEWLINE; }
-
-    // Line comments
-    "//" [^\r\n]*               { return LINE_COMMENT; }
-
     // Block comments (nestable)
     "/*"                        { commentDepth = 1; yybegin(BLOCK_COMMENT_STATE); }
 
@@ -56,6 +70,20 @@ IDENTIFIER     = {LETTER} {ID_CHAR}*
 
     // Single-line strings
     \"                          { yybegin(STRING); }
+
+    // Braces (no depth tracking at top level)
+    "{"                         { return LBRACE; }
+    "}"                         { return RBRACE; }
+}
+
+// === Shared rules for YYINITIAL and INTERP_EXPR ===
+<YYINITIAL, INTERP_EXPR> {
+    // Whitespace
+    {WHITE}+                    { return WHITE_SPACE; }
+    {NEWLINE}                   { return NEWLINE; }
+
+    // Line comments
+    "//" [^\r\n]*               { return LINE_COMMENT; }
 
     // Keywords — declaration
     "fun"                       { return KW_FUN; }
@@ -173,8 +201,6 @@ IDENTIFIER     = {LETTER} {ID_CHAR}*
     ";"                         { return SEMICOLON; }
     "("                         { return LPAREN; }
     ")"                         { return RPAREN; }
-    "{"                         { return LBRACE; }
-    "}"                         { return RBRACE; }
     "["                         { return LBRACKET; }
     "]"                         { return RBRACKET; }
     "@"                         { return AT; }
@@ -203,34 +229,43 @@ IDENTIFIER     = {LETTER} {ID_CHAR}*
                                 { return BUILTIN_FUNCTION; }
 
     // Identifiers (must come after keywords and built-in types)
-    {IDENTIFIER}                { return IDENTIFIER; }
+    // Boolean-prefixed identifiers (is..., has..., can..., etc.) detected via Java code
+    {IDENTIFIER}                { return identifierOrBoolean(); }
 
     // Fallback
     [^]                         { return BAD_CHARACTER; }
 }
 
+// === INTERP_ID: lex one identifier after $, then return to string state ===
+<INTERP_ID> {
+    {IDENTIFIER}                { yybegin(interpReturnState); return identifierOrBoolean(); }
+    [^]                         { yypushback(1); yybegin(interpReturnState); }
+}
+
+// === STRING state ===
 <STRING> {
     \"                          { yybegin(YYINITIAL); return STRING_LITERAL; }
     \\\\ | \\\" | \\n | \\t | \\r | \\0 | \\\'
                                 { return STRING_ESCAPE; }
     "\\u{" {HEX_DIGIT}+ "}"    { return STRING_ESCAPE; }
     "\\$"                       { return STRING_ESCAPE; }
-    "${"                        { return STRING_INTERPOLATION; }
-    "$" {IDENTIFIER}            { return STRING_INTERPOLATION; }
+    "${"                        { interpBraceDepth = 1; interpReturnState = STRING; yybegin(INTERP_EXPR); return STRING_INTERPOLATION; }
+    "$" / [a-zA-Z_]             { interpReturnState = STRING; yybegin(INTERP_ID); return STRING_INTERPOLATION; }
     {NEWLINE}                   { yybegin(YYINITIAL); return BAD_CHARACTER; }
     [^\"\\\$\r\n]+              { return STRING_LITERAL; }
     "$"                         { return STRING_LITERAL; }
     [^]                         { return BAD_CHARACTER; }
 }
 
+// === MULTILINE_STRING state ===
 <MULTILINE_STRING> {
     "\"\"\""                    { yybegin(YYINITIAL); return MULTILINE_STRING_LITERAL; }
     \\\\ | \\\" | \\n | \\t | \\r | \\0 | \\\'
                                 { return STRING_ESCAPE; }
     "\\u{" {HEX_DIGIT}+ "}"    { return STRING_ESCAPE; }
     "\\$"                       { return STRING_ESCAPE; }
-    "${"                        { return STRING_INTERPOLATION; }
-    "$" {IDENTIFIER}            { return STRING_INTERPOLATION; }
+    "${"                        { interpBraceDepth = 1; interpReturnState = MULTILINE_STRING; yybegin(INTERP_EXPR); return STRING_INTERPOLATION; }
+    "$" / [a-zA-Z_]             { interpReturnState = MULTILINE_STRING; yybegin(INTERP_ID); return STRING_INTERPOLATION; }
     [^\"\\\$]+                  { return MULTILINE_STRING_LITERAL; }
     \"                          { return MULTILINE_STRING_LITERAL; }
     "$"                         { return MULTILINE_STRING_LITERAL; }
@@ -238,6 +273,7 @@ IDENTIFIER     = {LETTER} {ID_CHAR}*
     [^]                         { return BAD_CHARACTER; }
 }
 
+// === BLOCK_COMMENT state ===
 <BLOCK_COMMENT_STATE> {
     "/*"                        { commentDepth++; }
     "*/"                        { commentDepth--; if (commentDepth == 0) { yybegin(YYINITIAL); return BLOCK_COMMENT; } }

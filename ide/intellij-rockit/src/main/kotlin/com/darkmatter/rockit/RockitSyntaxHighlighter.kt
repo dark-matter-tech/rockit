@@ -46,12 +46,44 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
             attrs(JBColor(Color(0x87, 0x10, 0x94), Color(0xB3, 0x81, 0xCF)), Font.BOLD)
         )
 
-        // Literal keywords: true, false, null — bold
+        // Boolean literals: true, false — bright orange, bold
         @JvmField
         @Suppress("DEPRECATION")
-        val LITERAL_KEYWORD = createTextAttributesKey(
-            "ROCKIT_LITERAL_KEYWORD",
-            attrs(JBColor(Color(0x00, 0x33, 0xB3), Color(0xFF, 0x7A, 0xB2)), Font.BOLD)
+        val BOOLEAN_LITERAL = createTextAttributesKey(
+            "ROCKIT_BOOLEAN_LITERAL",
+            attrs(JBColor(Color(0xE5, 0x7C, 0x00), Color(0xFF, 0xA0, 0x30)), Font.BOLD)
+        )
+
+        // Null literal — red/coral, bold
+        @JvmField
+        @Suppress("DEPRECATION")
+        val NULL_LITERAL = createTextAttributesKey(
+            "ROCKIT_NULL_LITERAL",
+            attrs(JBColor(Color(0xC6, 0x28, 0x28), Color(0xFF, 0x6B, 0x68)), Font.BOLD)
+        )
+
+        // Optional operators: ?, ?., ?: — cyan, bold
+        @JvmField
+        @Suppress("DEPRECATION")
+        val OPTIONAL_OPERATOR = createTextAttributesKey(
+            "ROCKIT_OPTIONAL_OPERATOR",
+            attrs(JBColor(Color(0x00, 0x83, 0x8F), Color(0x56, 0xB6, 0xC2)), Font.BOLD)
+        )
+
+        // Force unwrap: !! — red/warning, bold
+        @JvmField
+        @Suppress("DEPRECATION")
+        val FORCE_UNWRAP = createTextAttributesKey(
+            "ROCKIT_FORCE_UNWRAP",
+            attrs(JBColor(Color(0xC6, 0x28, 0x28), Color(0xFF, 0x6B, 0x68)), Font.BOLD)
+        )
+
+        // Boolean-prefixed identifiers: isActive, hasAccess, etc. — bright orange
+        @JvmField
+        @Suppress("DEPRECATION")
+        val BOOLEAN_IDENTIFIER = createTextAttributesKey(
+            "ROCKIT_BOOLEAN_IDENTIFIER",
+            attrs(JBColor(Color(0xE5, 0x7C, 0x00), Color(0xFF, 0xA0, 0x30)))
         )
 
         // Built-in types: String, Int, Bool, etc. — teal
@@ -190,7 +222,11 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
         private val KEYWORD_KEYS = arrayOf(KEYWORD)
         private val CONTROL_KEYWORD_KEYS = arrayOf(CONTROL_KEYWORD)
         private val ROCKIT_KEYWORD_KEYS = arrayOf(ROCKIT_KEYWORD)
-        private val LITERAL_KEYWORD_KEYS = arrayOf(LITERAL_KEYWORD)
+        private val BOOLEAN_LITERAL_KEYS = arrayOf(BOOLEAN_LITERAL)
+        private val NULL_LITERAL_KEYS = arrayOf(NULL_LITERAL)
+        private val OPTIONAL_OPERATOR_KEYS = arrayOf(OPTIONAL_OPERATOR)
+        private val FORCE_UNWRAP_KEYS = arrayOf(FORCE_UNWRAP)
+        private val BOOLEAN_IDENTIFIER_KEYS = arrayOf(BOOLEAN_IDENTIFIER)
         private val BUILTIN_TYPE_KEYS = arrayOf(BUILTIN_TYPE)
         private val BUILTIN_FUNCTION_KEYS = arrayOf(BUILTIN_FUNCTION)
         private val STRING_KEYS = arrayOf(STRING)
@@ -248,9 +284,15 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
             RockitTokenTypes.KW_WEAK, RockitTokenTypes.KW_UNOWNED
             -> ROCKIT_KEYWORD_KEYS
 
-            // Literal keywords
-            RockitTokenTypes.KW_TRUE, RockitTokenTypes.KW_FALSE, RockitTokenTypes.KW_NULL
-            -> LITERAL_KEYWORD_KEYS
+            // Boolean literals
+            RockitTokenTypes.KW_TRUE, RockitTokenTypes.KW_FALSE
+            -> BOOLEAN_LITERAL_KEYS
+
+            // Null literal
+            RockitTokenTypes.KW_NULL -> NULL_LITERAL_KEYS
+
+            // Boolean-prefixed identifiers
+            RockitTokenTypes.BOOLEAN_IDENTIFIER -> BOOLEAN_IDENTIFIER_KEYS
 
             // Built-in types
             RockitTokenTypes.BUILTIN_TYPE -> BUILTIN_TYPE_KEYS
@@ -273,6 +315,14 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
             RockitTokenTypes.LINE_COMMENT -> LINE_COMMENT_KEYS
             RockitTokenTypes.BLOCK_COMMENT -> BLOCK_COMMENT_KEYS
 
+            // Optional operators — cyan
+            RockitTokenTypes.QUESTION, RockitTokenTypes.QUESTION_DOT,
+            RockitTokenTypes.ELVIS
+            -> OPTIONAL_OPERATOR_KEYS
+
+            // Force unwrap — red/warning
+            RockitTokenTypes.BANG_BANG -> FORCE_UNWRAP_KEYS
+
             // Operators
             RockitTokenTypes.PLUS, RockitTokenTypes.MINUS, RockitTokenTypes.STAR,
             RockitTokenTypes.SLASH, RockitTokenTypes.PERCENT,
@@ -282,8 +332,6 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
             RockitTokenTypes.AMP_AMP, RockitTokenTypes.PIPE_PIPE, RockitTokenTypes.BANG,
             RockitTokenTypes.EQ, RockitTokenTypes.PLUS_EQ, RockitTokenTypes.MINUS_EQ,
             RockitTokenTypes.STAR_EQ, RockitTokenTypes.SLASH_EQ, RockitTokenTypes.PERCENT_EQ,
-            RockitTokenTypes.QUESTION, RockitTokenTypes.QUESTION_DOT,
-            RockitTokenTypes.ELVIS, RockitTokenTypes.BANG_BANG,
             RockitTokenTypes.DOT_DOT, RockitTokenTypes.DOT_DOT_LESS,
             RockitTokenTypes.ARROW, RockitTokenTypes.FAT_ARROW, RockitTokenTypes.COLON_COLON
             -> OPERATOR_KEYS

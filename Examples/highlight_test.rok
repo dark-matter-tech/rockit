@@ -1,0 +1,103 @@
+// Syntax highlighting test — booleans, null, optionals, force unwrap
+
+// Boolean literals (should be orange/amber)
+val isActive: Bool = true
+val isDisabled: Bool = false
+val flags = listOf(true, false, true)
+
+// Null literal (should be red)
+val nothing: String? = null
+val empty: Int? = null
+
+// Optional type marker and safe call (? and ?. should be cyan)
+fun greet(name: String?) {
+    val len: Int = name?.length ?: 0
+    val upper: String? = name?.uppercase()
+    val display: String = name ?: "Anonymous"
+    println("Hello, $display (length=$len)")
+}
+
+// Force unwrap (!! should be red/warning)
+fun forceGreet(name: String?) {
+    val forced: String = name!!
+    val forcedLen: Int = name!!.length
+    println("Force greeted: $forced")
+}
+
+// Mixed usage — all categories visible together
+fun processUser(user: User?) {
+    val isValid: Bool = user != null
+    val name: String = user?.name ?: "Unknown"
+    val verified: Bool = user?.isVerified ?: false
+
+    if (isValid) {
+        val email: String = user!!.email
+        println("Processing $name, verified=$verified")
+    } else {
+        println("No user provided, isValid=$isValid")
+    }
+}
+
+// Nested optionals and chaining
+fun deepAccess(a: Outer?) {
+    val result: String? = a?.inner?.value
+    val fallback: String = a?.inner?.value ?: "default"
+    val forced: String = a!!.inner!!.value
+    val isNull: Bool = result == null
+    val isNotNull: Bool = result != null
+}
+
+// Boolean expressions
+fun logic(a: Bool, b: Bool): Bool {
+    val both: Bool = a && b
+    val either: Bool = a || b
+    val negate: Bool = !a
+    val complex: Bool = (a && !b) || (!a && b)
+    return complex
+}
+
+// Elvis chains
+fun cascade(a: String?, b: String?, c: String?): String {
+    return a ?: b ?: c ?: "fallback"
+}
+
+// Null in collections
+fun nullCollections() {
+    val items: List<String?> = listOf("hello", null, "world", null)
+    val map: Map<String, Int?> = mapOf("a" to 1, "b" to null, "c" to 3)
+
+    for (item in items) {
+        val safe: String = item ?: "nil"
+        println(safe)
+    }
+}
+
+// When with boolean and null patterns
+fun describe(value: Any?) {
+    when (value) {
+        null -> println("It's null")
+        is Bool -> {
+            if (value == true) {
+                println("It's true")
+            } else {
+                println("It's false")
+            }
+        }
+        is String -> println("String: ${value}")
+    }
+}
+
+fun main() {
+    isActive(true)
+    isDisabled(false)
+    greet("Rockit")
+    greet(null)
+    forceGreet("Safe")
+    println(logic(true, false))
+    println(cascade(null, null, "found"))
+    nullCollections()
+    describe(null)
+    describe(true)
+    describe(false)
+    describe("hello")
+}
