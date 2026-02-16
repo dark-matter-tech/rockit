@@ -528,6 +528,24 @@ void rockit_print_any(int64_t value) {
     }
 }
 
+void rockit_println_double(double value) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%g", value);
+    printf("%s\n", buf);
+}
+
+void rockit_print_double(double value) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%g", value);
+    printf("%s", buf);
+}
+
+RockitString* rockit_double_to_string(double value) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%g", value);
+    return rockit_string_new(buf);
+}
+
 // ── Conversion ──────────────────────────────────────────────────────────────
 
 RockitString* rockit_int_to_string(int64_t value) {

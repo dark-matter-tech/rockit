@@ -4709,6 +4709,11 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "rockit_run_event_loop", "void|")
     mapPut(t, "rockit_await", "i64|ptr,ptr,ptr,ptr")
 
+    // Double print/toString
+    mapPut(t, "rockit_println_double", "void|double")
+    mapPut(t, "rockit_print_double", "void|double")
+    mapPut(t, "rockit_double_to_string", "ptr|double")
+
     // Math builtins (double → double)
     mapPut(t, "rockit_math_sqrt", "double|double")
     mapPut(t, "rockit_math_sin", "double|double")
@@ -5029,6 +5034,8 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
     mapPut(state, "vcallLabel", 0)
     val usedExterns = mapCreate()
     mapPut(state, "usedExterns", usedExterns)
+    val doubleRegs = mapCreate()
+    mapPut(state, "doubleRegs", doubleRegs)
 
     // Function signature
     if (isMain) {
@@ -5104,6 +5111,8 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val tmpI = llvmNextSSA(state)
             llvmLine(buf, stringConcat("  ", stringConcat(tmpI, stringConcat(" = bitcast double ", stringConcat(floatStr, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tmpI, stringConcat(", ptr %t", toString(dest)))))
+            // Track as double register
+            mapPut(mapGet(state, "doubleRegs"), toString(dest), true)
             ip = ip + 5
         } else if (op == 3) {
             // OP_CONST_TRUE
@@ -5151,6 +5160,11 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val tmp = llvmNextSSA(state)
             llvmLine(buf, stringConcat("  ", stringConcat(tmp, stringConcat(" = load i64, ptr %t", toString(src)))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tmp, stringConcat(", ptr %t", toString(dest)))))
+            // Propagate double flag
+            val dRegs17 = mapGet(state, "doubleRegs")
+            if (mapGet(dRegs17, toString(src)) != null) {
+                mapPut(dRegs17, toString(dest), true)
+            }
             ip = ip + 5
         } else if (op == 18) {
             // OP_LOAD: dest(u16) + src(u16)
@@ -5159,6 +5173,11 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val tmp = llvmNextSSA(state)
             llvmLine(buf, stringConcat("  ", stringConcat(tmp, stringConcat(" = load i64, ptr %t", toString(src)))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tmp, stringConcat(", ptr %t", toString(dest)))))
+            // Propagate double flag
+            val dRegs18 = mapGet(state, "doubleRegs")
+            if (mapGet(dRegs18, toString(src)) != null) {
+                mapPut(dRegs18, toString(dest), true)
+            }
             ip = ip + 5
         } else if (op == 19) {
             // OP_LOAD_PARAM: dest(u16) + paramIdx(u16)
@@ -5222,6 +5241,8 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             // Bitcast double → i64
             llvmLine(buf, stringConcat("  ", stringConcat(tresi, stringConcat(" = bitcast double ", stringConcat(tresf, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tresi, stringConcat(", ptr %t", toString(dest)))))
+            // Track as double register
+            mapPut(mapGet(state, "doubleRegs"), toString(dest), true)
             ip = ip + 7
         } else if (op == 42) {
             // OP_FNEG: dest(u16) + src(u16)
@@ -5236,6 +5257,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(tresf, stringConcat(" = fneg double ", tsf))))
             llvmLine(buf, stringConcat("  ", stringConcat(tresi, stringConcat(" = bitcast double ", stringConcat(tresf, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tresi, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(mapGet(state, "doubleRegs"), toString(dest), true)
             ip = ip + 5
         } else if (op == 48 || op == 49) {
             // OP_EQ(48) / OP_NEQ(49): dest(u16) + left(u16) + right(u16)
@@ -5700,6 +5722,40 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
 fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExterns: Map, callName: String, dest: Int, bc: List, argStart: Int, argc: Int, isMain: Bool): Unit {
     // Determine actual C function name and signature
     var cName: String = callName
+
+    // Check if println/print/toString arg is a double register
+    if ((callName == "println" || callName == "print" || callName == "toString") && argc == 1) {
+        val argReg = llvmReadU16(bc, argStart)
+        val dRegs = mapGet(state, "doubleRegs")
+        if (dRegs != null && mapGet(dRegs, toString(argReg)) != null) {
+            // Arg is a double — use double-specific variant
+            if (callName == "toString") {
+                cName = "rockit_double_to_string"
+                mapPut(usedExterns, cName, true)
+                val ta = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(ta, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+                val td = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(td, stringConcat(" = bitcast i64 ", stringConcat(ta, " to double")))))
+                val tres = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call ptr @rockit_double_to_string(double ", stringConcat(td, ")")))))
+                val tconv = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tconv, stringConcat(" = ptrtoint ptr ", stringConcat(tres, " to i64")))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(tconv, stringConcat(", ptr %t", toString(dest)))))
+                return
+            }
+            if (callName == "println") { cName = "rockit_println_double" }
+            if (callName == "print") { cName = "rockit_print_double" }
+            mapPut(usedExterns, cName, true)
+            val ta = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(ta, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+            val td = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(td, stringConcat(" = bitcast i64 ", stringConcat(ta, " to double")))))
+            llvmLine(buf, stringConcat("  call void @", stringConcat(cName, stringConcat("(double ", stringConcat(td, ")")))))
+            llvmLine(buf, stringConcat("  store i64 3405691582, ptr %t", toString(dest)))
+            return
+        }
+    }
+
     if (callName == "println") { cName = "rockit_println_any" }
     if (callName == "print") { cName = "rockit_print_any" }
 
@@ -5782,6 +5838,11 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call double @", stringConcat(cName, stringConcat("(", stringConcat(argStr, ")")))))))
         llvmLine(buf, stringConcat("  ", stringConcat(tconv, stringConcat(" = bitcast double ", stringConcat(tres, " to i64")))))
         llvmLine(buf, stringConcat("  store i64 ", stringConcat(tconv, stringConcat(", ptr %t", toString(dest)))))
+        // Track this register as holding a double
+        val doubleRegs = mapGet(state, "doubleRegs")
+        if (doubleRegs != null) {
+            mapPut(doubleRegs, toString(dest), true)
+        }
     } else {
         // i64 return
         val tres = llvmNextSSA(state)
