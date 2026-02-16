@@ -409,6 +409,23 @@ fun eliminateDeadFunctions(compiler: Map): Unit {
                             }
                         }
                     }
+                } else if (byte == 192) {
+                    // OP_AWAIT_CALL: same layout as OP_CALL
+                    if (bi + 4 < listSize(bytecode)) {
+                        val fidxHi = toInt(listGet(bytecode, bi + 3))
+                        val fidxLo = toInt(listGet(bytecode, bi + 4))
+                        val fidx = fidxHi * 256 + fidxLo
+                        if (fidx < listSize(pool)) {
+                            val constEntry = listGet(pool, fidx)
+                            val cval = toString(mapGet(constEntry, "value"))
+                            if (mapGet(allFuncNames, cval) != null) {
+                                if (mapGet(reachable, cval) == null) {
+                                    mapPut(reachable, cval, true)
+                                    listAppend(worklist, cval)
+                                }
+                            }
+                        }
+                    }
                 } else if (byte == 81) {
                     // OP_VCALL: dest(2), objReg(2), methodIdx(2), argCount(2), args...
                     // Mark all Class.method functions matching the method name

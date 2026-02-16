@@ -1084,10 +1084,10 @@ void rockit_task_schedule(void* resume_fn, void* frame, int64_t result) {
 }
 
 // Frame header: first fields of every continuation frame
-// struct { i32 state, i32 _pad, ptr parent_resume, ptr parent_frame }
+// struct { i64 state, ptr parent_resume, ptr parent_frame }
+// Layout as i64 array: [0]=state, [1]=parent_resume, [2]=parent_frame
 typedef struct {
-    int32_t state;
-    int32_t _pad;
+    int64_t state;
     int64_t (*parent_resume)(void*, int64_t);
     void*   parent_frame;
 } RockitFrameHeader;

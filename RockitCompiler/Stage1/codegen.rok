@@ -58,6 +58,9 @@ fun OP_FLT(): Int { return 55 }
 fun OP_FLTE(): Int { return 56 }
 fun OP_FGT(): Int { return 57 }
 fun OP_FGTE(): Int { return 58 }
+fun OP_AWAIT_CALL(): Int { return 192 }
+fun OP_CONCURRENT_BEGIN(): Int { return 193 }
+fun OP_CONCURRENT_END(): Int { return 194 }
 
 // Constant pool kind tags
 fun CK_STRING(): Int { return 1 }
@@ -321,6 +324,19 @@ fun emitLoadParam(fs: Map, dest: Int, paramIdx: Int): Unit {
 fun emitCall(fs: Map, dest: Int, funcName: String, args: List): Unit {
     val idx = addFuncName(mapGet(fs, "compiler"), funcName)
     emitByte(fs, OP_CALL())
+    emitU16(fs, dest)
+    emitU16(fs, idx)
+    emitU16(fs, listSize(args))
+    var i: Int = 0
+    while (i < listSize(args)) {
+        emitU16(fs, toInt(listGet(args, i)))
+        i = i + 1
+    }
+}
+
+fun emitAwaitCall(fs: Map, dest: Int, funcName: String, args: List): Unit {
+    val idx = addFuncName(mapGet(fs, "compiler"), funcName)
+    emitByte(fs, OP_AWAIT_CALL())
     emitU16(fs, dest)
     emitU16(fs, idx)
     emitU16(fs, listSize(args))
@@ -1168,6 +1184,28 @@ fun compileExpr(fs: Map, node: Map): Int {
 
     if (kind == "awaitExpr") {
         val operand = mapGet(node, "operand")
+        val opKind = toString(mapGet(operand, "kind"))
+        if (opKind == "call") {
+            val callee = mapGet(operand, "callee")
+            if (toString(mapGet(callee, "kind")) == "ident") {
+                val funcName = toString(mapGet(callee, "name"))
+                val callArgs = mapGet(operand, "args")
+                val argRegs = listCreate()
+                var ai: Int = 0
+                while (ai < listSize(callArgs)) {
+                    val argNode = listGet(callArgs, ai)
+                    if (isMap(argNode) && mapGet(argNode, "kind") != null && toString(mapGet(argNode, "kind")) == "namedArg") {
+                        listAppend(argRegs, compileExpr(fs, mapGet(argNode, "value")))
+                    } else {
+                        listAppend(argRegs, compileExpr(fs, argNode))
+                    }
+                    ai = ai + 1
+                }
+                val dest = allocReg(fs)
+                emitAwaitCall(fs, dest, funcName, argRegs)
+                return dest
+            }
+        }
         return compileExpr(fs, operand)
     }
 
@@ -2327,9 +2365,13 @@ fun compileStmt(fs: Map, node: Map): Unit {
         return
     }
 
-    // concurrent block — compile body sequentially (cooperative single-threaded)
+    // concurrent block — emit BEGIN/END markers around body
     if (kind == "concurrent") {
+        emitByte(fs, OP_CONCURRENT_BEGIN())
+        emitU16(fs, 0)
         compileBlock(fs, mapGet(node, "body"))
+        emitByte(fs, OP_CONCURRENT_END())
+        emitU16(fs, 0)
         return
     }
 
@@ -2480,6 +2522,9 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
     mapPut(funcRec, "bytecode", bc)
     mapPut(funcRec, "params", effectiveParams)
     mapPut(funcRec, "lineTable", mapGet(fs, "lineTable"))
+    if (mapGet(decl, "isSuspend") == true) {
+        mapPut(funcRec, "isSuspend", true)
+    }
 
     // Determine return type tag
     val retType = mapGet(decl, "returnType")

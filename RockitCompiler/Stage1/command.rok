@@ -4567,6 +4567,23 @@ fun eliminateDeadFunctions(compiler: Map): Unit {
                             }
                         }
                     }
+                } else if (byte == 192) {
+                    // OP_AWAIT_CALL: same layout as OP_CALL
+                    if (bi + 4 < listSize(bytecode)) {
+                        val fidxHi = toInt(listGet(bytecode, bi + 3))
+                        val fidxLo = toInt(listGet(bytecode, bi + 4))
+                        val fidx = fidxHi * 256 + fidxLo
+                        if (fidx < listSize(pool)) {
+                            val constEntry = listGet(pool, fidx)
+                            val cval = toString(mapGet(constEntry, "value"))
+                            if (mapGet(allFuncNames, cval) != null) {
+                                if (mapGet(reachable, cval) == null) {
+                                    mapPut(reachable, cval, true)
+                                    listAppend(worklist, cval)
+                                }
+                            }
+                        }
+                    }
                 } else if (byte == 81) {
                     // OP_VCALL: dest(2), objReg(2), methodIdx(2), argCount(2), args...
                     // Mark all Class.method functions matching the method name
@@ -4972,6 +4989,12 @@ fun llvmInstrSize(op: Int, bc: List, ip: Int): Int {
     if (op == 176) { return 7 }    // TRY_BEGIN: op + catchOffset(4) + excReg(2)
     if (op == 177) { return 1 }    // TRY_END
     if (op == 178) { return 3 }    // THROW: op + src(2)
+    if (op == 192) {                // AWAIT_CALL: same layout as CALL
+        val argc = llvmReadU16(bc, ip + 5)
+        return 7 + argc * 2
+    }
+    if (op == 193) { return 3 }    // CONCURRENT_BEGIN: op + scopeIdx(2)
+    if (op == 194) { return 3 }    // CONCURRENT_END: op + scopeIdx(2)
     if (op == 224) { return 3 }    // RET: op + src(2)
     if (op == 225) { return 1 }    // RET_VOID
     if (op == 226) { return 5 }    // JUMP: op + target(4)
@@ -5026,6 +5049,80 @@ fun llvmResolveFieldIndex(compiler: Map, poolFieldIdx: Int): Int {
     }
     // Fallback: return pool index (will likely be wrong, but avoids crash on unknown types)
     return poolFieldIdx
+}
+
+// ---------------------------------------------------------------------------
+// Check whether a function record has the isSuspend flag
+// ---------------------------------------------------------------------------
+
+fun llvmIsSuspendFunc(funcRec: Map): Bool {
+    val v = mapGet(funcRec, "isSuspend")
+    if (v == null) { return false }
+    return v == true
+}
+
+// ---------------------------------------------------------------------------
+// Count AWAIT_CALL instructions in a function's bytecode
+// ---------------------------------------------------------------------------
+
+fun llvmCountAwaits(bc: List): Int {
+    var count: Int = 0
+    var ip: Int = 0
+    while (ip < listSize(bc)) {
+        val op = toInt(listGet(bc, ip))
+        if (op == 192) { count = count + 1 }
+        val size = llvmInstrSize(op, bc, ip)
+        if (size <= 0) { return count }
+        ip = ip + size
+    }
+    return count
+}
+
+// ---------------------------------------------------------------------------
+// Get the register count from a function record
+// ---------------------------------------------------------------------------
+
+fun llvmGetFuncRegCount(funcRec: Map): Int {
+    return toInt(mapGet(funcRec, "regCount"))
+}
+
+// ---------------------------------------------------------------------------
+// Pre-scan bytecode for AWAIT_CALL dest registers (ordered list)
+// ---------------------------------------------------------------------------
+
+fun llvmScanAwaitDests(bc: List): List {
+    val dests = listCreate()
+    var ip: Int = 0
+    while (ip < listSize(bc)) {
+        val op = toInt(listGet(bc, ip))
+        if (op == 192) {
+            val dest = llvmReadU16(bc, ip + 1)
+            listAppend(dests, dest)
+        }
+        val size = llvmInstrSize(op, bc, ip)
+        if (size <= 0) { return dests }
+        ip = ip + size
+    }
+    return dests
+}
+
+// ---------------------------------------------------------------------------
+// Pre-scan bytecode for AWAIT_CALL instruction positions (IP list)
+// ---------------------------------------------------------------------------
+
+fun llvmScanAwaitIPs(bc: List): List {
+    val ips = listCreate()
+    var ip: Int = 0
+    while (ip < listSize(bc)) {
+        val op = toInt(listGet(bc, ip))
+        if (op == 192) {
+            listAppend(ips, ip)
+        }
+        val size = llvmInstrSize(op, bc, ip)
+        if (size <= 0) { return ips }
+        ip = ip + size
+    }
+    return ips
 }
 
 // ---------------------------------------------------------------------------
@@ -5730,6 +5827,763 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
 }
 
 // ---------------------------------------------------------------------------
+// Emit LLVM IR for a suspend function (CPS coroutine)
+//
+// Wrapper: allocates frame, stores params, calls _resume(frame, 0), frees.
+// Resume: state machine — switch on frame[0] to dispatch to the right
+//   code segment. State 0 loads params; states 1..N restore registers and
+//   store the await result into the correct dest register.
+//   Bytecode emission for each segment will be added in a later piece.
+// ---------------------------------------------------------------------------
+
+fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: Map): String {
+    val buf = llvmBuf()
+    val pool = mapGet(compiler, "pool")
+    val nameIdx = toInt(mapGet(funcRec, "nameIdx"))
+    val funcName = llvmPoolString(compiler, nameIdx)
+    val paramCount = toInt(mapGet(funcRec, "paramCount"))
+    val regCount = llvmGetFuncRegCount(funcRec)
+    val bc = mapGet(funcRec, "bytecode")
+    val awaitCount = llvmCountAwaits(bc)
+    val awaitDests = llvmScanAwaitDests(bc)
+    val isMain = funcName == "main"
+    val resumeName = stringConcat(funcName, "_resume")
+
+    // === Wrapper function ===
+    if (isMain) {
+        llvmLine(buf, "define i32 @main(i32 %argc, ptr %argv) {")
+    } else {
+        var sig: String = stringConcat("define i64 @", stringConcat(funcName, "("))
+        var pi: Int = 0
+        while (pi < paramCount) {
+            if (pi > 0) { sig = stringConcat(sig, ", ") }
+            sig = stringConcat(sig, stringConcat("i64 %p", toString(pi)))
+            pi = pi + 1
+        }
+        sig = stringConcat(sig, ") {")
+        llvmLine(buf, sig)
+    }
+    llvmLine(buf, "entry:")
+
+    // Frame: [0]=state, [1]=parent_resume, [2]=parent_frame, [3..]=registers
+    val headerSlots = 3
+    val frameSlots = regCount + headerSlots
+    val frameBytes = frameSlots * 8
+    llvmLine(buf, stringConcat("  %frame = call ptr @rockit_frame_alloc(i64 ", stringConcat(toString(frameBytes), ")")))
+
+    // Store params into frame[3..3+paramCount-1]
+    var pi: Int = 0
+    while (pi < paramCount) {
+        val slotIdx = pi + headerSlots
+        val gepName = stringConcat("%frame.p", toString(pi))
+        llvmLine(buf, stringConcat("  ", stringConcat(gepName, stringConcat(" = getelementptr i64, ptr %frame, i32 ", toString(slotIdx)))))
+        llvmLine(buf, stringConcat("  store i64 %p", stringConcat(toString(pi), stringConcat(", ptr ", gepName))))
+        pi = pi + 1
+    }
+
+    // Call _resume and handle result
+    llvmLine(buf, stringConcat("  %result = call i64 @", stringConcat(resumeName, "(ptr %frame, i64 0)")))
+    llvmLine(buf, "  %is.susp = icmp eq i64 %result, -9999")
+    llvmLine(buf, "  br i1 %is.susp, label %wrapper.suspended, label %wrapper.done")
+    llvmLine(buf, "wrapper.suspended:")
+    llvmLine(buf, "  call void @rockit_run_event_loop()")
+    if (isMain) {
+        llvmLine(buf, "  ret i32 0")
+    } else {
+        // After event loop, the frame was freed by the event loop
+        llvmLine(buf, "  ret i64 0")
+    }
+    llvmLine(buf, "wrapper.done:")
+    llvmLine(buf, "  call void @rockit_frame_free(ptr %frame)")
+    if (isMain) {
+        llvmLine(buf, "  ret i32 0")
+    } else {
+        llvmLine(buf, "  ret i64 %result")
+    }
+    llvmLine(buf, "}")
+    llvmLine(buf, "")
+
+    // Emit frame size global for this function (used by callers for child frame alloc)
+    llvmLine(buf, stringConcat("@", stringConcat(resumeName, stringConcat(".frame_size = private constant i64 ", toString(frameBytes)))))
+    llvmLine(buf, "")
+
+    // === Resume function: @funcName_resume(ptr %frame, i64 %result) -> i64 ===
+    // CPS state machine: setup blocks branch into a continuous bytecode walk.
+    // AWAIT_CALL saves regs, sets next state, calls awaited func, recurses.
+
+    val awaitIPs = llvmScanAwaitIPs(bc)
+    // Compute segment start IPs: state 0 at IP 0, state N at IP after (N-1)th AWAIT_CALL
+    val segStartIPs = listCreate()
+    listAppend(segStartIPs, 0)
+    var ssi: Int = 0
+    while (ssi < listSize(awaitIPs)) {
+        val awIP = toInt(listGet(awaitIPs, ssi))
+        listAppend(segStartIPs, awIP + llvmInstrSize(192, bc, awIP))
+        ssi = ssi + 1
+    }
+
+    llvmLine(buf, stringConcat("define i64 @", stringConcat(resumeName, "(ptr %frame, i64 %result) {")))
+    llvmLine(buf, "entry:")
+
+    // Allocas for all registers
+    var ri: Int = 0
+    while (ri < regCount) {
+        llvmLine(buf, stringConcat("  %t", stringConcat(toString(ri), " = alloca i64")))
+        ri = ri + 1
+    }
+
+    // Load state from frame[0]
+    llvmLine(buf, "  %state.ptr = getelementptr i64, ptr %frame, i32 0")
+    llvmLine(buf, "  %state.val = load i64, ptr %state.ptr")
+
+    // Switch to setup blocks
+    var switchStr: String = "  switch i64 %state.val, label %state.invalid [\n"
+    var si: Int = 0
+    while (si <= awaitCount) {
+        switchStr = stringConcat(switchStr, stringConcat("    i64 ", stringConcat(toString(si), stringConcat(", label %setup.", stringConcat(toString(si), "\n")))))
+        si = si + 1
+    }
+    switchStr = stringConcat(switchStr, "  ]")
+    llvmLine(buf, switchStr)
+
+    // --- Setup block 0: load params from frame[3..], branch to code.0 ---
+    llvmLine(buf, "setup.0:")
+    pi = 0
+    while (pi < paramCount) {
+        val slotIdx = pi + headerSlots
+        val gn = stringConcat("%s0.g", toString(pi))
+        val vn = stringConcat("%s0.v", toString(pi))
+        llvmLine(buf, stringConcat("  ", stringConcat(gn, stringConcat(" = getelementptr i64, ptr %frame, i32 ", toString(slotIdx)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(vn, stringConcat(" = load i64, ptr ", gn))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(vn, stringConcat(", ptr %t", toString(pi)))))
+        pi = pi + 1
+    }
+    llvmLine(buf, "  br label %code.0")
+
+    // --- Setup blocks 1..awaitCount: restore regs from frame[3..], store result, branch ---
+    var ai: Int = 1
+    while (ai <= awaitCount) {
+        llvmLine(buf, stringConcat("setup.", stringConcat(toString(ai), ":")))
+        var rri: Int = 0
+        while (rri < regCount) {
+            val slotIdx = rri + headerSlots
+            val gn = stringConcat(stringConcat("%s", toString(ai)), stringConcat(".g", toString(rri)))
+            val vn = stringConcat(stringConcat("%s", toString(ai)), stringConcat(".v", toString(rri)))
+            llvmLine(buf, stringConcat("  ", stringConcat(gn, stringConcat(" = getelementptr i64, ptr %frame, i32 ", toString(slotIdx)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(vn, stringConcat(" = load i64, ptr ", gn))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(vn, stringConcat(", ptr %t", toString(rri)))))
+            rri = rri + 1
+        }
+        val destReg = toInt(listGet(awaitDests, ai - 1))
+        llvmLine(buf, stringConcat("  store i64 %result, ptr %t", toString(destReg)))
+        llvmLine(buf, stringConcat("  br label %code.", toString(ai)))
+        ai = ai + 1
+    }
+
+    // === Bytecode walk (continuous, one pass) ===
+    val rState = mapCreate()
+    mapPut(rState, "ssa", 0)
+    mapPut(rState, "vcallLabel", 0)
+    val rExterns = mapCreate()
+    mapPut(rState, "usedExterns", rExterns)
+    val rDoubleRegs = mapCreate()
+    mapPut(rState, "doubleRegs", rDoubleRegs)
+
+    val blockStarts = llvmFindBlockStarts(bc)
+    var currentSeg: Int = 0
+    var lastWasTerminator: Bool = false
+    var concurrentDepth: Int = 0
+    var ip: Int = 0
+
+    while (ip < listSize(bc)) {
+        // Emit segment label if this IP starts a new code segment
+        if (currentSeg <= awaitCount) {
+            if (ip == toInt(listGet(segStartIPs, currentSeg))) {
+                if (!lastWasTerminator && ip > 0) {
+                    llvmLine(buf, stringConcat("  br label %code.", toString(currentSeg)))
+                }
+                llvmLine(buf, stringConcat("code.", stringConcat(toString(currentSeg), ":")))
+                lastWasTerminator = false
+            }
+        }
+
+        // Emit block label for jump targets (skip if already emitted as segment)
+        if (ip > 0 && mapGet(blockStarts, toString(ip)) != null) {
+            var isSegStart: Bool = false
+            if (currentSeg <= awaitCount) {
+                if (ip == toInt(listGet(segStartIPs, currentSeg))) {
+                    isSegStart = true
+                }
+            }
+            if (!isSegStart) {
+                if (!lastWasTerminator) {
+                    llvmLine(buf, stringConcat("  br label %", llvmBlockLabel(ip)))
+                }
+                llvmLine(buf, stringConcat(llvmBlockLabel(ip), ":"))
+                lastWasTerminator = false
+            }
+        }
+
+        val op = toInt(listGet(bc, ip))
+        lastWasTerminator = false
+
+        if (op == 1) {
+            // OP_CONST_INT: dest(u16) + value(i64)
+            val dest = llvmReadU16(bc, ip + 1)
+            val value = llvmReadI64(bc, ip + 3)
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(toString(value), stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 11
+        } else if (op == 2) {
+            // OP_CONST_FLOAT: dest(u16) + poolIdx(u16)
+            val dest = llvmReadU16(bc, ip + 1)
+            val poolIdx = llvmReadU16(bc, ip + 3)
+            val floatStr = llvmPoolString(compiler, poolIdx)
+            val tmpI = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tmpI, stringConcat(" = bitcast double ", stringConcat(floatStr, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tmpI, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(rDoubleRegs, toString(dest), true)
+            ip = ip + 5
+        } else if (op == 3) {
+            // OP_CONST_TRUE
+            val dest = llvmReadU16(bc, ip + 1)
+            llvmLine(buf, stringConcat("  store i64 1, ptr %t", toString(dest)))
+            ip = ip + 3
+        } else if (op == 4) {
+            // OP_CONST_FALSE
+            val dest = llvmReadU16(bc, ip + 1)
+            llvmLine(buf, stringConcat("  store i64 0, ptr %t", toString(dest)))
+            ip = ip + 3
+        } else if (op == 5) {
+            // OP_CONST_STRING: dest(u16) + poolIdx(u16)
+            val dest = llvmReadU16(bc, ip + 1)
+            val poolIdx = llvmReadU16(bc, ip + 3)
+            val strVal = llvmPoolString(compiler, poolIdx)
+            if (startsWith(strVal, "__lambda_") && mapGet(definedFuncs, strVal) != null) {
+                val s1 = llvmNextSSA(rState)
+                llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = ptrtoint ptr @", stringConcat(strVal, " to i64")))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(s1, stringConcat(", ptr %t", toString(dest)))))
+            } else {
+                val strGlobal = stringConcat("@.str.", toString(poolIdx))
+                val s1 = llvmNextSSA(rState)
+                val s2 = llvmNextSSA(rState)
+                mapPut(rExterns, "rockit_string_new", true)
+                llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = call ptr @rockit_string_new(ptr ", stringConcat(strGlobal, ")")))))
+                llvmLine(buf, stringConcat("  ", stringConcat(s2, stringConcat(" = ptrtoint ptr ", stringConcat(s1, " to i64")))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(s2, stringConcat(", ptr %t", toString(dest)))))
+            }
+            ip = ip + 5
+        } else if (op == 6) {
+            // OP_CONST_NULL
+            val dest = llvmReadU16(bc, ip + 1)
+            llvmLine(buf, stringConcat("  store i64 3405691582, ptr %t", toString(dest)))
+            ip = ip + 3
+        } else if (op == 16) {
+            // OP_ALLOC — no-op
+            ip = ip + 3
+        } else if (op == 17) {
+            // OP_STORE: dest(u16) + src(u16)
+            val dest = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val tmp = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tmp, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tmp, stringConcat(", ptr %t", toString(dest)))))
+            if (mapGet(rDoubleRegs, toString(src)) != null) {
+                mapPut(rDoubleRegs, toString(dest), true)
+            }
+            ip = ip + 5
+        } else if (op == 18) {
+            // OP_LOAD: dest(u16) + src(u16)
+            val dest = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val tmp = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tmp, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tmp, stringConcat(", ptr %t", toString(dest)))))
+            if (mapGet(rDoubleRegs, toString(src)) != null) {
+                mapPut(rDoubleRegs, toString(dest), true)
+            }
+            ip = ip + 5
+        } else if (op == 19) {
+            // OP_LOAD_PARAM: dest(u16) + paramIdx(u16)
+            // In _resume, params are in %t{0..paramCount-1} from setup block
+            val dest = llvmReadU16(bc, ip + 1)
+            val paramIdx = llvmReadU16(bc, ip + 3)
+            val tmp = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tmp, stringConcat(" = load i64, ptr %t", toString(paramIdx)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tmp, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 5
+        } else if (op == 20) {
+            // OP_LOAD_GLOBAL: dest(u16) + nameIdx(u16) — treat as load 0
+            val dest = llvmReadU16(bc, ip + 1)
+            llvmLine(buf, stringConcat("  store i64 0, ptr %t", toString(dest)))
+            ip = ip + 5
+        } else if (op >= 32 && op <= 36) {
+            // Arithmetic: ADD(32) SUB(33) MUL(34) DIV(35) MOD(36)
+            val dest = llvmReadU16(bc, ip + 1)
+            val left = llvmReadU16(bc, ip + 3)
+            val right = llvmReadU16(bc, ip + 5)
+            val tl = llvmNextSSA(rState)
+            val tr = llvmNextSSA(rState)
+            val tres = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tl, stringConcat(" = load i64, ptr %t", toString(left)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
+            var llvmOp: String = "add"
+            if (op == 33) { llvmOp = "sub" }
+            if (op == 34) { llvmOp = "mul" }
+            if (op == 35) { llvmOp = "sdiv" }
+            if (op == 36) { llvmOp = "srem" }
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = ", stringConcat(llvmOp, stringConcat(" i64 ", stringConcat(tl, stringConcat(", ", tr))))))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 7
+        } else if (op == 37) {
+            // OP_NEG
+            val dest = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val ts = llvmNextSSA(rState)
+            val tres = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = sub i64 0, ", ts))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 5
+        } else if (op >= 38 && op <= 41) {
+            // Float arithmetic: FADD(38) FSUB(39) FMUL(40) FDIV(41)
+            val dest = llvmReadU16(bc, ip + 1)
+            val left = llvmReadU16(bc, ip + 3)
+            val right = llvmReadU16(bc, ip + 5)
+            val tli = llvmNextSSA(rState)
+            val tri = llvmNextSSA(rState)
+            val tlf = llvmNextSSA(rState)
+            val trf = llvmNextSSA(rState)
+            val tresf = llvmNextSSA(rState)
+            val tresi = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tli, stringConcat(" = load i64, ptr %t", toString(left)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tri, stringConcat(" = load i64, ptr %t", toString(right)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tlf, stringConcat(" = bitcast i64 ", stringConcat(tli, " to double")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(trf, stringConcat(" = bitcast i64 ", stringConcat(tri, " to double")))))
+            var fop: String = "fadd"
+            if (op == 39) { fop = "fsub" }
+            if (op == 40) { fop = "fmul" }
+            if (op == 41) { fop = "fdiv" }
+            llvmLine(buf, stringConcat("  ", stringConcat(tresf, stringConcat(" = ", stringConcat(fop, stringConcat(" double ", stringConcat(tlf, stringConcat(", ", trf))))))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tresi, stringConcat(" = bitcast double ", stringConcat(tresf, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tresi, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(rDoubleRegs, toString(dest), true)
+            ip = ip + 7
+        } else if (op == 48 || op == 49) {
+            // OP_EQ(48) / OP_NEQ(49)
+            val dest = llvmReadU16(bc, ip + 1)
+            val left = llvmReadU16(bc, ip + 3)
+            val right = llvmReadU16(bc, ip + 5)
+            val tl = llvmNextSSA(rState)
+            val tr = llvmNextSSA(rState)
+            val tcmp = llvmNextSSA(rState)
+            val tres = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tl, stringConcat(" = load i64, ptr %t", toString(left)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
+            if (op == 48) {
+                mapPut(rExterns, "rockit_string_eq", true)
+                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+            } else {
+                mapPut(rExterns, "rockit_string_neq", true)
+                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+            }
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 7
+        } else if (op >= 50 && op <= 53) {
+            // OP_LT(50) LTE(51) GT(52) GTE(53)
+            val dest = llvmReadU16(bc, ip + 1)
+            val left = llvmReadU16(bc, ip + 3)
+            val right = llvmReadU16(bc, ip + 5)
+            val tl = llvmNextSSA(rState)
+            val tr = llvmNextSSA(rState)
+            val tcmp = llvmNextSSA(rState)
+            val tres = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tl, stringConcat(" = load i64, ptr %t", toString(left)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
+            var cmpOp: String = "slt"
+            if (op == 51) { cmpOp = "sle" }
+            if (op == 52) { cmpOp = "sgt" }
+            if (op == 53) { cmpOp = "sge" }
+            llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp ", stringConcat(cmpOp, stringConcat(" i64 ", stringConcat(tl, stringConcat(", ", tr))))))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 7
+        } else if (op == 64 || op == 65) {
+            // OP_AND(64) / OP_OR(65)
+            val dest = llvmReadU16(bc, ip + 1)
+            val left = llvmReadU16(bc, ip + 3)
+            val right = llvmReadU16(bc, ip + 5)
+            val tl = llvmNextSSA(rState)
+            val tr = llvmNextSSA(rState)
+            val tres = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tl, stringConcat(" = load i64, ptr %t", toString(left)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
+            if (op == 64) {
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = and i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+            } else {
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = or i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+            }
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 7
+        } else if (op == 66) {
+            // OP_NOT
+            val dest = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val ts = llvmNextSSA(rState)
+            val tcmp = llvmNextSSA(rState)
+            val tres = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(ts, ", 0")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 5
+        } else if (op == 80) {
+            // OP_CALL: dest(u16) + funcIdx(u16) + argc(u16) + args(u16*N)
+            val dest = llvmReadU16(bc, ip + 1)
+            val funcIdx = llvmReadU16(bc, ip + 3)
+            val argc = llvmReadU16(bc, ip + 5)
+            val callName = llvmPoolString(compiler, funcIdx)
+            llvmEmitCall(buf, rState, sigTable, compiler, rExterns, callName, dest, bc, ip + 7, argc, false)
+            ip = ip + 7 + argc * 2
+        } else if (op == 81) {
+            // OP_VCALL — simplified: direct call to first matching method
+            val dest = llvmReadU16(bc, ip + 1)
+            val objReg = llvmReadU16(bc, ip + 3)
+            val methodIdx = llvmReadU16(bc, ip + 5)
+            val argc = llvmReadU16(bc, ip + 7)
+            val methodName = llvmPoolString(compiler, methodIdx)
+            val tobj = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+            var callArgs: String = stringConcat("i64 ", tobj)
+            var vi: Int = 0
+            while (vi < argc) {
+                val argReg = llvmReadU16(bc, ip + 9 + vi * 2)
+                val ta = llvmNextSSA(rState)
+                llvmLine(buf, stringConcat("  ", stringConcat(ta, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+                callArgs = stringConcat(callArgs, stringConcat(", i64 ", ta))
+                vi = vi + 1
+            }
+            val tres = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @", stringConcat(methodName, stringConcat("(", stringConcat(callArgs, ")")))))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 9 + argc * 2
+        } else if (op == 82) {
+            // OP_CALL_INDIRECT
+            val dest = llvmReadU16(bc, ip + 1)
+            val funcRef = llvmReadU16(bc, ip + 3)
+            val argc = llvmReadU16(bc, ip + 5)
+            val tfn = llvmNextSSA(rState)
+            val tfnPtr = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tfn, stringConcat(" = load i64, ptr %t", toString(funcRef)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tfnPtr, stringConcat(" = inttoptr i64 ", stringConcat(tfn, " to ptr")))))
+            var argVals: String = ""
+            var ci: Int = 0
+            while (ci < argc) {
+                val argReg = llvmReadU16(bc, ip + 7 + ci * 2)
+                val ta = llvmNextSSA(rState)
+                llvmLine(buf, stringConcat("  ", stringConcat(ta, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+                if (ci > 0) { argVals = stringConcat(argVals, ", ") }
+                argVals = stringConcat(argVals, stringConcat("i64 ", ta))
+                ci = ci + 1
+            }
+            val tres = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 ", stringConcat(tfnPtr, stringConcat("(", stringConcat(argVals, ")")))))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 7 + argc * 2
+        } else if (op == 96) {
+            // OP_GET_FIELD
+            val dest = llvmReadU16(bc, ip + 1)
+            val objReg = llvmReadU16(bc, ip + 3)
+            val fieldPoolIdx = llvmReadU16(bc, ip + 5)
+            val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
+            val tobj = llvmNextSSA(rState)
+            val tobjPtr = llvmNextSSA(rState)
+            val tres = llvmNextSSA(rState)
+            mapPut(rExterns, "rockit_object_get_field", true)
+            llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @rockit_object_get_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), ")")))))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 7
+        } else if (op == 97) {
+            // OP_SET_FIELD
+            val objReg = llvmReadU16(bc, ip + 1)
+            val fieldPoolIdx = llvmReadU16(bc, ip + 3)
+            val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
+            val valReg = llvmReadU16(bc, ip + 5)
+            val tobj = llvmNextSSA(rState)
+            val tobjPtr = llvmNextSSA(rState)
+            val tval = llvmNextSSA(rState)
+            mapPut(rExterns, "rockit_object_set_field", true)
+            llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
+            llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), stringConcat(", i64 ", stringConcat(tval, ")")))))))
+            ip = ip + 7
+        } else if (op == 112) {
+            // OP_NEW_OBJECT: dest(u16) + typeIdx(u16) + argc(u16) + args
+            val dest = llvmReadU16(bc, ip + 1)
+            val typeIdx = llvmReadU16(bc, ip + 3)
+            val argc = llvmReadU16(bc, ip + 5)
+            val typeName = llvmPoolString(compiler, typeIdx)
+            val tyGlobal = stringConcat("@.typename.", toString(typeIdx))
+            var totalFields: Int = argc
+            val allTypes = mapGet(compiler, "types")
+            if (allTypes != null) {
+                var ati: Int = 0
+                while (ati < listSize(allTypes)) {
+                    val atr = listGet(allTypes, ati)
+                    val atrNameIdx = toInt(mapGet(atr, "nameIdx"))
+                    if (llvmPoolString(compiler, atrNameIdx) == typeName) {
+                        val atrFields = mapGet(atr, "fields")
+                        if (atrFields != null) { totalFields = listSize(atrFields) }
+                    }
+                    ati = ati + 1
+                }
+            }
+            val tobj = llvmNextSSA(rState)
+            val tobjI64 = llvmNextSSA(rState)
+            mapPut(rExterns, "rockit_object_alloc", true)
+            llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = call ptr @rockit_object_alloc(ptr ", stringConcat(tyGlobal, stringConcat(", i32 ", stringConcat(toString(totalFields), ")")))))))
+            var oai: Int = 0
+            while (oai < argc) {
+                val argReg = llvmReadU16(bc, ip + 7 + oai * 2)
+                val targ = llvmNextSSA(rState)
+                mapPut(rExterns, "rockit_object_set_field", true)
+                llvmLine(buf, stringConcat("  ", stringConcat(targ, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+                llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobj, stringConcat(", i32 ", stringConcat(toString(oai), stringConcat(", i64 ", stringConcat(targ, ")")))))))
+                oai = oai + 1
+            }
+            llvmLine(buf, stringConcat("  ", stringConcat(tobjI64, stringConcat(" = ptrtoint ptr ", stringConcat(tobj, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tobjI64, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 7 + argc * 2
+        } else if (op == 128) {
+            // OP_NULL_CHECK
+            val dest = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val ts = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(ts, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 5
+        } else if (op == 129) {
+            // OP_IS_NULL
+            val dest = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val ts = llvmNextSSA(rState)
+            val tcmp = llvmNextSSA(rState)
+            val tres = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(ts, ", 3405691582")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 5
+        } else if (op == 144) {
+            // OP_TYPE_CHECK
+            val dest = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val typeIdx = llvmReadU16(bc, ip + 5)
+            val tyGlobal = stringConcat("@.typename.", toString(typeIdx))
+            val tsrc = llvmNextSSA(rState)
+            val tobjPtr = llvmNextSSA(rState)
+            val tresult = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tsrc, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tsrc, " to ptr")))))
+            mapPut(rExterns, "rockit_object_is_type", true)
+            llvmLine(buf, stringConcat("  ", stringConcat(tresult, stringConcat(" = call i64 @rockit_object_is_type(ptr ", stringConcat(tobjPtr, stringConcat(", ptr ", stringConcat(tyGlobal, ")")))))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tresult, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 7
+        } else if (op == 145) {
+            // OP_TYPE_CAST — just copy
+            val dest = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val ts = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(ts, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 7
+        } else if (op == 176) {
+            // OP_TRY_BEGIN: catchOffset(u32) + excReg(u16)
+            val catchOffset = llvmReadU32(bc, ip + 1)
+            val excReg = llvmReadU16(bc, ip + 5)
+            val tbuf = llvmNextSSA(rState)
+            val tjmp = llvmNextSSA(rState)
+            val tcaught = llvmNextSSA(rState)
+            mapPut(rExterns, "rockit_exc_push", true)
+            mapPut(rExterns, "_setjmp", true)
+            llvmLine(buf, stringConcat("  ", stringConcat(tbuf, " = call ptr @rockit_exc_push()")))
+            llvmLine(buf, stringConcat("  ", stringConcat(tjmp, stringConcat(" = call i32 @_setjmp(ptr ", stringConcat(tbuf, ") #0")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tcaught, stringConcat(" = icmp ne i32 ", stringConcat(tjmp, ", 0")))))
+            val tryBody = stringConcat("try_body_", toString(ip))
+            val catchLabel = llvmBlockLabel(catchOffset)
+            llvmLine(buf, stringConcat("  br i1 ", stringConcat(tcaught, stringConcat(", label %", stringConcat(catchLabel, stringConcat(", label %", tryBody))))))
+            llvmLine(buf, stringConcat(tryBody, ":"))
+            lastWasTerminator = false
+            ip = ip + 7
+        } else if (op == 177) {
+            // OP_TRY_END
+            mapPut(rExterns, "rockit_exc_pop", true)
+            llvmLine(buf, "  call void @rockit_exc_pop()")
+            ip = ip + 1
+        } else if (op == 178) {
+            // OP_THROW
+            val src = llvmReadU16(bc, ip + 1)
+            val ts = llvmNextSSA(rState)
+            mapPut(rExterns, "rockit_exc_throw", true)
+            llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  call void @rockit_exc_throw(i64 ", stringConcat(ts, ")")))
+            llvmLine(buf, "  unreachable")
+            lastWasTerminator = true
+            ip = ip + 3
+        } else if (op == 192) {
+            // OP_AWAIT_CALL: save regs, set next state, then either:
+            //   (a) synchronous call + recurse _resume (outside concurrent), or
+            //   (b) alloc child frame + rockit_await + return SUSPENDED (inside concurrent)
+            val awDest = llvmReadU16(bc, ip + 1)
+            val awFuncIdx = llvmReadU16(bc, ip + 3)
+            val awArgc = llvmReadU16(bc, ip + 5)
+            val awFuncName = llvmPoolString(compiler, awFuncIdx)
+            val awResumeName = stringConcat(awFuncName, "_resume")
+
+            // 1. Save all registers to frame[3..3+regCount-1]
+            var sr: Int = 0
+            while (sr < regCount) {
+                val sv = llvmNextSSA(rState)
+                val sg = llvmNextSSA(rState)
+                llvmLine(buf, stringConcat("  ", stringConcat(sv, stringConcat(" = load i64, ptr %t", toString(sr)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(sg, stringConcat(" = getelementptr i64, ptr %frame, i32 ", toString(sr + 3)))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(sv, stringConcat(", ptr ", sg))))
+                sr = sr + 1
+            }
+
+            // 2. Set frame[0] = next state
+            val nextState = currentSeg + 1
+            val sgep = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(sgep, " = getelementptr i64, ptr %frame, i32 0")))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(toString(nextState), stringConcat(", ptr ", sgep))))
+
+            if (concurrentDepth > 0) {
+                // === Event-loop path (inside concurrent block) ===
+                mapPut(rExterns, "rockit_frame_alloc", true)
+                mapPut(rExterns, "rockit_await", true)
+
+                // 3a. Allocate child frame using child's frame_size global
+                val cfsz = llvmNextSSA(rState)
+                llvmLine(buf, stringConcat("  ", stringConcat(cfsz, stringConcat(" = load i64, ptr @", stringConcat(awResumeName, ".frame_size")))))
+                val cframe = llvmNextSSA(rState)
+                llvmLine(buf, stringConcat("  ", stringConcat(cframe, stringConcat(" = call ptr @rockit_frame_alloc(i64 ", stringConcat(cfsz, ")")))))
+
+                // 3b. Store call arguments into child frame[3..3+argc-1]
+                var awi: Int = 0
+                while (awi < awArgc) {
+                    val argReg = llvmReadU16(bc, ip + 7 + awi * 2)
+                    val ta = llvmNextSSA(rState)
+                    val cg = llvmNextSSA(rState)
+                    llvmLine(buf, stringConcat("  ", stringConcat(ta, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(cg, stringConcat(" = getelementptr i64, ptr ", stringConcat(cframe, stringConcat(", i32 ", toString(awi + 3)))))))
+                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(ta, stringConcat(", ptr ", cg))))
+                    awi = awi + 1
+                }
+
+                // 3c. Call rockit_await(child_resume, child_frame, self_resume, self_frame)
+                val awRet = llvmNextSSA(rState)
+                llvmLine(buf, stringConcat("  ", stringConcat(awRet, stringConcat(" = call i64 @rockit_await(ptr @", stringConcat(awResumeName, stringConcat(", ptr ", stringConcat(cframe, stringConcat(", ptr @", stringConcat(resumeName, ", ptr %frame)")))))))))
+                llvmLine(buf, stringConcat("  ret i64 ", awRet))
+            } else {
+                // === Synchronous path (outside concurrent block) ===
+                // 3. Load args and call the awaited function directly
+                var awArgs: String = ""
+                var awi: Int = 0
+                while (awi < awArgc) {
+                    val argReg = llvmReadU16(bc, ip + 7 + awi * 2)
+                    val ta = llvmNextSSA(rState)
+                    llvmLine(buf, stringConcat("  ", stringConcat(ta, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+                    if (awi > 0) { awArgs = stringConcat(awArgs, ", ") }
+                    awArgs = stringConcat(awArgs, stringConcat("i64 ", ta))
+                    awi = awi + 1
+                }
+                val awResult = llvmNextSSA(rState)
+                if (awArgc == 0) {
+                    llvmLine(buf, stringConcat("  ", stringConcat(awResult, stringConcat(" = call i64 @", stringConcat(awFuncName, "()")))))
+                } else {
+                    llvmLine(buf, stringConcat("  ", stringConcat(awResult, stringConcat(" = call i64 @", stringConcat(awFuncName, stringConcat("(", stringConcat(awArgs, ")")))))))
+                }
+
+                // 4. Recursive call to our own _resume with the await result
+                val awResume = llvmNextSSA(rState)
+                llvmLine(buf, stringConcat("  ", stringConcat(awResume, stringConcat(" = call i64 @", stringConcat(resumeName, stringConcat("(ptr %frame, i64 ", stringConcat(awResult, ")")))))))
+                llvmLine(buf, stringConcat("  ret i64 ", awResume))
+            }
+
+            lastWasTerminator = true
+            currentSeg = currentSeg + 1
+            ip = ip + llvmInstrSize(192, bc, ip)
+        } else if (op == 193) {
+            // CONCURRENT_BEGIN — enter concurrent region
+            concurrentDepth = concurrentDepth + 1
+            ip = ip + 3
+        } else if (op == 194) {
+            // CONCURRENT_END — leave concurrent region, drain event loop
+            concurrentDepth = concurrentDepth - 1
+            mapPut(rExterns, "rockit_run_event_loop", true)
+            llvmLine(buf, "  call void @rockit_run_event_loop()")
+            ip = ip + 3
+        } else if (op == 224) {
+            // OP_RET: src(u16) — always i64 in _resume
+            val src = llvmReadU16(bc, ip + 1)
+            val ts = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  ret i64 ", ts))
+            lastWasTerminator = true
+            ip = ip + 3
+        } else if (op == 225) {
+            // OP_RET_VOID — return null sentinel in _resume
+            llvmLine(buf, "  ret i64 0")
+            lastWasTerminator = true
+            ip = ip + 1
+        } else if (op == 226) {
+            // OP_JUMP: target(u32)
+            val target = llvmReadU32(bc, ip + 1)
+            llvmLine(buf, stringConcat("  br label %", llvmBlockLabel(target)))
+            lastWasTerminator = true
+            ip = ip + 5
+        } else if (op == 227) {
+            // OP_BRANCH: cond(u16) + then(u32) + else(u32)
+            val condReg = llvmReadU16(bc, ip + 1)
+            val thenTarget = llvmReadU32(bc, ip + 3)
+            val elseTarget = llvmReadU32(bc, ip + 7)
+            val tc = llvmNextSSA(rState)
+            val tcmp = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tc, stringConcat(" = load i64, ptr %t", toString(condReg)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp ne i64 ", stringConcat(tc, ", 0")))))
+            llvmLine(buf, stringConcat("  br i1 ", stringConcat(tcmp, stringConcat(", label %", stringConcat(llvmBlockLabel(thenTarget), stringConcat(", label %", llvmBlockLabel(elseTarget)))))))
+            lastWasTerminator = true
+            ip = ip + 11
+        } else if (op == 240) {
+            // OP_UNREACHABLE
+            llvmLine(buf, "  unreachable")
+            lastWasTerminator = true
+            ip = ip + 1
+        } else {
+            // Unknown opcode — skip
+            ip = ip + 1
+        }
+    }
+
+    // Default terminator if needed
+    if (!lastWasTerminator) {
+        llvmLine(buf, "  ret i64 0")
+    }
+
+    // Invalid state
+    llvmLine(buf, "state.invalid:")
+    llvmLine(buf, "  ret i64 0")
+
+    llvmLine(buf, "}")
+    llvmLine(buf, "")
+
+    return llvmJoin(buf)
+}
+
+// ---------------------------------------------------------------------------
 // Emit a function call instruction
 // ---------------------------------------------------------------------------
 
@@ -5976,20 +6830,30 @@ fun emitLLVM(compiler: Map, outputFile: String): Unit {
     // Collect all used externs across all functions
     val allUsedExterns = mapCreate()
 
-    // Emit each function
+    // Emit each function — first pass: register all defined names
     var fi: Int = 0
     while (fi < listSize(functions)) {
         val funcRec = listGet(functions, fi)
         val nameIdx = toInt(mapGet(funcRec, "nameIdx"))
         val funcName = llvmPoolString(compiler, nameIdx)
         mapPut(definedFuncs, funcName, true)
+        // Suspend functions also define funcName_resume
+        if (llvmIsSuspendFunc(funcRec)) {
+            mapPut(definedFuncs, stringConcat(funcName, "_resume"), true)
+        }
         fi = fi + 1
     }
 
+    // Second pass: emit IR for each function
     fi = 0
     while (fi < listSize(functions)) {
         val funcRec = listGet(functions, fi)
-        val funcIR = emitLLVMFunction(compiler, funcRec, sigTable, definedFuncs)
+        var funcIR: String = ""
+        if (llvmIsSuspendFunc(funcRec)) {
+            funcIR = emitLLVMSuspendFunction(compiler, funcRec, sigTable, definedFuncs)
+        } else {
+            funcIR = emitLLVMFunction(compiler, funcRec, sigTable, definedFuncs)
+        }
         listAppend(mainBuf, funcIR)
 
         // Collect externs from this function's state
@@ -6034,6 +6898,11 @@ fun emitLLVM(compiler: Map, outputFile: String): Unit {
         di = di + 1
     }
     llvmLine(mainBuf, "declare i32 @_setjmp(ptr) #0")
+
+    // Suspend function support: malloc/free/memset for coroutine frames
+    llvmLine(mainBuf, "declare ptr @malloc(i64)")
+    llvmLine(mainBuf, "declare void @free(ptr)")
+    llvmLine(mainBuf, "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)")
     llvmLine(mainBuf, "")
     llvmLine(mainBuf, "attributes #0 = { returns_twice }")
 
@@ -6103,6 +6972,9 @@ fun OP_FLT(): Int { return 55 }
 fun OP_FLTE(): Int { return 56 }
 fun OP_FGT(): Int { return 57 }
 fun OP_FGTE(): Int { return 58 }
+fun OP_AWAIT_CALL(): Int { return 192 }
+fun OP_CONCURRENT_BEGIN(): Int { return 193 }
+fun OP_CONCURRENT_END(): Int { return 194 }
 
 // Constant pool kind tags
 fun CK_STRING(): Int { return 1 }
@@ -6366,6 +7238,19 @@ fun emitLoadParam(fs: Map, dest: Int, paramIdx: Int): Unit {
 fun emitCall(fs: Map, dest: Int, funcName: String, args: List): Unit {
     val idx = addFuncName(mapGet(fs, "compiler"), funcName)
     emitByte(fs, OP_CALL())
+    emitU16(fs, dest)
+    emitU16(fs, idx)
+    emitU16(fs, listSize(args))
+    var i: Int = 0
+    while (i < listSize(args)) {
+        emitU16(fs, toInt(listGet(args, i)))
+        i = i + 1
+    }
+}
+
+fun emitAwaitCall(fs: Map, dest: Int, funcName: String, args: List): Unit {
+    val idx = addFuncName(mapGet(fs, "compiler"), funcName)
+    emitByte(fs, OP_AWAIT_CALL())
     emitU16(fs, dest)
     emitU16(fs, idx)
     emitU16(fs, listSize(args))
@@ -7213,6 +8098,28 @@ fun compileExpr(fs: Map, node: Map): Int {
 
     if (kind == "awaitExpr") {
         val operand = mapGet(node, "operand")
+        val opKind = toString(mapGet(operand, "kind"))
+        if (opKind == "call") {
+            val callee = mapGet(operand, "callee")
+            if (toString(mapGet(callee, "kind")) == "ident") {
+                val funcName = toString(mapGet(callee, "name"))
+                val callArgs = mapGet(operand, "args")
+                val argRegs = listCreate()
+                var ai: Int = 0
+                while (ai < listSize(callArgs)) {
+                    val argNode = listGet(callArgs, ai)
+                    if (isMap(argNode) && mapGet(argNode, "kind") != null && toString(mapGet(argNode, "kind")) == "namedArg") {
+                        listAppend(argRegs, compileExpr(fs, mapGet(argNode, "value")))
+                    } else {
+                        listAppend(argRegs, compileExpr(fs, argNode))
+                    }
+                    ai = ai + 1
+                }
+                val dest = allocReg(fs)
+                emitAwaitCall(fs, dest, funcName, argRegs)
+                return dest
+            }
+        }
         return compileExpr(fs, operand)
     }
 
@@ -8372,9 +9279,13 @@ fun compileStmt(fs: Map, node: Map): Unit {
         return
     }
 
-    // concurrent block — compile body sequentially (cooperative single-threaded)
+    // concurrent block — emit BEGIN/END markers around body
     if (kind == "concurrent") {
+        emitByte(fs, OP_CONCURRENT_BEGIN())
+        emitU16(fs, 0)
         compileBlock(fs, mapGet(node, "body"))
+        emitByte(fs, OP_CONCURRENT_END())
+        emitU16(fs, 0)
         return
     }
 
@@ -8525,6 +9436,9 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
     mapPut(funcRec, "bytecode", bc)
     mapPut(funcRec, "params", effectiveParams)
     mapPut(funcRec, "lineTable", mapGet(fs, "lineTable"))
+    if (mapGet(decl, "isSuspend") == true) {
+        mapPut(funcRec, "isSuspend", true)
+    }
 
     // Determine return type tag
     val retType = mapGet(decl, "returnType")
