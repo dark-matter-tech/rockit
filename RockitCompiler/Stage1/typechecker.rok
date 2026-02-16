@@ -19,6 +19,9 @@ fun makeTypeChecker(ast: Map): Map {
     // Warnings: list of warning message strings
     mapPut(tc, "warnings", listCreate())
     mapPut(tc, "sourceFile", "")
+    mapPut(tc, "sealedNames", mapCreate())
+    mapPut(tc, "overloadedFuncs", mapCreate()) // baseName -> true
+    mapPut(tc, "typeAliases", mapCreate())     // aliasName -> targetTypeName
     return tc
 }
 
@@ -212,21 +215,45 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
     if (!isMap(decl)) { return }
     val kind = toString(mapGet(decl, "kind"))
 
-    if (kind == "funDecl") {
+    if (kind == "funDecl" || kind == "viewDecl" || kind == "navigationDecl" || kind == "themeDecl") {
         val name = toString(mapGet(decl, "name"))
         val params = mapGet(decl, "params")
         var arity: Int = 0
         if (params != null) { arity = listSize(params) }
         val retTypeNode = mapGet(decl, "returnType")
         var ret: String = "Unit"
-        if (retTypeNode != null) { ret = resolveTypeName(retTypeNode) }
+        if (retTypeNode != null) { ret = tcResolveType(tc, retTypeNode) }
         val sig = mapCreate()
         mapPut(sig, "arity", arity)
         mapPut(sig, "returnType", ret)
-        mapPut(sig, "variadic", false)
+        // Check if any param is vararg
+        var isVariadic: Bool = false
+        if (params != null) {
+            var vci: Int = 0
+            while (vci < listSize(params)) {
+                if (mapGet(listGet(params, vci), "isVararg") != null) {
+                    isVariadic = true
+                }
+                vci = vci + 1
+            }
+        }
+        mapPut(sig, "variadic", isVariadic)
         mapPut(sig, "params", params)
-        mapPut(mapGet(tc, "functions"), name, sig)
-    } else if (kind == "classDecl") {
+        // Check for function overloads
+        val fns = mapGet(tc, "functions")
+        val existing = mapGet(fns, name)
+        if (existing != null) {
+            val existingArity = toInt(mapGet(existing, "arity"))
+            if (existingArity != arity) {
+                // Valid overload — register under mangled name
+                mapPut(mapGet(tc, "overloadedFuncs"), name, true)
+                val mangledName = stringConcat(name, stringConcat("$", toString(arity)))
+                mapPut(fns, mangledName, sig)
+            }
+        } else {
+            mapPut(fns, name, sig)
+        }
+    } else if (kind == "classDecl" || kind == "actorDecl") {
         val name = toString(mapGet(decl, "name"))
         val classInfo = mapCreate()
         val fields = mapCreate()
@@ -238,12 +265,37 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
                 val p = listGet(ctorParams, j)
                 val pname = toString(mapGet(p, "name"))
                 val ptype = mapGet(p, "type")
-                mapPut(fields, pname, if (ptype != null) { resolveTypeName(ptype) } else { "Any" })
+                mapPut(fields, pname, if (ptype != null) { tcResolveType(tc, ptype) } else { "Any" })
                 j = j + 1
             }
         }
         mapPut(classInfo, "fields", fields)
         mapPut(mapGet(tc, "classes"), name, classInfo)
+
+        // Track sealed classes
+        val isSealed = mapGet(decl, "isSealed")
+        if (isSealed == true) {
+            mapPut(mapGet(tc, "sealedNames"), name, listCreate())
+        }
+        // Track subclasses of sealed parents
+        val superTypes = mapGet(decl, "superTypes")
+        if (superTypes != null) {
+            var si: Int = 0
+            while (si < listSize(superTypes)) {
+                val st = listGet(superTypes, si)
+                var superName: String = ""
+                if (isMap(st)) {
+                    superName = toString(mapGet(st, "name"))
+                } else {
+                    superName = toString(st)
+                }
+                val sealedSubs = mapGet(mapGet(tc, "sealedNames"), superName)
+                if (sealedSubs != null) {
+                    listAppend(sealedSubs, name)
+                }
+                si = si + 1
+            }
+        }
 
         // Register constructor as a function
         val ctorSig = mapCreate()
@@ -273,7 +325,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
                                 val mret = mapGet(member, "returnType")
                                 val msig = mapCreate()
                                 mapPut(msig, "arity", marity + 1)
-                                mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
+                                mapPut(msig, "returnType", if (mret != null) { tcResolveType(tc, mret) } else { "Unit" })
                                 mapPut(msig, "variadic", false)
                                 mapPut(mapGet(tc, "functions"), fullName, msig)
                             }
@@ -323,7 +375,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
                         val mret = mapGet(member, "returnType")
                         val msig = mapCreate()
                         mapPut(msig, "arity", marity + 1)
-                        mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
+                        mapPut(msig, "returnType", if (mret != null) { tcResolveType(tc, mret) } else { "Unit" })
                         mapPut(msig, "variadic", false)
                         mapPut(mapGet(tc, "functions"), fullName, msig)
                     }
@@ -359,7 +411,7 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
                                 val mret = mapGet(member, "returnType")
                                 val msig = mapCreate()
                                 mapPut(msig, "arity", marity + 1)
-                                mapPut(msig, "returnType", if (mret != null) { resolveTypeName(mret) } else { "Unit" })
+                                mapPut(msig, "returnType", if (mret != null) { tcResolveType(tc, mret) } else { "Unit" })
                                 mapPut(msig, "variadic", false)
                                 mapPut(mapGet(tc, "functions"), fullName, msig)
                             }
@@ -371,6 +423,13 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
         }
         mapPut(classInfo, "interfaceMethods", methodList)
         mapPut(mapGet(tc, "classes"), name, classInfo)
+    }
+
+    if (kind == "typeAlias") {
+        val aliasName = toString(mapGet(decl, "name"))
+        val targetNode = mapGet(decl, "target")
+        val targetName = resolveTypeName(targetNode)
+        mapPut(mapGet(tc, "typeAliases"), aliasName, targetName)
     }
 }
 
@@ -389,6 +448,28 @@ fun resolveTypeName(typeNode: Map): String {
         return "Function"
     }
     return "Any"
+}
+
+// Resolve a type name with alias substitution
+fun tcResolveType(tc: Map, typeNode: Map): String {
+    val name = resolveTypeName(typeNode)
+    val aliases = mapGet(tc, "typeAliases")
+    if (aliases == null) { return name }
+    // Handle nullable aliases: "Text?" -> check "Text" alias -> "String?"
+    val len = stringLength(name)
+    if (len > 1) {
+        val lastChar = charAt(name, len - 1)
+        if (lastChar == "?") {
+            val baseName = substring(name, 0, len - 1)
+            val baseTarget = mapGet(aliases, baseName)
+            if (baseTarget != null) {
+                return stringConcat(toString(baseTarget), "?")
+            }
+        }
+    }
+    val target = mapGet(aliases, name)
+    if (target != null) { return toString(target) }
+    return name
 }
 
 // ---------------------------------------------------------------------------
@@ -411,7 +492,7 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
     if (!isMap(decl)) { return }
     val kind = toString(mapGet(decl, "kind"))
 
-    if (kind == "funDecl") {
+    if (kind == "funDecl" || kind == "viewDecl" || kind == "navigationDecl" || kind == "themeDecl") {
         tcPushScope(tc)
         // Register parameters
         val params = mapGet(decl, "params")
@@ -422,7 +503,7 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
                 val pname = toString(mapGet(p, "name"))
                 val ptype = mapGet(p, "type")
                 var typeName: String = "Any"
-                if (ptype != null) { typeName = resolveTypeName(ptype) }
+                if (ptype != null) { typeName = tcResolveType(tc, ptype) }
                 tcDefine(tc, pname, typeName)
                 i = i + 1
             }
@@ -436,7 +517,7 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
             }
         }
         tcPopScope(tc)
-    } else if (kind == "classDecl") {
+    } else if (kind == "classDecl" || kind == "actorDecl") {
         // Check methods
         val classBody = mapGet(decl, "body")
         if (classBody == null) { return }
@@ -463,7 +544,7 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
                             val pname = toString(mapGet(p, "name"))
                             val ptype = mapGet(p, "type")
                             var ptName: String = "Any"
-                            if (ptype != null) { ptName = resolveTypeName(ptype) }
+                            if (ptype != null) { ptName = tcResolveType(tc, ptype) }
                             tcDefine(tc, pname, ptName)
                             j = j + 1
                         }
@@ -495,7 +576,11 @@ fun tcCheckDecl(tc: Map, decl: Map): Unit {
                                     val fullName = stringConcat(className, stringConcat(".", reqMethod))
                                     val fns = mapGet(tc, "functions")
                                     if (mapGet(fns, fullName) == null) {
-                                        tcWarn(tc, stringConcat("class '", stringConcat(className, stringConcat("' missing interface method '", stringConcat(reqMethod, stringConcat("' from '", stringConcat(superName, "'")))))), decl)
+                                        // Check if interface provides a default implementation
+                                        val ifaceFullName = stringConcat(superName, stringConcat(".", reqMethod))
+                                        if (mapGet(fns, ifaceFullName) == null) {
+                                            tcWarn(tc, stringConcat("class '", stringConcat(className, stringConcat("' missing interface method '", stringConcat(reqMethod, stringConcat("' from '", stringConcat(superName, "'")))))), decl)
+                                        }
                                     }
                                     mi = mi + 1
                                 }
@@ -551,7 +636,7 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
         val initExpr = mapGet(stmt, "init")
         var declaredType: String = ""
         if (typeAnnotation != null) {
-            declaredType = resolveTypeName(typeAnnotation)
+            declaredType = tcResolveType(tc, typeAnnotation)
         }
         if (initExpr != null) {
             val inferredType = tcInferExpr(tc, initExpr)
@@ -571,7 +656,7 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
         val initExpr = mapGet(stmt, "init")
         var declaredType: String = ""
         if (typeAnnotation != null) {
-            declaredType = resolveTypeName(typeAnnotation)
+            declaredType = tcResolveType(tc, typeAnnotation)
         }
         if (initExpr != null) {
             val inferredType = tcInferExpr(tc, initExpr)
@@ -606,15 +691,39 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
         }
     } else if (kind == "if") {
         val condition = mapGet(stmt, "condition")
+        var smartCastName: String = ""
+        var smartCastType: String = ""
         if (condition != null) {
             val condType = tcInferExpr(tc, condition)
             if (condType != "Bool" && condType != "Any") {
                 tcError(tc, stringConcat("if condition must be Bool, got ", condType), stmt)
             }
+            if (isMap(condition)) {
+                val condKind = toString(mapGet(condition, "kind"))
+                if (condKind == "typeCheck") {
+                    val operand = mapGet(condition, "operand")
+                    if (operand != null) {
+                        if (isMap(operand)) {
+                            if (toString(mapGet(operand, "kind")) == "ident") {
+                                smartCastName = toString(mapGet(operand, "name"))
+                                val tNode = mapGet(condition, "type")
+                                if (tNode != null) {
+                                    if (isMap(tNode)) {
+                                        smartCastType = toString(mapGet(tNode, "name"))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         val thenBody = mapGet(stmt, "then")
         if (thenBody != null) {
             tcPushScope(tc)
+            if (stringLength(smartCastName) > 0) {
+                tcDefine(tc, smartCastName, smartCastType)
+            }
             val stmts = mapGet(thenBody, "stmts")
             if (stmts != null) { tcCheckStmts(tc, stmts) }
             tcPopScope(tc)
@@ -640,6 +749,21 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
             val stmts = mapGet(body, "stmts")
             if (stmts != null) { tcCheckStmts(tc, stmts) }
             tcPopScope(tc)
+        }
+    } else if (kind == "doWhile") {
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            tcPushScope(tc)
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) { tcCheckStmts(tc, stmts) }
+            tcPopScope(tc)
+        }
+        val condition = mapGet(stmt, "condition")
+        if (condition != null) {
+            val condType = tcInferExpr(tc, condition)
+            if (condType != "Bool" && condType != "Any") {
+                tcError(tc, stringConcat("do-while condition must be Bool, got ", condType), stmt)
+            }
         }
     } else if (kind == "for") {
         tcPushScope(tc)
@@ -673,7 +797,7 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
             if (catchVar != null) {
                 val catchType = mapGet(stmt, "catchType")
                 var catchTypeName: String = "Any"
-                if (catchType != null) { catchTypeName = resolveTypeName(catchType) }
+                if (catchType != null) { catchTypeName = tcResolveType(tc, catchType) }
                 tcDefine(tc, toString(catchVar), catchTypeName)
             }
             val cStmts = mapGet(catchBody, "stmts")
@@ -808,6 +932,12 @@ fun tcInferExpr(tc: Map, expr: Map): String {
         val leftType = tcInferExpr(tc, left)
         val rightType = tcInferExpr(tc, right)
 
+        // Annotate with operand types for codegen float detection
+        val isFloat = leftType == "Float" || rightType == "Float"
+        if (isFloat) {
+            mapPut(expr, "_floatOp", true)
+        }
+
         // Comparison operators
         if (op == "==" || op == "!=" || op == ">" || op == "<" || op == ">=" || op == "<=") {
             return "Bool"
@@ -837,8 +967,13 @@ fun tcInferExpr(tc: Map, expr: Map): String {
         val operand = mapGet(expr, "operand")
         val op = toString(mapGet(expr, "op"))
         val operandType = tcInferExpr(tc, operand)
-        if (op == "!") { return "Bool" }
-        if (op == "-") { return operandType }
+        if (op == "!" ) { return "Bool" }
+        if (op == "-") {
+            if (operandType == "Float") {
+                mapPut(expr, "_floatOp", true)
+            }
+            return operandType
+        }
         return operandType
     }
 
@@ -872,12 +1007,27 @@ fun tcInferExpr(tc: Map, expr: Map): String {
             val fns = mapGet(tc, "functions")
             val sig = mapGet(fns, fname)
             if (sig != null) {
-                val expectedArity = toInt(mapGet(sig, "arity"))
-                // Only check arity for non-variadic functions with known arity
-                if (expectedArity >= 0 && argCount != expectedArity) {
-                    // Allow default parameters — don't error if fewer args
-                    if (argCount > expectedArity) {
-                        tcError(tc, stringConcat(fname, stringConcat(" expects ", stringConcat(toString(expectedArity), stringConcat(" argument(s), got ", toString(argCount))))), expr)
+                // Check if overloaded — skip arity check for overloaded functions
+                val isOverloaded = mapGet(mapGet(tc, "overloadedFuncs"), fname)
+                if (isOverloaded == null) {
+                    val isVariadic = mapGet(sig, "variadic")
+                    if (isVariadic != true) {
+                        val expectedArity = toInt(mapGet(sig, "arity"))
+                        // Only check arity for non-variadic functions with known arity
+                        if (expectedArity >= 0 && argCount != expectedArity) {
+                            // Allow default parameters — don't error if fewer args
+                            if (argCount > expectedArity) {
+                                tcError(tc, stringConcat(fname, stringConcat(" expects ", stringConcat(toString(expectedArity), stringConcat(" argument(s), got ", toString(argCount))))), expr)
+                            }
+                        }
+                    }
+                }
+                // For overloaded functions, try to find the right overload's return type
+                if (isOverloaded != null) {
+                    val mangledName = stringConcat(fname, stringConcat("$", toString(argCount)))
+                    val overloadSig = mapGet(fns, mangledName)
+                    if (overloadSig != null) {
+                        return toString(mapGet(overloadSig, "returnType"))
                     }
                 }
                 return toString(mapGet(sig, "returnType"))
@@ -917,15 +1067,39 @@ fun tcInferExpr(tc: Map, expr: Map): String {
 
     if (kind == "if") {
         val condition = mapGet(expr, "condition")
+        var smartCastName: String = ""
+        var smartCastType: String = ""
         if (condition != null) {
             val condType = tcInferExpr(tc, condition)
             if (condType != "Bool" && condType != "Any") {
                 tcError(tc, stringConcat("if condition must be Bool, got ", condType), expr)
             }
+            if (isMap(condition)) {
+                val condKind = toString(mapGet(condition, "kind"))
+                if (condKind == "typeCheck") {
+                    val operand = mapGet(condition, "operand")
+                    if (operand != null) {
+                        if (isMap(operand)) {
+                            if (toString(mapGet(operand, "kind")) == "ident") {
+                                smartCastName = toString(mapGet(operand, "name"))
+                                val tNode = mapGet(condition, "type")
+                                if (tNode != null) {
+                                    if (isMap(tNode)) {
+                                        smartCastType = toString(mapGet(tNode, "name"))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         val thenBody = mapGet(expr, "then")
         if (thenBody != null) {
             tcPushScope(tc)
+            if (stringLength(smartCastName) > 0) {
+                tcDefine(tc, smartCastName, smartCastType)
+            }
             val stmts = mapGet(thenBody, "stmts")
             if (stmts != null) { tcCheckStmts(tc, stmts) }
             tcPopScope(tc)
@@ -986,6 +1160,12 @@ fun tcInferExpr(tc: Map, expr: Map): String {
         return "Function"
     }
 
+    if (kind == "awaitExpr") {
+        val operand = mapGet(expr, "operand")
+        if (operand != null) { return tcInferExpr(tc, operand) }
+        return "Any"
+    }
+
     if (kind == "elvis") {
         val left = mapGet(expr, "left")
         val right = mapGet(expr, "right")
@@ -1031,7 +1211,7 @@ fun tcInferExpr(tc: Map, expr: Map): String {
         val inner = mapGet(expr, "expr")
         if (inner != null) { tcInferExpr(tc, inner) }
         val targetType = mapGet(expr, "targetType")
-        if (targetType != null) { return resolveTypeName(targetType) }
+        if (targetType != null) { return tcResolveType(tc, targetType) }
         return "Any"
     }
 
@@ -1101,6 +1281,41 @@ fun tcCheckWhenExhaustiveness(tc: Map, node: Map, branches: List): Unit {
     }
     if (hasElse) { return }
 
+    // Check sealed class exhaustiveness
+    val sealedNames = mapGet(tc, "sealedNames")
+    if (sealedNames != null) {
+        val sealedKeys = mapKeys(sealedNames)
+        var sk: Int = 0
+        while (sk < listSize(sealedKeys)) {
+            val sealedName = toString(listGet(sealedKeys, sk))
+            val subs = mapGet(sealedNames, sealedName)
+            if (subs != null) {
+                if (listSize(subs) > 0) {
+                    var anyMatch: Bool = false
+                    var si: Int = 0
+                    while (si < listSize(subs)) {
+                        val subName = toString(listGet(subs, si))
+                        if (listContainsStr(coveredTypes, subName)) {
+                            anyMatch = true
+                        }
+                        si = si + 1
+                    }
+                    if (anyMatch) {
+                        var mi: Int = 0
+                        while (mi < listSize(subs)) {
+                            val subName = toString(listGet(subs, mi))
+                            if (!listContainsStr(coveredTypes, subName)) {
+                                tcError(tc, stringConcat("'when' on sealed class '", stringConcat(sealedName, stringConcat("' missing branch for '", stringConcat(subName, "'")))), node)
+                            }
+                            mi = mi + 1
+                        }
+                    }
+                }
+            }
+            sk = sk + 1
+        }
+    }
+
     // Check enum exhaustiveness
     val classes = mapGet(tc, "classes")
     val classKeys = mapKeys(classes)
@@ -1112,23 +1327,21 @@ fun tcCheckWhenExhaustiveness(tc: Map, node: Map, branches: List): Unit {
             val enumEntries = mapGet(cinfo, "enumEntries")
             if (enumEntries != null) {
                 if (listSize(enumEntries) > 0) {
-                    // Check if any entries from this enum are covered
                     var anyMatch: Bool = false
                     var ei: Int = 0
                     while (ei < listSize(enumEntries)) {
                         val ename = toString(listGet(enumEntries, ei))
-                        if (listContains(coveredEntries, ename)) {
+                        if (listContainsStr(coveredEntries, ename)) {
                             anyMatch = true
                         }
                         ei = ei + 1
                     }
-                    // If some entries match but not all, warn about missing ones
                     if (anyMatch) {
                         var mi: Int = 0
                         while (mi < listSize(enumEntries)) {
                             val ename = toString(listGet(enumEntries, mi))
-                            if (!listContains(coveredEntries, ename)) {
-                                tcWarn(tc, stringConcat("'when' missing branch for '", stringConcat(cname, stringConcat(".", stringConcat(ename, "'")))), node)
+                            if (!listContainsStr(coveredEntries, ename)) {
+                                tcError(tc, stringConcat("'when' missing branch for '", stringConcat(cname, stringConcat(".", stringConcat(ename, "'")))), node)
                             }
                             mi = mi + 1
                         }
@@ -1174,4 +1387,3 @@ fun typeCheckWithFile(ast: Map, sourceFile: String): Map {
     tcCheckBodies(tc)
     return tc
 }
-

@@ -40,6 +40,7 @@ fun buildKeywordMap(): Map {
     mapPut(kw, "protected", "KW_PROTECTED")
     mapPut(kw, "companion", "KW_COMPANION")
     mapPut(kw, "typealias", "KW_TYPEALIAS")
+    mapPut(kw, "vararg", "KW_VARARG")
     // Rockit-specific keywords
     mapPut(kw, "view", "KW_VIEW")
     mapPut(kw, "actor", "KW_ACTOR")
@@ -84,6 +85,18 @@ fun buildKeywordMap(): Map {
     mapPut(kw, "false", "BOOL_FALSE")
     mapPut(kw, "null", "NULL")
     return kw
+}
+
+// String-aware list contains (C runtime listContains uses pointer equality)
+fun listContainsStr(list: List, target: String): Bool {
+    var i: Int = 0
+    while (i < listSize(list)) {
+        if (toString(listGet(list, i)) == target) {
+            return true
+        }
+        i = i + 1
+    }
+    return false
 }
 
 // ---------------------------------------------------------------------------
@@ -231,8 +244,12 @@ fun scanString(lex: Map): String {
                                 if (esc == "$") {
                                     result = stringConcat(result, "$")
                                 } else {
-                                    // Unknown escape — include backslash and char
-                                    result = stringConcat(result, stringConcat("\\", esc))
+                                    if (esc == "0") {
+                                        result = stringConcat(result, "\0")
+                                    } else {
+                                        // Unknown escape — include backslash and char
+                                        result = stringConcat(result, stringConcat("\\", esc))
+                                    }
                                 }
                             }
                         }

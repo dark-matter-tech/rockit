@@ -48,6 +48,16 @@ fun OP_NULL_CHECK(): Int { return 128 }
 fun OP_IS_NULL(): Int { return 129 }
 fun OP_TYPE_CHECK(): Int { return 144 }
 fun OP_TYPE_CAST(): Int { return 145 }
+fun OP_FADD(): Int { return 38 }
+fun OP_FSUB(): Int { return 39 }
+fun OP_FMUL(): Int { return 40 }
+fun OP_FDIV(): Int { return 41 }
+fun OP_FNEG(): Int { return 42 }
+fun OP_FEQ(): Int { return 54 }
+fun OP_FLT(): Int { return 55 }
+fun OP_FLTE(): Int { return 56 }
+fun OP_FGT(): Int { return 57 }
+fun OP_FGTE(): Int { return 58 }
 
 // Constant pool kind tags
 fun CK_STRING(): Int { return 1 }
@@ -55,6 +65,7 @@ fun CK_TYPE_NAME(): Int { return 2 }
 fun CK_FIELD_NAME(): Int { return 3 }
 fun CK_FUNC_NAME(): Int { return 4 }
 fun CK_METHOD_NAME(): Int { return 5 }
+fun CK_FLOAT(): Int { return 6 }
 
 // Type tags
 fun TT_UNIT(): Int { return 0 }
@@ -77,10 +88,15 @@ fun makeCompiler(): Map {
     mapPut(c, "enumNames", mapCreate())   // enumName -> list of entry names
     mapPut(c, "objectNames", mapCreate()) // objectName -> true (singletons)
     mapPut(c, "interfaceNames", mapCreate()) // ifaceName -> list of method names
+    mapPut(c, "interfaceDefaultDecls", mapCreate()) // ifaceName -> list of method AST nodes with default bodies
     mapPut(c, "sealedNames", mapCreate())    // sealedName -> list of subclass names
     mapPut(c, "funcSignatures", mapCreate()) // funcName -> params list (for default args)
     mapPut(c, "typeAliases", mapCreate())    // aliasName -> targetName
     mapPut(c, "extensionFuncs", mapCreate()) // "TypeName.method" -> true
+    mapPut(c, "classBodyInits", mapCreate()) // className -> list of {name, init} for body field defaults
+    mapPut(c, "classFieldNames", mapCreate()) // className -> ordered list of ctor param names
+    mapPut(c, "overloadedFuncs", mapCreate()) // baseName -> true (marks name as overloaded)
+    mapPut(c, "varargFuncs", mapCreate())    // funcName -> vararg param index
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     return c
@@ -105,6 +121,10 @@ fun addConst(c: Map, kind: Int, value: String): Int {
 
 fun addStringConst(c: Map, s: String): Int {
     return addConst(c, CK_STRING(), s)
+}
+
+fun addFloatConst(c: Map, value: String): Int {
+    return addConst(c, CK_FLOAT(), value)
 }
 
 fun addFuncName(c: Map, name: String): Int {
@@ -251,6 +271,13 @@ fun emitConstInt(fs: Map, dest: Int, value: Int): Unit {
     emitI64(fs, value)
 }
 
+fun emitConstFloat(fs: Map, dest: Int, value: String): Unit {
+    val idx = addFloatConst(mapGet(fs, "compiler"), value)
+    emitByte(fs, OP_CONST_FLOAT())
+    emitU16(fs, dest)
+    emitU16(fs, idx)
+}
+
 fun emitConstString(fs: Map, dest: Int, value: String): Unit {
     val idx = addStringConst(mapGet(fs, "compiler"), value)
     emitByte(fs, OP_CONST_STRING())
@@ -317,21 +344,24 @@ fun emitCallIndirect(fs: Map, dest: Int, funcRefReg: Int, args: List): Unit {
 }
 
 fun emitBinaryOp(fs: Map, op: String, dest: Int, left: Int, right: Int): Unit {
-    if (op == "+") { emitByte(fs, OP_ADD()) }
-    else { if (op == "-") { emitByte(fs, OP_SUB()) }
-    else { if (op == "*") { emitByte(fs, OP_MUL()) }
-    else { if (op == "/") { emitByte(fs, OP_DIV()) }
+    emitBinaryOpFloat(fs, op, dest, left, right, false)
+}
+
+fun emitBinaryOpFloat(fs: Map, op: String, dest: Int, left: Int, right: Int, isFloat: Bool): Unit {
+    if (op == "+") { if (isFloat) { emitByte(fs, OP_FADD()) } else { emitByte(fs, OP_ADD()) } }
+    else { if (op == "-") { if (isFloat) { emitByte(fs, OP_FSUB()) } else { emitByte(fs, OP_SUB()) } }
+    else { if (op == "*") { if (isFloat) { emitByte(fs, OP_FMUL()) } else { emitByte(fs, OP_MUL()) } }
+    else { if (op == "/") { if (isFloat) { emitByte(fs, OP_FDIV()) } else { emitByte(fs, OP_DIV()) } }
     else { if (op == "%") { emitByte(fs, OP_MOD()) }
-    else { if (op == "==") { emitByte(fs, OP_EQ()) }
+    else { if (op == "==") { if (isFloat) { emitByte(fs, OP_FEQ()) } else { emitByte(fs, OP_EQ()) } }
     else { if (op == "!=") { emitByte(fs, OP_NEQ()) }
-    else { if (op == "<") { emitByte(fs, OP_LT()) }
-    else { if (op == "<=") { emitByte(fs, OP_LTE()) }
-    else { if (op == ">") { emitByte(fs, OP_GT()) }
-    else { if (op == ">=") { emitByte(fs, OP_GTE()) }
+    else { if (op == "<") { if (isFloat) { emitByte(fs, OP_FLT()) } else { emitByte(fs, OP_LT()) } }
+    else { if (op == "<=") { if (isFloat) { emitByte(fs, OP_FLTE()) } else { emitByte(fs, OP_LTE()) } }
+    else { if (op == ">") { if (isFloat) { emitByte(fs, OP_FGT()) } else { emitByte(fs, OP_GT()) } }
+    else { if (op == ">=") { if (isFloat) { emitByte(fs, OP_FGTE()) } else { emitByte(fs, OP_GTE()) } }
     else { if (op == "&&") { emitByte(fs, OP_AND()) }
     else { if (op == "||") { emitByte(fs, OP_OR()) }
     else {
-        // Unknown operator — emit ADD as fallback
         emitByte(fs, OP_ADD())
     } } } } } } } } } } } } }
     emitU16(fs, dest)
@@ -588,9 +618,9 @@ fun compileExpr(fs: Map, node: Map): Int {
     }
 
     if (kind == "floatLit") {
-        // Emit as int for now (float codegen would need emitF64)
         val dest = allocReg(fs)
-        emitConstInt(fs, dest, 0)
+        val floatStr = toString(mapGet(node, "value"))
+        emitConstFloat(fs, dest, floatStr)
         return dest
     }
 
@@ -635,7 +665,7 @@ fun compileExpr(fs: Map, node: Map): Int {
         val methodClass = mapGet(fs, "className")
         if (methodClass != null) {
             val classFields = mapGet(fs, "classFields")
-            if (listContains(classFields, name)) {
+            if (listContainsStr(classFields, name)) {
                 val thisSlot = toInt(mapGet(mapGet(fs, "locals"), "this"))
                 val thisReg = allocReg(fs)
                 emitLoad(fs, thisReg, thisSlot)
@@ -813,7 +843,8 @@ fun compileExpr(fs: Map, node: Map): Int {
         val leftReg = compileExpr(fs, mapGet(node, "left"))
         val rightReg = compileExpr(fs, mapGet(node, "right"))
         val dest = allocReg(fs)
-        emitBinaryOp(fs, op, dest, leftReg, rightReg)
+        val isFloat = mapGet(node, "_floatOp") != null
+        emitBinaryOpFloat(fs, op, dest, leftReg, rightReg, isFloat)
         return dest
     }
 
@@ -822,7 +853,12 @@ fun compileExpr(fs: Map, node: Map): Int {
         val operandReg = compileExpr(fs, mapGet(node, "operand"))
         val dest = allocReg(fs)
         if (op == "-") {
-            emitByte(fs, OP_NEG())
+            val isFloat = mapGet(node, "_floatOp") != null
+            if (isFloat) {
+                emitByte(fs, OP_FNEG())
+            } else {
+                emitByte(fs, OP_NEG())
+            }
             emitU16(fs, dest)
             emitU16(fs, operandReg)
         } else {
@@ -863,6 +899,19 @@ fun compileExpr(fs: Map, node: Map): Int {
                 }
                 val dest = allocReg(fs)
                 emitNewObject(fs, dest, funcName, argRegs)
+                // Initialize body-declared fields with default values
+                val bodyInits = mapGet(mapGet(mapGet(fs, "compiler"), "classBodyInits"), funcName)
+                if (bodyInits != null) {
+                    var bi: Int = 0
+                    while (bi < listSize(bodyInits)) {
+                        val initRec = listGet(bodyInits, bi)
+                        val fieldName = toString(mapGet(initRec, "name"))
+                        val initExpr = mapGet(initRec, "init")
+                        val valReg = compileExpr(fs, initExpr)
+                        emitSetField(fs, dest, fieldName, valReg)
+                        bi = bi + 1
+                    }
+                }
                 return dest
             }
 
@@ -963,6 +1012,47 @@ fun compileExpr(fs: Map, node: Map): Int {
                     }
                 }
             }
+            // Pack vararg arguments into a list
+            val varargIdx = mapGet(mapGet(mapGet(fs, "compiler"), "varargFuncs"), funcName)
+            if (varargIdx != null) {
+                val vidx = toInt(varargIdx)
+                // Collect args before vararg position
+                val packedArgs = listCreate()
+                var vai: Int = 0
+                while (vai < vidx) {
+                    if (vai < listSize(argRegs)) {
+                        listAppend(packedArgs, toInt(listGet(argRegs, vai)))
+                    }
+                    vai = vai + 1
+                }
+                // Create a list from remaining args
+                val listReg = allocReg(fs)
+                emitCall(fs, listReg, "listCreate", listCreate())
+                while (vai < listSize(argRegs)) {
+                    val appendArgs = listCreate()
+                    listAppend(appendArgs, listReg)
+                    listAppend(appendArgs, toInt(listGet(argRegs, vai)))
+                    emitCall(fs, allocReg(fs), "listAppend", appendArgs)
+                    vai = vai + 1
+                }
+                listAppend(packedArgs, listReg)
+                // Replace argRegs with packed version
+                // Clear and refill argRegs
+                while (listSize(argRegs) > 0) {
+                    listRemoveAt(argRegs, 0)
+                }
+                var pai: Int = 0
+                while (pai < listSize(packedArgs)) {
+                    listAppend(argRegs, toInt(listGet(packedArgs, pai)))
+                    pai = pai + 1
+                }
+            }
+
+            // Resolve overloaded function names by arity
+            val overloads = mapGet(mapGet(mapGet(fs, "compiler"), "overloadedFuncs"), funcName)
+            if (overloads != null) {
+                funcName = stringConcat(funcName, stringConcat("$", toString(listSize(argRegs))))
+            }
             val dest = allocReg(fs)
             emitCall(fs, dest, funcName, argRegs)
             return dest
@@ -979,7 +1069,7 @@ fun compileExpr(fs: Map, node: Map): Int {
                 val isObject = mapGet(mapGet(mapGet(fs, "compiler"), "objectNames"), memberObjName)
                 val isClass = mapGet(mapGet(mapGet(fs, "compiler"), "classNames"), memberObjName)
                 if (isObject != null || isClass != null) {
-                    // Static call to ObjectName.method
+                    // Static call to ObjectName.method OR nested class constructor
                     val fullName = stringConcat(memberObjName, stringConcat(".", methodName))
                     val argRegs = listCreate()
                     var i: Int = 0
@@ -994,7 +1084,26 @@ fun compileExpr(fs: Map, node: Map): Int {
                         i = i + 1
                     }
                     val dest = allocReg(fs)
-                    emitCall(fs, dest, fullName, argRegs)
+                    // Check if fullName is a class name → constructor call
+                    val isNestedClass = mapGet(mapGet(mapGet(fs, "compiler"), "classNames"), fullName)
+                    if (isNestedClass != null) {
+                        emitNewObject(fs, dest, fullName, argRegs)
+                        // Initialize body-declared fields with default values
+                        val bodyInits = mapGet(mapGet(mapGet(fs, "compiler"), "classBodyInits"), fullName)
+                        if (bodyInits != null) {
+                            var bi: Int = 0
+                            while (bi < listSize(bodyInits)) {
+                                val initRec = listGet(bodyInits, bi)
+                                val fieldName = toString(mapGet(initRec, "name"))
+                                val initExpr = mapGet(initRec, "init")
+                                val valReg = compileExpr(fs, initExpr)
+                                emitSetField(fs, dest, fieldName, valReg)
+                                bi = bi + 1
+                            }
+                        }
+                    } else {
+                        emitCall(fs, dest, fullName, argRegs)
+                    }
                     return dest
                 }
             }
@@ -1057,6 +1166,11 @@ fun compileExpr(fs: Map, node: Map): Int {
         return dest
     }
 
+    if (kind == "awaitExpr") {
+        val operand = mapGet(node, "operand")
+        return compileExpr(fs, operand)
+    }
+
     if (kind == "lambda") {
         return compileLambda(fs, node)
     }
@@ -1115,6 +1229,8 @@ fun collectFreeVarsExpr(node: Map, names: Map): Unit {
                 i = i + 1
             }
         }
+    } else if (kind == "awaitExpr") {
+        collectFreeVarsExpr(mapGet(node, "operand"), names)
     } else if (kind == "elvis") {
         collectFreeVarsExpr(mapGet(node, "left"), names)
         collectFreeVarsExpr(mapGet(node, "right"), names)
@@ -1143,7 +1259,7 @@ fun collectFreeVarsStmt(node: Map, names: Map): Unit {
         if (target != null) {
             collectFreeVarsExpr(target, names)
         }
-    } else if (kind == "while") {
+    } else if (kind == "while" || kind == "doWhile") {
         collectFreeVarsExpr(mapGet(node, "condition"), names)
         val body = mapGet(node, "body")
         if (body != null) {
@@ -1269,7 +1385,7 @@ fun compileLambda(fs: Map, node: Map): Int {
         if (stmtCount > 0) {
             val lastStmt = listGet(stmts, stmtCount - 1)
             val lastKind = toString(mapGet(lastStmt, "kind"))
-            if (lastKind != "return" && lastKind != "break" && lastKind != "continue" && lastKind != "valDecl" && lastKind != "varDecl" && lastKind != "assign" && lastKind != "while" && lastKind != "for" && lastKind != "if") {
+            if (lastKind != "return" && lastKind != "break" && lastKind != "continue" && lastKind != "valDecl" && lastKind != "varDecl" && lastKind != "assign" && lastKind != "while" && lastKind != "doWhile" && lastKind != "for" && lastKind != "if") {
                 val retNode = mapCreate()
                 mapPut(retNode, "kind", "return")
                 mapPut(retNode, "value", lastStmt)
@@ -1319,13 +1435,59 @@ fun compileLambda(fs: Map, node: Map): Int {
 // If expression compilation
 // ---------------------------------------------------------------------------
 
+fun isStatementKind(k: String): Bool {
+    if (k == "valDecl") { return true }
+    if (k == "varDecl") { return true }
+    if (k == "assign") { return true }
+    if (k == "compoundAssign") { return true }
+    if (k == "return") { return true }
+    if (k == "while") { return true }
+    if (k == "for") { return true }
+    if (k == "break") { return true }
+    if (k == "continue") { return true }
+    if (k == "throw") { return true }
+    if (k == "destructure") { return true }
+    if (k == "forDestructure") { return true }
+    if (k == "doWhile") { return true }
+    return false
+}
+
+fun compileBlockWithResult(fs: Map, blockNode: Map, dest: Int): Unit {
+    val kind = toString(mapGet(blockNode, "kind"))
+    if (kind == "block") {
+        val stmts = mapGet(blockNode, "stmts")
+        val count = listSize(stmts)
+        var i: Int = 0
+        while (i < count - 1) {
+            compileStmt(fs, listGet(stmts, i))
+            i = i + 1
+        }
+        if (count > 0) {
+            val lastStmt = listGet(stmts, count - 1)
+            val lastKind = toString(mapGet(lastStmt, "kind"))
+            if (isStatementKind(lastKind)) {
+                compileStmt(fs, lastStmt)
+            } else {
+                val valReg = compileExpr(fs, lastStmt)
+                emitStore(fs, dest, valReg)
+            }
+        }
+    } else {
+        val valReg = compileExpr(fs, blockNode)
+        emitStore(fs, dest, valReg)
+    }
+}
+
 fun compileIfExpr(fs: Map, node: Map): Int {
+    val dest = allocReg(fs)
+    emitConstNull(fs, dest)
+
     val condReg = compileExpr(fs, mapGet(node, "condition"))
     val patches = emitBranch(fs, condReg)
 
     // Then branch
     patchJump(fs, toInt(mapGet(patches, "thenPatch")))
-    compileBlock(fs, mapGet(node, "then"))
+    compileBlockWithResult(fs, mapGet(node, "then"), dest)
     val jumpToEnd = emitJump(fs)
 
     // Else branch
@@ -1334,20 +1496,20 @@ fun compileIfExpr(fs: Map, node: Map): Int {
     if (elseNode != null) {
         val elseKind = toString(mapGet(elseNode, "kind"))
         if (elseKind == "block") {
-            compileBlock(fs, elseNode)
+            compileBlockWithResult(fs, elseNode, dest)
         } else {
             if (elseKind == "if") {
-                compileIfExpr(fs, elseNode)
+                val elseResult = compileIfExpr(fs, elseNode)
+                emitStore(fs, dest, elseResult)
             } else {
-                compileStmt(fs, elseNode)
+                val valReg = compileExpr(fs, elseNode)
+                emitStore(fs, dest, valReg)
             }
         }
     }
 
     // End
     patchJump(fs, jumpToEnd)
-    val dest = allocReg(fs)
-    emitConstNull(fs, dest)
     return dest
 }
 
@@ -1396,8 +1558,17 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
                     // No subject — pattern is a boolean condition
                     val exprReg = compileExpr(fs, pattern)
                     emitStore(fs, singleCond, exprReg)
-                } else if (patKind == "isPattern") {
-                    // Type check pattern: is Type
+                } else if (patKind == "inRangePattern") {
+                    // Range pattern: in start..end → subject >= start && subject <= end
+                    val startReg = compileExpr(fs, mapGet(pattern, "start"))
+                    val endReg = compileExpr(fs, mapGet(pattern, "end"))
+                    val geReg = allocReg(fs)
+                    emitBinaryOp(fs, ">=", geReg, subjectReg, startReg)
+                    val leReg = allocReg(fs)
+                    emitBinaryOp(fs, "<=", leReg, subjectReg, endReg)
+                    emitBinaryOp(fs, "&&", singleCond, geReg, leReg)
+                } else if (patKind == "isPattern" || patKind == "isDestructPattern") {
+                    // Type check pattern: is Type or is Type(val a, val b)
                     val typeNode = mapGet(pattern, "type")
                     val typeName = toString(mapGet(typeNode, "name"))
                     emitTypeCheck(fs, singleCond, subjectReg, typeName)
@@ -1437,15 +1608,66 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
             val patches = emitBranch(fs, condReg)
             patchJump(fs, toInt(mapGet(patches, "thenPatch")))
 
-            val body = mapGet(branch, "body")
-            val bodyKind = toString(mapGet(body, "kind"))
-            if (bodyKind == "block") {
-                compileBlock(fs, body)
-            } else {
-                val valReg = compileExpr(fs, body)
-                emitStore(fs, dest, valReg)
+            // Emit destructuring bindings for isDestructPattern
+            var dpi: Int = 0
+            while (dpi < listSize(patterns)) {
+                val dpat = listGet(patterns, dpi)
+                if (toString(mapGet(dpat, "kind")) == "isDestructPattern") {
+                    val dBindings = mapGet(dpat, "bindings")
+                    val dTypeName = toString(mapGet(mapGet(dpat, "type"), "name"))
+                    // Look up field names from the class
+                    val classInfo = mapGet(mapGet(mapGet(fs, "compiler"), "classNames"), dTypeName)
+                    val classFields = mapGet(mapGet(mapGet(fs, "compiler"), "classFieldNames"), dTypeName)
+                    var dbi: Int = 0
+                    while (dbi < listSize(dBindings)) {
+                        val bindName = toString(listGet(dBindings, dbi))
+                        // Get field name by position (or use binding name as fallback)
+                        var fieldName: String = bindName
+                        if (classFields != null) {
+                            if (dbi < listSize(classFields)) {
+                                fieldName = toString(listGet(classFields, dbi))
+                            }
+                        }
+                        val fieldReg = allocReg(fs)
+                        emitGetField(fs, fieldReg, subjectReg, fieldName)
+                        val slot = allocReg(fs)
+                        emitStore(fs, slot, fieldReg)
+                        mapPut(mapGet(fs, "locals"), bindName, slot)
+                        dbi = dbi + 1
+                    }
+                }
+                dpi = dpi + 1
             }
-            listAppend(endPatches, emitJump(fs))
+
+            // Handle guard: if guard -> body, else -> next branch
+            val guardExpr = mapGet(branch, "guard")
+            if (guardExpr != null) {
+                val guardReg = compileExpr(fs, guardExpr)
+                val guardPatches = emitBranch(fs, guardReg)
+                patchJump(fs, toInt(mapGet(guardPatches, "thenPatch")))
+                // Body goes here (guard succeeded)
+                val body = mapGet(branch, "body")
+                val bodyKind = toString(mapGet(body, "kind"))
+                if (bodyKind == "block") {
+                    compileBlock(fs, body)
+                } else {
+                    val valReg = compileExpr(fs, body)
+                    emitStore(fs, dest, valReg)
+                }
+                listAppend(endPatches, emitJump(fs))
+                // Guard failed → jump to else (next branch)
+                patchJump(fs, toInt(mapGet(guardPatches, "elsePatch")))
+            } else {
+                val body = mapGet(branch, "body")
+                val bodyKind = toString(mapGet(body, "kind"))
+                if (bodyKind == "block") {
+                    compileBlock(fs, body)
+                } else {
+                    val valReg = compileExpr(fs, body)
+                    emitStore(fs, dest, valReg)
+                }
+                listAppend(endPatches, emitJump(fs))
+            }
 
             patchJump(fs, toInt(mapGet(patches, "elsePatch")))
         }
@@ -1486,7 +1708,7 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
                     var si: Int = 0
                     while (si < listSize(subs)) {
                         val subName = toString(listGet(subs, si))
-                        if (!listContains(coveredTypes, subName)) {
+                        if (!listContainsStr(coveredTypes, subName)) {
                             allCovered = false
                         }
                         si = si + 1
@@ -1496,7 +1718,7 @@ fun compileWhenExpr(fs: Map, node: Map): Int {
                         var mi: Int = 0
                         while (mi < listSize(subs)) {
                             val subName = toString(listGet(subs, mi))
-                            if (!listContains(coveredTypes, subName)) {
+                            if (!listContainsStr(coveredTypes, subName)) {
                                 val warning = stringConcat("warning: 'when' on sealed class '", stringConcat(sealedName, stringConcat("' missing branch for '", stringConcat(subName, "'"))))
                                 println(warning)
                             }
@@ -1581,7 +1803,7 @@ fun compileStmt(fs: Map, node: Map): Unit {
                 val methodClass = mapGet(fs, "className")
                 if (methodClass != null) {
                     val classFields = mapGet(fs, "classFields")
-                    if (listContains(classFields, name)) {
+                    if (listContainsStr(classFields, name)) {
                         val thisSlot = toInt(mapGet(mapGet(fs, "locals"), "this"))
                         val thisReg = allocReg(fs)
                         emitLoad(fs, thisReg, thisSlot)
@@ -1686,6 +1908,40 @@ fun compileStmt(fs: Map, node: Map): Unit {
         emitU32(fs, loopStart)
 
         // Exit
+        patchJump(fs, toInt(mapGet(patches, "elsePatch")))
+        markLabel(fs, breakLabel)
+
+        // Pop loop context
+        val stack = mapGet(fs, "loopStack")
+        listRemoveAt(stack, listSize(stack) - 1)
+        return
+    }
+
+    if (kind == "doWhile") {
+        val loopStart = currentOffset(fs)
+        val breakLabel = newLabel(fs)
+        val continueLabel = newLabel(fs)
+
+        // Push loop context
+        val loopCtx = mapCreate()
+        mapPut(loopCtx, "breakLabel", breakLabel)
+        mapPut(loopCtx, "continueLabel", continueLabel)
+        listAppend(mapGet(fs, "loopStack"), loopCtx)
+
+        // Body executes first
+        compileBlock(fs, mapGet(node, "body"))
+
+        // Condition (continue target)
+        markLabel(fs, continueLabel)
+        val condReg = compileExpr(fs, mapGet(node, "condition"))
+        val patches = emitBranch(fs, condReg)
+        patchJump(fs, toInt(mapGet(patches, "thenPatch")))
+
+        // If true, loop back to body
+        emitByte(fs, OP_JUMP())
+        emitU32(fs, loopStart)
+
+        // If false, exit
         patchJump(fs, toInt(mapGet(patches, "elsePatch")))
         markLabel(fs, breakLabel)
 
@@ -2146,6 +2402,16 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
     // Store function signature info for call sites
     mapPut(mapGet(compiler, "funcSignatures"), name, params)
 
+    // Track vararg functions
+    var vi: Int = 0
+    while (vi < listSize(params)) {
+        val vp = listGet(params, vi)
+        if (mapGet(vp, "isVararg") != null) {
+            mapPut(mapGet(compiler, "varargFuncs"), name, vi)
+        }
+        vi = vi + 1
+    }
+
     // Compile body
     val body = mapGet(decl, "body")
     if (body != null) {
@@ -2241,8 +2507,9 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
         }
     }
 
-    // Collect fields from body val/var declarations
+    // Collect fields from body val/var declarations (and save initializers)
     val body = mapGet(decl, "body")
+    val bodyInits = listCreate()
     if (body != null) {
         val members = mapGet(body, "members")
         if (members != null) {
@@ -2251,8 +2518,9 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
                 val member = listGet(members, i)
                 val mkind = toString(mapGet(member, "kind"))
                 if (mkind == "valDecl" || mkind == "varDecl") {
+                    val fieldName = toString(mapGet(member, "name"))
                     val fieldRec = mapCreate()
-                    mapPut(fieldRec, "name", toString(mapGet(member, "name")))
+                    mapPut(fieldRec, "name", fieldName)
                     val mtype = mapGet(member, "type")
                     if (mtype != null) {
                         mapPut(fieldRec, "typeName", toString(mapGet(mtype, "name")))
@@ -2260,10 +2528,21 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
                         mapPut(fieldRec, "typeName", "Unit")
                     }
                     listAppend(fields, fieldRec)
+                    // Save initializer expression for constructor inlining
+                    val initExpr = mapGet(member, "init")
+                    if (initExpr != null) {
+                        val initRec = mapCreate()
+                        mapPut(initRec, "name", fieldName)
+                        mapPut(initRec, "init", initExpr)
+                        listAppend(bodyInits, initRec)
+                    }
                 }
                 i = i + 1
             }
         }
+    }
+    if (listSize(bodyInits) > 0) {
+        mapPut(mapGet(compiler, "classBodyInits"), className, bodyInits)
     }
 
     // Build field name list for method compilation
@@ -2273,6 +2552,8 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
         listAppend(fieldNames, toString(mapGet(listGet(fields, fi), "name")))
         fi = fi + 1
     }
+    // Store field names for when destructuring patterns
+    mapPut(mapGet(compiler, "classFieldNames"), className, fieldNames)
 
     // Collect method names first (needed for self-calls within methods)
     val methods = listCreate()
@@ -2288,6 +2569,52 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
                 }
                 i = i + 1
             }
+        }
+    }
+
+    // Inherit interface default methods (compile as ClassName.method)
+    val declSuperTypes = mapGet(decl, "superTypes")
+    if (declSuperTypes != null) {
+        var sti: Int = 0
+        while (sti < listSize(declSuperTypes)) {
+            val superType = listGet(declSuperTypes, sti)
+            val superName = toString(mapGet(superType, "name"))
+            val ifaceDefaults = mapGet(mapGet(compiler, "interfaceDefaultDecls"), superName)
+            if (ifaceDefaults != null) {
+                var di: Int = 0
+                while (di < listSize(ifaceDefaults)) {
+                    val defaultMethod = listGet(ifaceDefaults, di)
+                    val dmName = toString(mapGet(defaultMethod, "name"))
+                    if (!listContainsStr(methods, dmName)) {
+                        listAppend(methods, dmName)
+                        val dmParams = listCreate()
+                        val dmThis = mapCreate()
+                        mapPut(dmThis, "kind", "param")
+                        mapPut(dmThis, "name", "this")
+                        listAppend(dmParams, dmThis)
+                        val dmOrigParams = mapGet(defaultMethod, "params")
+                        if (dmOrigParams != null) {
+                            var dpi: Int = 0
+                            while (dpi < listSize(dmOrigParams)) {
+                                listAppend(dmParams, listGet(dmOrigParams, dpi))
+                                dpi = dpi + 1
+                            }
+                        }
+                        val dmDecl = mapCreate()
+                        mapPut(dmDecl, "kind", "funDecl")
+                        mapPut(dmDecl, "name", stringConcat(className, stringConcat(".", dmName)))
+                        mapPut(dmDecl, "params", dmParams)
+                        mapPut(dmDecl, "body", mapGet(defaultMethod, "body"))
+                        mapPut(dmDecl, "returnType", mapGet(defaultMethod, "returnType"))
+                        mapPut(dmDecl, "_className", className)
+                        mapPut(dmDecl, "_classFields", fieldNames)
+                        mapPut(dmDecl, "_classMethods", methods)
+                        compileFunction(compiler, dmDecl)
+                    }
+                    di = di + 1
+                }
+            }
+            sti = sti + 1
         }
     }
 
@@ -2354,6 +2681,10 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
                         }
                     }
                 }
+                if (mkind == "classDecl") {
+                    // Nested class — name already qualified in Pass 1, compile it
+                    compileClassDecl(compiler, member)
+                }
                 i = i + 1
             }
         }
@@ -2363,7 +2694,7 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
     val isData = mapGet(decl, "isData") == true
     if (isData) {
         // Check if user already defined toString
-        if (!listContains(methods, "toString")) {
+        if (!listContainsStr(methods, "toString")) {
             listAppend(methods, "toString")
             // Build synthetic toString body:
             // return "ClassName(field1=<val1>, field2=<val2>)"
@@ -2486,7 +2817,7 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
         }
 
         // Auto-generate equals method
-        if (!listContains(methods, "equals")) {
+        if (!listContainsStr(methods, "equals")) {
             listAppend(methods, "equals")
             // Build: fun equals(other): Bool { return field1==other.field1 && ... }
             val eqStmts = listCreate()
@@ -2694,6 +3025,10 @@ fun compileInterfaceDecl(compiler: Map, decl: Map): Unit {
     val methodNames = listCreate()
     mapPut(mapGet(compiler, "interfaceNames"), ifaceName, methodNames)
 
+    // Track default method declarations for inheritance by implementing classes
+    val defaultDecls = listCreate()
+    mapPut(mapGet(compiler, "interfaceDefaultDecls"), ifaceName, defaultDecls)
+
     // Compile default method implementations
     val body = mapGet(decl, "body")
     if (body != null) {
@@ -2709,6 +3044,7 @@ fun compileInterfaceDecl(compiler: Map, decl: Map): Unit {
                     // Only compile if it has a body (default implementation)
                     val methodBody = mapGet(member, "body")
                     if (methodBody != null) {
+                        listAppend(defaultDecls, member)
                         val fullName = stringConcat(ifaceName, stringConcat(".", methodName))
                         val methodParams = listCreate()
                         val thisParam = mapCreate()
@@ -2952,12 +3288,37 @@ fun compileProgram(ast: Map): Map {
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
         val kind = toString(mapGet(decl, "kind"))
-        if (kind == "classDecl") {
+        if (kind == "classDecl" || kind == "actorDecl") {
             val cname = toString(mapGet(decl, "name"))
             mapPut(mapGet(compiler, "classNames"), cname, true)
             // Register sealed classes
             if (mapGet(decl, "isSealed") == true) {
                 mapPut(mapGet(compiler, "sealedNames"), cname, listCreate())
+            }
+            // Register nested class declarations with qualified names
+            val cbody = mapGet(decl, "body")
+            if (cbody != null) {
+                val cmembers = mapGet(cbody, "members")
+                if (cmembers != null) {
+                    var ni: Int = 0
+                    while (ni < listSize(cmembers)) {
+                        val nested = listGet(cmembers, ni)
+                        val nkind = toString(mapGet(nested, "kind"))
+                        if (nkind == "classDecl") {
+                            val nestedName = toString(mapGet(nested, "name"))
+                            val qualName = stringConcat(cname, stringConcat(".", nestedName))
+                            mapPut(mapGet(compiler, "classNames"), qualName, true)
+                            // Register nested class as sealed subclass
+                            val sealedSubs = mapGet(mapGet(compiler, "sealedNames"), cname)
+                            if (sealedSubs != null) {
+                                listAppend(sealedSubs, qualName)
+                            }
+                            // Rewrite the nested decl name to qualified name for later compilation
+                            mapPut(nested, "name", qualName)
+                        }
+                        ni = ni + 1
+                    }
+                }
             }
         }
         if (kind == "enumDecl") {
@@ -2983,7 +3344,7 @@ fun compileProgram(ast: Map): Map {
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
         val kind = toString(mapGet(decl, "kind"))
-        if (kind == "classDecl") {
+        if (kind == "classDecl" || kind == "actorDecl") {
             val superTypes = mapGet(decl, "superTypes")
             if (superTypes != null) {
                 val cname = toString(mapGet(decl, "name"))
@@ -3002,16 +3363,34 @@ fun compileProgram(ast: Map): Map {
         i = i + 1
     }
 
-    // Pass 1c: Pre-register function signatures for default param padding
+    // Pass 1c: Pre-register function signatures for default param padding + detect overloads
     i = 0
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
         val kind = toString(mapGet(decl, "kind"))
-        if (kind == "funDecl") {
+        if (kind == "funDecl" || kind == "viewDecl" || kind == "navigationDecl" || kind == "themeDecl") {
+            // Ensure navigation/theme have params list for compileFunction
+            if (kind == "navigationDecl" || kind == "themeDecl") {
+                if (mapGet(decl, "params") == null) {
+                    mapPut(decl, "params", listCreate())
+                }
+            }
             val fname = toString(mapGet(decl, "name"))
             val fparams = mapGet(decl, "params")
-            if (fparams != null) {
-                mapPut(mapGet(compiler, "funcSignatures"), fname, fparams)
+            // Detect overloads
+            val existingSig = mapGet(mapGet(compiler, "funcSignatures"), fname)
+            if (existingSig != null) {
+                if (fparams != null) {
+                    if (listSize(fparams) != listSize(existingSig)) {
+                        mapPut(mapGet(compiler, "overloadedFuncs"), fname, true)
+                        val mangledName = stringConcat(fname, stringConcat("$", toString(listSize(fparams))))
+                        mapPut(mapGet(compiler, "funcSignatures"), mangledName, fparams)
+                    }
+                }
+            } else {
+                if (fparams != null) {
+                    mapPut(mapGet(compiler, "funcSignatures"), fname, fparams)
+                }
             }
             // Register extension functions
             val recvType = mapGet(decl, "receiverType")
@@ -3027,10 +3406,44 @@ fun compileProgram(ast: Map): Map {
     while (i < listSize(decls)) {
         val decl = listGet(decls, i)
         val kind = toString(mapGet(decl, "kind"))
-        if (kind == "classDecl") {
+        if (kind == "classDecl" || kind == "actorDecl") {
             compileClassDecl(compiler, decl)
         }
         if (kind == "funDecl") {
+            // Mangle overloaded function names
+            val fnName = toString(mapGet(decl, "name"))
+            val isOverloaded = mapGet(mapGet(compiler, "overloadedFuncs"), fnName)
+            if (isOverloaded != null) {
+                val fnParams = mapGet(decl, "params")
+                var fnArity: Int = 0
+                if (fnParams != null) { fnArity = listSize(fnParams) }
+                val mangledDecl = mapCreate()
+                mapPut(mangledDecl, "kind", "funDecl")
+                mapPut(mangledDecl, "name", stringConcat(fnName, stringConcat("$", toString(fnArity))))
+                mapPut(mangledDecl, "params", fnParams)
+                mapPut(mangledDecl, "body", mapGet(decl, "body"))
+                mapPut(mangledDecl, "returnType", mapGet(decl, "returnType"))
+                compileFunction(compiler, mangledDecl)
+            } else {
+                compileFunction(compiler, decl)
+            }
+        }
+        if (kind == "viewDecl") {
+            // Compile view as a function with its params and body
+            compileFunction(compiler, decl)
+        }
+        if (kind == "navigationDecl") {
+            // Navigation has no params — add empty list so compileFunction works
+            if (mapGet(decl, "params") == null) {
+                mapPut(decl, "params", listCreate())
+            }
+            compileFunction(compiler, decl)
+        }
+        if (kind == "themeDecl") {
+            // Theme has no params — add empty list so compileFunction works
+            if (mapGet(decl, "params") == null) {
+                mapPut(decl, "params", listCreate())
+            }
             compileFunction(compiler, decl)
         }
         i = i + 1
@@ -3417,7 +3830,7 @@ fun main(): Unit {
         }
 
         // Invoke clang
-        val clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
+        val clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
         val exitCode = systemExec(clangCmd)
         // Clean up temp .ll file
         fileDelete(llFile)

@@ -23,7 +23,7 @@ fun foldDeclConstants(decl: Map): Unit {
     if (decl == null) { return }
     if (!isMap(decl)) { return }
     val kind = toString(mapGet(decl, "kind"))
-    if (kind == "funDecl") {
+    if (kind == "funDecl" || kind == "viewDecl" || kind == "navigationDecl" || kind == "themeDecl") {
         val body = mapGet(decl, "body")
         if (body != null) {
             val stmts = mapGet(body, "stmts")
@@ -31,7 +31,7 @@ fun foldDeclConstants(decl: Map): Unit {
                 foldStmtList(stmts)
             }
         }
-    } else if (kind == "classDecl") {
+    } else if (kind == "classDecl" || kind == "actorDecl") {
         val members = mapGet(decl, "members")
         if (members != null) {
             var i: Int = 0
@@ -99,6 +99,16 @@ fun foldStmt(stmt: Map): Map {
         if (body != null) {
             val stmts = mapGet(body, "stmts")
             if (stmts != null) { foldStmtList(stmts) }
+        }
+    } else if (kind == "doWhile") {
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) { foldStmtList(stmts) }
+        }
+        val condition = mapGet(stmt, "condition")
+        if (condition != null) {
+            mapPut(stmt, "condition", foldExpr(condition))
         }
     } else if (kind == "for") {
         val iterable = mapGet(stmt, "iterable")
@@ -212,6 +222,12 @@ fun foldExpr(expr: Map): Map {
             return makeStringLit(stringConcat(lv, rv), expr)
         }
 
+        return expr
+    }
+
+    if (kind == "awaitExpr") {
+        val operand = foldExpr(mapGet(expr, "operand"))
+        mapPut(expr, "operand", operand)
         return expr
     }
 
@@ -384,6 +400,31 @@ fun eliminateDeadFunctions(compiler: Map): Unit {
                                     mapPut(reachable, cval, true)
                                     listAppend(worklist, cval)
                                 }
+                            }
+                        }
+                    }
+                } else if (byte == 81) {
+                    // OP_VCALL: dest(2), objReg(2), methodIdx(2), argCount(2), args...
+                    // Mark all Class.method functions matching the method name
+                    if (bi + 6 < listSize(bytecode)) {
+                        val midxHi = toInt(listGet(bytecode, bi + 5))
+                        val midxLo = toInt(listGet(bytecode, bi + 6))
+                        val midx = midxHi * 256 + midxLo
+                        if (midx < listSize(pool)) {
+                            val constEntry = listGet(pool, midx)
+                            val mname = toString(mapGet(constEntry, "value"))
+                            val suffix = stringConcat(".", mname)
+                            // Mark all ClassName.methodName as reachable
+                            var fni: Int = 0
+                            while (fni < listSize(nameKeys)) {
+                                val fn = toString(listGet(nameKeys, fni))
+                                if (endsWith(fn, suffix)) {
+                                    if (mapGet(reachable, fn) == null) {
+                                        mapPut(reachable, fn, true)
+                                        listAppend(worklist, fn)
+                                    }
+                                }
+                                fni = fni + 1
                             }
                         }
                     }
