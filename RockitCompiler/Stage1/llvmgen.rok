@@ -99,6 +99,20 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "rockit_object_get_field", "i64|ptr,i32")
     mapPut(t, "rockit_object_set_field", "void|ptr,i32,i64")
 
+    // Math builtins (double → double)
+    mapPut(t, "rockit_math_sqrt", "double|double")
+    mapPut(t, "rockit_math_sin", "double|double")
+    mapPut(t, "rockit_math_cos", "double|double")
+    mapPut(t, "rockit_math_tan", "double|double")
+    mapPut(t, "rockit_math_floor", "double|double")
+    mapPut(t, "rockit_math_ceil", "double|double")
+    mapPut(t, "rockit_math_round", "double|double")
+    mapPut(t, "rockit_math_log", "double|double")
+    mapPut(t, "rockit_math_exp", "double|double")
+    mapPut(t, "rockit_math_abs", "double|double")
+    mapPut(t, "rockit_math_pow", "double|double,double")
+    mapPut(t, "rockit_math_atan2", "double|double,double")
+
     return t
 }
 
@@ -927,6 +941,10 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
             val tcast = llvmNextSSA(state)
             llvmLine(buf, stringConcat("  ", stringConcat(tcast, stringConcat(" = trunc i64 ", stringConcat(ta, " to i1")))))
             argVal = stringConcat("i1 ", tcast)
+        } else if (paramType == "double") {
+            val tcast = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tcast, stringConcat(" = bitcast i64 ", stringConcat(ta, " to double")))))
+            argVal = stringConcat("double ", tcast)
         } else {
             argVal = stringConcat("i64 ", ta)
         }
@@ -958,6 +976,12 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         val tconv = llvmNextSSA(state)
         llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i8 @", stringConcat(cName, stringConcat("(", stringConcat(argStr, ")")))))))
         llvmLine(buf, stringConcat("  ", stringConcat(tconv, stringConcat(" = zext i8 ", stringConcat(tres, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tconv, stringConcat(", ptr %t", toString(dest)))))
+    } else if (retType == "double") {
+        val tres = llvmNextSSA(state)
+        val tconv = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call double @", stringConcat(cName, stringConcat("(", stringConcat(argStr, ")")))))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tconv, stringConcat(" = bitcast double ", stringConcat(tres, " to i64")))))
         llvmLine(buf, stringConcat("  store i64 ", stringConcat(tconv, stringConcat(", ptr %t", toString(dest)))))
     } else {
         // i64 return

@@ -1615,6 +1615,7 @@ fun parseStatement(p: Map): Map {
     if (tt == "KW_DO") { return parseDoWhile(p) }
     if (tt == "KW_FOR") { return parseFor(p) }
     if (tt == "KW_TRY") { return parseTryCatch(p) }
+    if (tt == "KW_CONCURRENT") { return parseConcurrent(p) }
 
     // Nested declarations
     if (tt == "KW_FUN" || tt == "KW_SUSPEND") { return parseFunDecl(p) }
@@ -1737,6 +1738,16 @@ fun parseDoWhile(p: Map): Map {
     expect(p, "RPAREN")
     val node = makeNodeAt("doWhile", line, col)
     mapPut(node, "condition", condition)
+    mapPut(node, "body", body)
+    return node
+}
+
+fun parseConcurrent(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_CONCURRENT")
+    val body = parseBlock(p)
+    val node = makeNodeAt("concurrent", line, col)
     mapPut(node, "body", body)
     return node
 }
@@ -2062,6 +2073,29 @@ fun parseInterfaceDecl(p: Map): Map {
     val name = toString(mapGet(expect(p, "IDENT"), "value"))
     val node = makeNodeAt("interfaceDecl", line, col)
     mapPut(node, "name", name)
+
+    // Type parameters
+    if (check(p, "LESS")) {
+        advance(p)
+        val typeParams = listCreate()
+        listAppend(typeParams, parseTypeParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(typeParams, parseTypeParam(p))
+        }
+        expect(p, "GREATER")
+        mapPut(node, "typeParams", typeParams)
+    }
+
+    // Supertype list
+    if (matchToken(p, "COLON")) {
+        val superTypes = listCreate()
+        listAppend(superTypes, parseType(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(superTypes, parseType(p))
+        }
+        mapPut(node, "superTypes", superTypes)
+    }
+
     if (check(p, "LBRACE")) {
         mapPut(node, "body", parseClassBody(p))
     }
@@ -4675,6 +4709,20 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "rockit_run_event_loop", "void|")
     mapPut(t, "rockit_await", "i64|ptr,ptr,ptr,ptr")
 
+    // Math builtins (double → double)
+    mapPut(t, "rockit_math_sqrt", "double|double")
+    mapPut(t, "rockit_math_sin", "double|double")
+    mapPut(t, "rockit_math_cos", "double|double")
+    mapPut(t, "rockit_math_tan", "double|double")
+    mapPut(t, "rockit_math_floor", "double|double")
+    mapPut(t, "rockit_math_ceil", "double|double")
+    mapPut(t, "rockit_math_round", "double|double")
+    mapPut(t, "rockit_math_log", "double|double")
+    mapPut(t, "rockit_math_exp", "double|double")
+    mapPut(t, "rockit_math_abs", "double|double")
+    mapPut(t, "rockit_math_pow", "double|double,double")
+    mapPut(t, "rockit_math_atan2", "double|double,double")
+
     return t
 }
 
@@ -5727,6 +5775,12 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         val tconv = llvmNextSSA(state)
         llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i8 @", stringConcat(cName, stringConcat("(", stringConcat(argStr, ")")))))))
         llvmLine(buf, stringConcat("  ", stringConcat(tconv, stringConcat(" = zext i8 ", stringConcat(tres, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tconv, stringConcat(", ptr %t", toString(dest)))))
+    } else if (retType == "double") {
+        val tres = llvmNextSSA(state)
+        val tconv = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call double @", stringConcat(cName, stringConcat("(", stringConcat(argStr, ")")))))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tconv, stringConcat(" = bitcast double ", stringConcat(tres, " to i64")))))
         llvmLine(buf, stringConcat("  store i64 ", stringConcat(tconv, stringConcat(", ptr %t", toString(dest)))))
     } else {
         // i64 return

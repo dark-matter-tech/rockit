@@ -311,6 +311,15 @@ fun parsePrimary(p: Map): Map {
         return parseTryCatch(p)
     }
 
+    // Await expression
+    if (tt == "KW_AWAIT") {
+        advance(p)
+        val inner = parseExpression(p, 0)
+        val node = makeNodeAt("await", line, col)
+        mapPut(node, "expr", inner)
+        return node
+    }
+
     // Identifier (or keyword used as identifier)
     if (tt == "IDENT" || tt == "KW_THIS" || tt == "KW_SUPER") {
         val tok = advance(p)
@@ -722,6 +731,7 @@ fun parseStatement(p: Map): Map {
     if (tt == "KW_WHILE") { return parseWhile(p) }
     if (tt == "KW_FOR") { return parseFor(p) }
     if (tt == "KW_TRY") { return parseTryCatch(p) }
+    if (tt == "KW_CONCURRENT") { return parseConcurrent(p) }
 
     // Nested declarations
     if (tt == "KW_FUN") { return parseFunDecl(p) }
@@ -803,6 +813,16 @@ fun parseThrow(p: Map): Map {
     expect(p, "KW_THROW")
     val node = makeNodeAt("throw", line, col)
     mapPut(node, "value", parseExpression(p, 0))
+    return node
+}
+
+fun parseConcurrent(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_CONCURRENT")
+    val body = parseBlock(p)
+    val node = makeNodeAt("concurrent", line, col)
+    mapPut(node, "body", body)
     return node
 }
 
@@ -896,8 +916,21 @@ fun parseFunDecl(p: Map): Map {
     val line = peekLine(p)
     val col = peekCol(p)
     expect(p, "KW_FUN")
-    var name: String = toString(mapGet(expect(p, "IDENT"), "value"))
     val node = makeNodeAt("funDecl", line, col)
+
+    // Type parameters before name: fun <T> name(...)
+    if (check(p, "LESS")) {
+        advance(p)
+        val typeParams = listCreate()
+        listAppend(typeParams, parseTypeParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(typeParams, parseTypeParam(p))
+        }
+        expect(p, "GREATER")
+        mapPut(node, "typeParams", typeParams)
+    }
+
+    var name: String = toString(mapGet(expect(p, "IDENT"), "value"))
 
     // Extension function: fun TypeName.methodName(...)
     if (check(p, "DOT")) {
@@ -908,8 +941,8 @@ fun parseFunDecl(p: Map): Map {
     }
     mapPut(node, "name", name)
 
-    // Type parameters: <T, U>
-    if (check(p, "LESS")) {
+    // Type parameters after name: fun name<T, U>(...)
+    if (check(p, "LESS") && mapGet(node, "typeParams") == null) {
         advance(p)
         val typeParams = listCreate()
         listAppend(typeParams, parseTypeParam(p))
@@ -1115,6 +1148,29 @@ fun parseInterfaceDecl(p: Map): Map {
     val name = toString(mapGet(expect(p, "IDENT"), "value"))
     val node = makeNodeAt("interfaceDecl", line, col)
     mapPut(node, "name", name)
+
+    // Type parameters
+    if (check(p, "LESS")) {
+        advance(p)
+        val typeParams = listCreate()
+        listAppend(typeParams, parseTypeParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(typeParams, parseTypeParam(p))
+        }
+        expect(p, "GREATER")
+        mapPut(node, "typeParams", typeParams)
+    }
+
+    // Supertype list
+    if (matchToken(p, "COLON")) {
+        val superTypes = listCreate()
+        listAppend(superTypes, parseType(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(superTypes, parseType(p))
+        }
+        mapPut(node, "superTypes", superTypes)
+    }
+
     if (check(p, "LBRACE")) {
         mapPut(node, "body", parseClassBody(p))
     }
@@ -1221,7 +1277,12 @@ fun parseProgram(p: Map): Map {
         skipNewlines(p)
         if (parserAtEnd(p) || peekType(p) == "EOF") { break }
         val tt = peekType(p)
-        if (tt == "KW_FUN") {
+        if (tt == "KW_SUSPEND") {
+            advance(p)
+            val fn = parseFunDecl(p)
+            mapPut(fn, "isSuspend", true)
+            listAppend(decls, fn)
+        } else if (tt == "KW_FUN") {
             listAppend(decls, parseFunDecl(p))
         } else {
             if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") {
