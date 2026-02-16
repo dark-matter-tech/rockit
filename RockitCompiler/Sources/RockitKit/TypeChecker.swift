@@ -38,6 +38,8 @@ public final class TypeChecker {
     private var currentActorName: String? = nil
     /// Tracks the current enclosing class name (nil when outside a class)
     private var currentClassName: String? = nil
+    /// Tracks the receiver type for extension functions (e.g. "Int" for `fun Int.double()`)
+    private var currentReceiverType: String? = nil
     /// Tracks whether we are inside a suspend or async function (or concurrent block)
     private var inSuspendContext: Bool = false
     /// Names of functions declared with `suspend` or `async` modifier
@@ -521,6 +523,12 @@ public final class TypeChecker {
             inSuspendContext = true
         }
 
+        // Track receiver type for extension functions (e.g. fun Int.double())
+        let previousReceiverType = currentReceiverType
+        if let receiver = f.receiverType {
+            currentReceiverType = receiver
+        }
+
         // Register type parameters
         for tp in f.typeParameters {
             let bound: Type? = tp.upperBound.map { resolver.resolve($0) }
@@ -563,6 +571,7 @@ public final class TypeChecker {
         }
 
         inSuspendContext = previousSuspendContext
+        currentReceiverType = previousReceiverType
         symbolTable.popScope()
     }
 
@@ -921,6 +930,8 @@ public final class TypeChecker {
                 return .classType(name: className, typeArguments: [])
             } else if let actorName = currentActorName {
                 return .actorType(name: actorName)
+            } else if let receiver = currentReceiverType {
+                return resolver.resolve(TypeNode.simple(name: receiver, typeArguments: [], span: span))
             }
             diagnostics.error("'this' used outside of a class or actor", at: span.start)
             return .error
