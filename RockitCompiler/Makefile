@@ -4,7 +4,7 @@
 PREFIX ?= /usr/local
 RUNTIME_DIR = Runtime
 
-.PHONY: build release install uninstall test clean
+.PHONY: build release install uninstall test clean docker
 
 build:
 	swift build
@@ -31,6 +31,13 @@ uninstall:
 	@rm -f $(PREFIX)/bin/rockit
 	@rm -rf $(PREFIX)/lib/rockit
 	@echo "Uninstalled rockit"
+
+docker:
+	docker build -t rockit .
+	@echo ""
+	@echo "Run:    docker run --rm rockit run /usr/local/lib/rockit/examples/hello.rok"
+	@echo "REPL:   docker run --rm -it rockit repl"
+	@echo "Mount:  docker run --rm -v \$$(pwd):/code rockit run /code/main.rok"
 
 clean:
 	swift package clean

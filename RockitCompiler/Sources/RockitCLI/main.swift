@@ -1046,6 +1046,12 @@ func runNativeCommand(file: String) {
 func findRuntimeDir() -> String {
     let fm = FileManager.default
 
+    // Check ROCKIT_RUNTIME_DIR environment variable first
+    if let envDir = ProcessInfo.processInfo.environment["ROCKIT_RUNTIME_DIR"],
+       fm.fileExists(atPath: envDir + "/rockit_runtime.c") {
+        return envDir
+    }
+
     // Try relative to current working directory
     let cwd = fm.currentDirectoryPath
     let cwdRuntime = cwd + "/Runtime"
