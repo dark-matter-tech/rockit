@@ -1,0 +1,111 @@
+<list>
+    <!-- Rockit Language — Darcula (dark theme) color scheme addon -->
+    <!-- Xcode/Swift-inspired palette for dark backgrounds -->
+
+    <!-- Declaration keywords: fun, val, var, class, etc. — pink -->
+    <option name="ROCKIT_KEYWORD">
+        <value>
+            <option name="FOREGROUND" value="ff7ab2"/>
+            <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- Control flow: if, else, for, while, return, etc. — pink -->
+    <option name="ROCKIT_CONTROL_KEYWORD">
+        <value>
+            <option name="FOREGROUND" value="ff7ab2"/>
+            <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- Rockit-specific: view, actor, suspend, concurrent, etc. — purple -->
+    <option name="ROCKIT_BUILTIN_KEYWORD">
+        <value>
+            <option name="FOREGROUND" value="b381cf"/>
+            <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- Literal keywords: true, false, null — pink -->
+    <option name="ROCKIT_LITERAL_KEYWORD">
+        <value>
+            <option name="FOREGROUND" value="ff7ab2"/>
+            <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- Built-in types: String, Int, Bool, List, etc. — teal -->
+    <option name="ROCKIT_BUILTIN_TYPE">
+        <value>
+            <option name="FOREGROUND" value="5dd8b4"/>
+        </value>
+    </option>
+
+    <!-- Built-in functions: println, listOf, etc. — darker teal, italic -->
+    <option name="ROCKIT_BUILTIN_FUNCTION">
+        <value>
+            <option name="FOREGROUND" value="67b7a4"/>
+            <option name="FONT_TYPE" value="2"/>
+        </value>
+    </option>
+
+    <!-- String literals — red/salmon -->
+    <option name="ROCKIT_STRING">
+        <value>
+            <option name="FOREGROUND" value="fc6a5d"/>
+        </value>
+    </option>
+
+    <!-- Escape sequences in strings — golden, bold -->
+    <option name="ROCKIT_STRING_ESCAPE">
+        <value>
+            <option name="FOREGROUND" value="e9b96e"/>
+            <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- String interpolation ($name, ${expr}) — blue, bold -->
+    <option name="ROCKIT_STRING_INTERPOLATION">
+        <value>
+            <option name="FOREGROUND" value="41a1c0"/>
+            <option name="FONT_TYPE" value="1"/>
+        </value>
+    </option>
+
+    <!-- Numbers — yellow/gold -->
+    <option name="ROCKIT_NUMBER">
+        <value>
+            <option name="FOREGROUND" value="d0bf69"/>
+        </value>
+    </option>
+
+    <!-- Line comments — gray-green, italic -->
+    <option name="ROCKIT_LINE_COMMENT">
+        <value>
+            <option name="FOREGROUND" value="7f8c98"/>
+            <option name="FONT_TYPE" value="2"/>
+        </value>
+    </option>
+
+    <!-- Block comments — gray-green, italic -->
+    <option name="ROCKIT_BLOCK_COMMENT">
+        <value>
+            <option name="FOREGROUND" value="7f8c98"/>
+            <option name="FONT_TYPE" value="2"/>
+        </value>
+    </option>
+
+    <!-- Annotations — orange -->
+    <option name="ROCKIT_ANNOTATION">
+        <value>
+            <option name="FOREGROUND" value="ffa14f"/>
+        </value>
+    </option>
+
+    <!-- Operators — light gray -->
+    <option name="ROCKIT_OPERATOR">
+        <value>
+            <option name="FOREGROUND" value="a9b7c6"/>
+        </value>
+    </option>
+</list>

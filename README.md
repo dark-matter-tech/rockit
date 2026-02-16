@@ -1,141 +1,234 @@
-# moonc
+# Rockit
 
-The Moon language compiler. Written from scratch in Swift.
+A statically-typed, compiled, memory-safe programming language designed to replace JavaScript, HTML, CSS, and the DOM as the foundational technology of the web platform.
 
-> **Status:** Phase 1 — Lexer complete. Parser next.
-
-For the full language specification and design rationale, see the [Moon Language README](../README.md).
+Built by [Dark Matter Tech](https://github.com/Dark-Matter).
 
 ---
 
-## Build
+## Status
+
+The compiler is **self-hosting** — Rockit compiles itself. All compiler phases are complete and 521+ tests pass across the full pipeline.
+
+| Component | Status |
+|-----------|--------|
+| Lexer | Complete |
+| Parser | Complete |
+| Type Checker | Complete |
+| MIR Lowering | Complete |
+| Optimizer | Complete |
+| Codegen (bytecode + native) | Complete |
+| Runtime (ARC, actors, coroutines) | Complete |
+| Self-hosting bootstrap | Complete |
+| IDE plugin (JetBrains) | Available |
+
+---
+
+## Quick Start
+
+### Install
+
+**macOS / Linux:**
+```bash
+git clone https://github.com/Dark-Matter/moon.git
+cd moon/RockitCompiler
+make release && sudo make install
+```
+
+**Windows:**
+```powershell
+git clone https://github.com/Dark-Matter/moon.git
+cd moon\RockitCompiler
+swift build -c release
+copy .build\release\rockit.exe %LOCALAPPDATA%\Rockit\bin\
+```
+
+See [INSTALL.md](INSTALL.md) for full installation instructions, Docker, and IDE setup.
+
+### Hello World
+
+```kotlin
+// hello.rok
+fun main() {
+    println("Hello, Rockit!")
+}
+```
 
 ```bash
-swift build
+rockit run hello.rok
 ```
 
-Binary lands at `.build/debug/moonc`.
+---
 
-## Run
+## Language Overview
+
+Rockit's syntax is Kotlin-inspired with purpose-built constructs for UI, concurrency, and styling:
+
+```kotlin
+// Data classes with null safety
+data class User(val name: String, val email: String?)
+
+// Pattern matching
+fun greet(user: User) {
+    val display = user.email ?: "no email"
+    println("Hello, ${user.name} ($display)")
+}
+
+// Declarative UI
+view Greeting(val name: String) {
+    Text("Hello, $name!")
+}
+
+// Thread-safe concurrency
+actor Counter {
+    private var count: Int = 0
+    suspend fun increment() { count += 1 }
+    suspend fun get(): Int = count
+}
+
+// Structured concurrency
+suspend fun loadData(client: HttpClient) {
+    concurrent {
+        val users = await client.get("/users")
+        val posts = await client.get("/posts")
+    }
+}
+
+// Type-safe styling
+theme AppTheme {
+    val primary = Color.BLUE
+    val background = "#1E1E2E"
+}
+
+// Declarative navigation
+navigation AppRouter {
+    route("/") { Greeting("Rockit") }
+    route("/counter") { Counter() }
+}
+```
+
+### Key Features
+
+- **Null safety** enforced at compile time (`String` vs `String?`, `?.`, `?:`, `!!`)
+- **Sealed classes** with exhaustive `when` matching
+- **Data classes** with destructuring
+- **Generics** with variance (`out`, `in`)
+- **String interpolation** (`"Hello, ${name}"`)
+- **ARC memory model** with compile-time cycle analysis — no garbage collector
+- **Actors** for thread-safe concurrent objects
+- **Views** for declarative UI components
+- **Themes** and **styles** for type-safe styling
+
+---
+
+## Ecosystem
+
+| Tool | Name | Description |
+|------|------|-------------|
+| Language | **Rockit** | `.rok` / `.rokb` files |
+| Compiler | **Command** | Compiles, runs, and manages Rockit projects |
+| Package Manager | **Fuel** | Dependency management |
+| Test Framework | **Probe** | Built-in testing |
+| Registry | **Silo** | Package registry |
+| REPL | **Launch** | Interactive shell |
+
+---
+
+## IDE Support
+
+### JetBrains (IntelliJ IDEA, WebStorm, CLion, etc.)
+
+The **Rockit Language Support** plugin provides:
+
+- Syntax highlighting with distinct colors for keywords, types, strings, annotations
+- Rockit-specific keyword highlighting (`view`, `actor`, `suspend`, `async`)
+- Code folding for functions, classes, comments, and import groups
+- Brace matching, comment toggling, auto-close quotes
+- Xcode/Swift-inspired color palette (dark and light themes)
+- Configurable via Settings > Editor > Color Scheme > Rockit
+
+**Install:** Settings > Plugins > gear icon > Install Plugin from Disk > select `intellij-rockit-0.1.0.zip`
+
+Build from source:
+```bash
+cd ide/intellij-rockit
+./gradlew buildPlugin
+# Output: build/distributions/intellij-rockit-0.1.0.zip
+```
+
+---
+
+## Project Structure
+
+```
+moon/
+├── RockitCompiler/
+│   ├── Sources/RockitKit/       # Core compiler library (34 files)
+│   ├── Sources/RockitCLI/       # CLI entry point
+│   ├── Tests/                   # 521+ tests
+│   ├── Runtime/                 # C runtime (ARC, actors, coroutines)
+│   ├── Stage1/                  # Self-hosting compiler in Rockit
+│   └── Examples/                # Example .rok files
+├── ide/
+│   └── intellij-rockit/         # JetBrains IDE plugin
+├── INSTALL.md                   # Installation guide
+└── CLAUDE.md                    # Compiler specification
+```
+
+---
+
+## Building from Source
+
+### Prerequisites
+
+| Prerequisite | Version | macOS | Linux | Windows |
+|---|---|---|---|---|
+| **Swift** | 5.9+ | Xcode or [swift.org](https://swift.org/download) | [swift.org](https://swift.org/download) | [swift.org](https://swift.org/download) |
+| **Clang/LLVM** | 14+ | `xcode-select --install` | `apt install clang` | [releases.llvm.org](https://releases.llvm.org) |
+| **Git** | any | Included with Xcode | `apt install git` | [git-scm.com](https://git-scm.com) |
+
+### Build
 
 ```bash
-# Tokenize a .moon file and dump the token stream
-swift run moonc lex Examples/hello.moon --dump-tokens
+cd RockitCompiler
 
-# Just tokenize (summary only)
-swift run moonc lex Examples/hello.moon
+# Debug
+make build
 
-# Version
-swift run moonc version
+# Release
+make release
+
+# Run tests
+make test
 ```
 
-## Test
+### Install
 
 ```bash
-swift test
-```
+# macOS/Linux (installs to /usr/local)
+sudo make install
 
-25+ test cases covering the full token set — keywords, literals, operators, comments, string interpolation, null safety operators, generics, annotations, error recovery, and source location tracking.
+# Custom prefix
+make install PREFIX=$HOME/.local
 
----
-
-## Architecture
-
-```
-moonc
-├── MoonKit          # Core compiler library (importable)
-│   ├── Token        # 130+ token types — full Moon grammar coverage
-│   ├── Lexer        # Single-pass UTF-8 scanner
-│   ├── Diagnostic   # Error/warning reporting with source locations
-│   ├── AST          # (Phase 2)
-│   └── Parser       # (Phase 2)
-└── MoonCLI          # CLI frontend (moonc binary)
-```
-
-MoonKit is a standalone library so it can be embedded in other tools — editor plugins, LSP server, Aurora package manager — without dragging in the CLI.
-
-## Compiler Pipeline
-
-| Phase | Input | Output | Status |
-|-------|-------|--------|--------|
-| **Lexer** | `.moon` source | Token stream | ✅ |
-| **Parser** | Token stream | AST | 🔨 Next |
-| **Type Checker** | AST | Typed AST | ⬜ |
-| **MIR Lowering** | Typed AST | Moon IR | ⬜ |
-| **Optimizer** | MIR | Optimized MIR | ⬜ |
-| **Codegen** | Optimized MIR | Bytecode | ⬜ |
-| **Runtime** | Bytecode | Execution | ⬜ |
-
----
-
-## Token Coverage
-
-The lexer handles the complete Moon token set as defined in the language spec.
-
-**Moon-specific keywords**
-`view` · `actor` · `navigation` · `route` · `theme` · `style` · `suspend` · `async` · `await` · `concurrent` · `weak` · `unowned`
-
-**Kotlin-inherited keywords**
-`fun` · `val` · `var` · `class` · `data` · `sealed` · `enum` · `interface` · `object` · `when` · `is` · `as` · `in` · `if` · `else` · `for` · `while` · `return` · `break` · `continue` · `override` · `private` · `public` · `internal` · `protected` · `companion` · `typealias` · `import` · `package` · `try` · `catch` · `finally` · `throw` · `this` · `super` · `where` · `out` · `open` · `abstract` · `constructor` · `init` · `do`
-
-**Literals**
-- Integers: decimal, `0x` hex, `0b` binary, underscore separators (`1_000_000`)
-- Floats: decimal with optional exponent (`3.14`, `1.0e10`, `2.5E-3`)
-- Strings: escape sequences (`\n`, `\t`, `\r`, `\\`, `\"`, `\0`, `\u{XXXX}`), `$var` and `${expr}` interpolation
-- Booleans: `true`, `false`
-- Null: `null`
-
-**Operators**
-- Arithmetic: `+` `-` `*` `/` `%`
-- Comparison: `==` `!=` `<` `<=` `>` `>=`
-- Assignment: `=` `+=` `-=` `*=` `/=` `%=`
-- Logical: `&&` `||` `!`
-- Null safety: `?.` `?:` `!!` `?`
-- Range: `..` `..<`
-- Arrow: `->` `=>`
-- Member: `.` `::` `.*`
-
-**Comments**
-- Single-line: `// ...`
-- Multi-line: `/* ... */` (nestable)
-
----
-
-## Example Output
-
-```bash
-$ moonc lex Examples/hello.moon --dump-tokens
-```
-
-```
-  1:1      package                        kwPackage
-  1:9      com                            identifier("com")
-  1:12     .                              '.'
-  1:13     darkmatter                     identifier("darkmatter")
-  1:23     .                              '.'
-  1:24     hello                          identifier("hello")
-  3:1      import                         kwImport
-  ...
-  8:1      val                            kwVal
-  8:5      appName                        identifier("appName")
-  8:12     :                              ':'
-  8:14     String                         identifier("String")
-  8:21     =                              '='
-  8:23     "Moon Demo"                    string("Moon Demo")
-  ...
-  EOF
-
-Examples/hello.moon: 312 tokens
-OK
+# Verify
+rockit --version
+rockit run Examples/hello.rok
 ```
 
 ---
 
-## Requirements
+## Platforms
 
-- Swift 5.9+
-- macOS 14+
+| Platform | Build | Run bytecode | Native compile |
+|----------|-------|-------------|----------------|
+| **macOS** (arm64, x86_64) | Yes | Yes | Yes |
+| **Linux** (x86_64, arm64) | Yes | Yes | Yes |
+| **Windows** (x86_64) | Yes | Yes | Yes |
+| **Docker** | Yes | Yes | Yes |
+
+---
 
 ## License
 
-Proprietary. Copyright © 2026 Dark Matter Tech. All rights reserved.
+Apache 2.0. Copyright 2026 Dark Matter Tech.

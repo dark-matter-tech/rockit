@@ -3,8 +3,10 @@
 
 PREFIX ?= /usr/local
 RUNTIME_DIR = Runtime
+PLUGIN_DIR = ../ide/intellij-rockit
+PLUGIN_ZIP = $(PLUGIN_DIR)/build/distributions/intellij-rockit-0.1.0.zip
 
-.PHONY: build release install uninstall test clean docker
+.PHONY: build release install uninstall test clean docker plugin plugin-install
 
 build:
 	swift build
@@ -37,7 +39,32 @@ docker:
 	@echo ""
 	@echo "Run:    docker run --rm rockit run /usr/local/lib/rockit/examples/hello.rok"
 	@echo "REPL:   docker run --rm -it rockit repl"
-	@echo "Mount:  docker run --rm -v \$$(pwd):/code rockit run /code/main.rok"
+	@echo "Mount:  docker run --rm -v $$(pwd):/code rockit run /code/main.rok"
+
+plugin:
+	@echo "Building IntelliJ plugin..."
+	@cd $(PLUGIN_DIR) && ./gradlew buildPlugin
+	@echo ""
+	@echo "Plugin built: $(PLUGIN_ZIP)"
+	@echo "Install: Settings > Plugins > gear > Install Plugin from Disk > select the .zip"
+
+plugin-install: plugin
+	@echo "Installing Rockit plugin to JetBrains IDEs..."
+	@INSTALLED=0; \
+	for dir in "$(HOME)/Library/Application Support/JetBrains"/*/plugins; do \
+		if [ -d "$$dir" ]; then \
+			unzip -o -q $(PLUGIN_ZIP) -d "$$dir"; \
+			echo "  Installed to $$dir/intellij-rockit/"; \
+			INSTALLED=$$((INSTALLED + 1)); \
+		fi; \
+	done; \
+	if [ "$$INSTALLED" -eq 0 ]; then \
+		echo "  No JetBrains IDEs found. Install manually:"; \
+		echo "  Settings > Plugins > gear > Install Plugin from Disk > $(PLUGIN_ZIP)"; \
+	else \
+		echo ""; \
+		echo "Installed to $$INSTALLED IDE(s). Restart your IDE to activate."; \
+	fi
 
 clean:
 	swift package clean

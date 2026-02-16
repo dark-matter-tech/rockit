@@ -10,3 +10,8 @@ RockitCompiler/--dump-llvm
 RockitCompiler/Examples/test_*
 !RockitCompiler/Examples/test_*.rok
 RockitCompiler/Stage1/command
+RockitCompiler/Stage1/command_s2
+RockitCompiler/Stage1/command_s3
+ide/intellij-rockit/.gradle/
+ide/intellij-rockit/.intellijPlatform/
+ide/intellij-rockit/build/

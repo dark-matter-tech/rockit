@@ -1,50 +1,54 @@
-# command
+# Rockit Compiler
 
-The Rockit language compiler. Written from scratch in Swift (Stage 0), self-hosting in Rockit (Stage 1+).
+The Rockit language compiler. Self-hosting — Rockit compiles itself.
 
-> **Status:** All phases complete. Self-hosting compiler achieves bit-identical fixed point.
-
-For the full language specification and design rationale, see the [Rockit Language README](../README.md).
+> **Status:** All phases complete. 521+ tests passing. Self-hosting bootstrap verified (Stage 2 == Stage 3).
 
 ---
 
 ## Build
 
 ```bash
+# Debug build
 swift build
-```
 
-Binary lands at `.build/debug/command`.
+# Release build
+swift build -c release
+
+# Using Make
+make build     # debug
+make release   # release
+```
 
 ## Run
 
 ```bash
-# Tokenize a .rok file and dump the token stream
-swift run command lex Examples/hello.rok --dump-tokens
+# Run a .rok file (bytecode)
+rockit run Examples/hello.rok
+
+# Compile to native binary
+rockit build-native Examples/hello.rok
 
 # Parse and dump AST
-swift run command parse Examples/hello.rok --dump-ast
+rockit parse Examples/hello.rok --dump-ast
 
 # Type-check
-swift run command check Examples/hello.rok
+rockit check Examples/hello.rok
 
 # Compile to bytecode
-swift run command build Examples/hello.rok
-
-# Run a .rok or .rokb file
-swift run command run Examples/hello.rok
+rockit build Examples/hello.rok
 
 # Start REPL
-swift run command repl
+rockit repl
 
 # Create a new project
-swift run command init myproject
+rockit init myproject
 
 # Run tests
-swift run command test
+rockit test
 
 # Version
-swift run command version
+rockit --version
 ```
 
 ## Test
@@ -53,82 +57,70 @@ swift run command version
 swift test
 ```
 
-479+ test cases covering the full compiler pipeline — lexer, parser, type checker, MIR, optimizer, codegen, VM, collections, strings, break/continue, ARC, coroutines, actors, file I/O, and bytecode serialization.
+521+ test cases covering the full compiler pipeline: lexer, parser, type checker, MIR, optimizer, codegen, VM, collections, strings, ARC, coroutines, actors, file I/O, and bytecode serialization.
 
 ---
 
 ## Architecture
 
 ```
-command
-├── RockitKit          # Core compiler library (importable)
-│   ├── Token          # 130+ token types — full Rockit grammar coverage
-│   ├── Lexer          # Single-pass UTF-8 scanner
-│   ├── Parser         # Recursive descent parser
-│   ├── TypeChecker    # Two-pass type checker
-│   ├── MIRLowering    # AST → MIR
-│   ├── MIROptimizer   # Optimization passes
-│   ├── CodeGen        # MIR → bytecode
-│   ├── VM             # Bytecode interpreter
-│   ├── Diagnostic     # Error/warning reporting with source locations
-│   └── ...            # 34 files total
-└── RockitCLI          # CLI frontend (command binary)
+RockitCompiler/
+├── Sources/
+│   ├── RockitKit/          # Core compiler library (importable)
+│   │   ├── Token.swift     # 130+ token types
+│   │   ├── Lexer.swift     # Single-pass UTF-8 scanner
+│   │   ├── Parser.swift    # Recursive descent parser
+│   │   ├── TypeChecker.swift
+│   │   ├── MIRLowering.swift
+│   │   ├── MIROptimizer.swift
+│   │   ├── CodeGen.swift   # MIR → bytecode
+│   │   ├── LLVMCodeGen.swift  # MIR → LLVM IR → native
+│   │   ├── VM.swift        # Bytecode interpreter
+│   │   └── ...             # 34 files total
+│   └── RockitCLI/          # CLI entry point
+├── Tests/                  # 521+ tests
+├── Runtime/                # C runtime (ARC, actors, coroutines)
+├── Stage1/                 # Self-hosting compiler in Rockit
+│   ├── command.rok         # Concatenated compiler source
+│   ├── command             # Stage 1 native binary
+│   └── stdlib/             # Standard library modules
+└── Examples/
 ```
 
-RockitKit is a standalone library so it can be embedded in other tools — editor plugins, LSP server, Fuel package manager — without dragging in the CLI.
+RockitKit is a standalone library so it can be imported by other tools (editor plugins, LSP server, Fuel) without the CLI.
 
 ## Compiler Pipeline
 
 | Phase | Input | Output | Status |
 |-------|-------|--------|--------|
-| **Lexer** | `.rok` source | Token stream | ✅ |
-| **Parser** | Token stream | AST | ✅ |
-| **Type Checker** | AST | Typed AST | ✅ |
-| **MIR Lowering** | Typed AST | Rockit IR | ✅ |
-| **Optimizer** | MIR | Optimized MIR | ✅ |
-| **Codegen** | Optimized MIR | Bytecode | ✅ |
-| **Runtime** | Bytecode | Execution | ✅ |
+| **Lexer** | `.rok` source | Token stream | Complete |
+| **Parser** | Token stream | AST | Complete |
+| **Type Checker** | AST | Typed AST | Complete |
+| **MIR Lowering** | Typed AST | Rockit IR | Complete |
+| **Optimizer** | MIR | Optimized MIR | Complete |
+| **Codegen** | Optimized MIR | Bytecode / LLVM IR | Complete |
+| **Runtime** | Bytecode | Execution | Complete |
 
 ---
 
-## Token Coverage
+## Platforms
 
-The lexer handles the complete Rockit token set as defined in the language spec.
+| Platform | Swift build | Bytecode VM | Native compile |
+|----------|-------------|-------------|----------------|
+| macOS (arm64, x86_64) | Yes | Yes | Yes |
+| Linux (x86_64, arm64) | Yes | Yes | Yes |
+| Windows (x86_64) | Yes | Yes | Yes |
 
-**Rockit-specific keywords**
-`view` · `actor` · `navigation` · `route` · `theme` · `style` · `suspend` · `async` · `await` · `concurrent` · `weak` · `unowned`
+### Prerequisites
 
-**Kotlin-inherited keywords**
-`fun` · `val` · `var` · `class` · `data` · `sealed` · `enum` · `interface` · `object` · `when` · `is` · `as` · `in` · `if` · `else` · `for` · `while` · `return` · `break` · `continue` · `override` · `private` · `public` · `internal` · `protected` · `companion` · `typealias` · `import` · `package` · `try` · `catch` · `finally` · `throw` · `this` · `super` · `where` · `out` · `open` · `abstract` · `constructor` · `init` · `do`
-
-**Literals**
-- Integers: decimal, `0x` hex, `0b` binary, underscore separators (`1_000_000`)
-- Floats: decimal with optional exponent (`3.14`, `1.0e10`, `2.5E-3`)
-- Strings: escape sequences (`\n`, `\t`, `\r`, `\\`, `\"`, `\0`, `\u{XXXX}`), `$var` and `${expr}` interpolation
-- Booleans: `true`, `false`
-- Null: `null`
-
-**Operators**
-- Arithmetic: `+` `-` `*` `/` `%`
-- Comparison: `==` `!=` `<` `<=` `>` `>=`
-- Assignment: `=` `+=` `-=` `*=` `/=` `%=`
-- Logical: `&&` `||` `!`
-- Null safety: `?.` `?:` `!!` `?`
-- Range: `..` `..<`
-- Arrow: `->` `=>`
-- Member: `.` `::` `.*`
-
-**Comments**
-- Single-line: `// ...`
-- Multi-line: `/* ... */` (nestable)
+- **Swift 5.9+** — [swift.org/download](https://swift.org/download)
+- **Clang/LLVM 14+** — required for native compilation (`rockit build-native`)
+  - macOS: `xcode-select --install`
+  - Linux: `sudo apt install clang`
+  - Windows: [releases.llvm.org](https://releases.llvm.org)
 
 ---
-
-## Requirements
-
-- Swift 5.9+
-- macOS 14+
 
 ## License
 
-Proprietary. Copyright © 2026 Dark Matter Tech. All rights reserved.
+Apache 2.0. Copyright 2026 Dark Matter Tech.

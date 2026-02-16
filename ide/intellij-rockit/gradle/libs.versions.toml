@@ -1,0 +1,12 @@
+[versions]
+# plugins
+changelog = "2.5.0"
+intelliJPlatform = "2.11.0"
+kotlin = "1.9.24"
+grammarKit = "2022.3.2.2"
+
+[plugins]
+changelog = { id = "org.jetbrains.changelog", version.ref = "changelog" }
+intelliJPlatform = { id = "org.jetbrains.intellij.platform", version.ref = "intelliJPlatform" }
+kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+grammarKit = { id = "org.jetbrains.grammarkit", version.ref = "grammarKit" }
