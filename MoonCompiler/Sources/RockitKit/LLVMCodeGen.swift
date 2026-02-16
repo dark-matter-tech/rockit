@@ -468,19 +468,12 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i1 @isLetterOrDigit(ptr)")
         // Type checks
         externalDecls.insert("declare i1 @isMap(i64)")
-        // List operations (i64 wrapper API)
-        externalDecls.insert("declare i64 @listCreate()")
-        externalDecls.insert("declare void @listAppend(i64, i64)")
-        externalDecls.insert("declare i64 @listGet(i64, i64)")
-        externalDecls.insert("declare void @listSet(i64, i64, i64)")
-        externalDecls.insert("declare i64 @listSize(i64)")
-        externalDecls.insert("declare i1 @listContains(i64, i64)")
-        externalDecls.insert("declare i64 @listRemoveAt(i64, i64)")
-        // Map operations (string-keyed wrapper API)
-        externalDecls.insert("declare i64 @mapCreate()")
-        externalDecls.insert("declare i64 @mapPut(i64, ptr, i64)")
-        externalDecls.insert("declare i64 @mapGet(i64, ptr)")
-        externalDecls.insert("declare i64 @mapKeys(i64)")
+        // Additional native runtime (remapped from bytecode builtins in emitCall)
+        externalDecls.insert("declare i8 @rockit_list_contains(ptr, i64)")
+        externalDecls.insert("declare i64 @rockit_list_remove_at(ptr, i64)")
+        externalDecls.insert("declare ptr @rockit_map_keys(ptr)")
+        externalDecls.insert("declare ptr @rockit_map_values(ptr)")
+        externalDecls.insert("declare void @rockit_map_remove(ptr, i64)")
         // I/O operations
         externalDecls.insert("declare ptr @readLine()")
         externalDecls.insert("declare i1 @fileExists(ptr)")
@@ -498,6 +491,19 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i1 @rockit_string_neq(i64, i64)")
         // Process args initialization
         externalDecls.insert("declare void @rockit_set_args(i32, ptr)")
+        // Math functions
+        externalDecls.insert("declare double @rockit_math_sqrt(double)")
+        externalDecls.insert("declare double @rockit_math_sin(double)")
+        externalDecls.insert("declare double @rockit_math_cos(double)")
+        externalDecls.insert("declare double @rockit_math_tan(double)")
+        externalDecls.insert("declare double @rockit_math_pow(double, double)")
+        externalDecls.insert("declare double @rockit_math_floor(double)")
+        externalDecls.insert("declare double @rockit_math_ceil(double)")
+        externalDecls.insert("declare double @rockit_math_round(double)")
+        externalDecls.insert("declare double @rockit_math_log(double)")
+        externalDecls.insert("declare double @rockit_math_exp(double)")
+        externalDecls.insert("declare double @rockit_math_abs(double)")
+        externalDecls.insert("declare double @rockit_math_atan2(double, double)")
     }
 
     /// Scan emitted IR for `call` instructions and auto-declare any functions
@@ -1862,6 +1868,12 @@ public final class LLVMCodeGen {
     // MARK: - Call Emission
 
     private func emitCall(dest: String?, function: String, args: [String]) -> [String] {
+        // Remap bytecode-only builtins to native runtime functions
+        // Remap bytecode-only collection builtins to native runtime functions
+        if let result = emitRemappedCollectionBuiltin(dest: dest, function: function, args: args) {
+            return result
+        }
+
         // Special handling for builtins
         if function == "println" || function == "print" {
             return emitPrintCall(function: function, args: args)
@@ -2076,6 +2088,206 @@ public final class LLVMCodeGen {
             }
         }
         return dests
+    }
+
+    // MARK: - Bytecode-to-Native Collection Remapping
+
+    /// Remap bytecode collection builtins (listCreate, listAppend, mapCreate, etc.)
+    /// to native runtime functions (rockit_list_create, rockit_list_append, etc.).
+    /// Returns nil if the function is not a remappable collection builtin.
+    private func emitRemappedCollectionBuiltin(dest: String?, function: String, args: [String]) -> [String]? {
+        switch function {
+        case "listCreate":
+            return emitNativeCollectionCreate(dest: dest, nativeFn: "rockit_list_create", kind: .list)
+        case "mapCreate":
+            return emitNativeCollectionCreate(dest: dest, nativeFn: "rockit_map_create", kind: .map)
+        case "listAppend":
+            return emitNativeListAppend(args: args)
+        case "listGet":
+            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_list_get", args: args, retType: "i64")
+        case "listSet":
+            return emitNativeListSet(args: args)
+        case "listSize":
+            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_list_size", args: args, retType: "i64")
+        case "listContains":
+            return emitNativeCollectionCallBool(dest: dest, nativeFn: "rockit_list_contains", args: args)
+        case "listRemoveAt":
+            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_list_remove_at", args: args, retType: "i64")
+        case "mapPut":
+            return emitNativeMapPut(args: args)
+        case "mapGet":
+            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_map_get", args: args, retType: "i64")
+        case "mapKeys":
+            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_map_keys", args: args, retType: "ptr")
+        case "mapValues":
+            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_map_values", args: args, retType: "ptr")
+        case "mapSize":
+            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_map_size", args: args, retType: "i64")
+        case "mapContainsKey":
+            return emitNativeCollectionCallBool(dest: dest, nativeFn: "rockit_map_contains_key", args: args)
+        case "mapRemove":
+            return emitNativeMapRemove(args: args)
+        default:
+            return nil
+        }
+    }
+
+    /// Emit a native collection create call (rockit_list_create or rockit_map_create)
+    private func emitNativeCollectionCreate(dest: String?, nativeFn: String, kind: HeapKind) -> [String] {
+        guard let dest = dest else { return [] }
+        var lines: [String] = []
+        let tmp = nextSSA()
+        lines.append("\(tmp) = call ptr @\(nativeFn)()")
+        lines.append(storeToTemp(dest, value: tmp, type: "ptr"))
+        registerTypes[dest] = "ptr"
+        ownedHeapTemps.append((allocaName: dest, kind: kind))
+        if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
+        return lines
+    }
+
+    /// Load an arg as ptr, converting from i64 if needed
+    private func loadArgAsPtr(_ arg: String, lines: inout [String]) -> String {
+        let argType = typeOf(arg)
+        let tmp = nextSSA()
+        lines.append("\(tmp) = load \(argType), ptr \(addrOf(arg))")
+        if argType == "ptr" { return tmp }
+        let castTmp = nextSSA()
+        lines.append("\(castTmp) = inttoptr i64 \(tmp) to ptr")
+        return castTmp
+    }
+
+    /// Load an arg as i64, converting from ptr if needed
+    private func loadArgAsI64(_ arg: String, lines: inout [String]) -> String {
+        let argType = typeOf(arg)
+        let tmp = nextSSA()
+        lines.append("\(tmp) = load \(argType), ptr \(addrOf(arg))")
+        if argType == "i64" { return tmp }
+        if argType == "ptr" {
+            let castTmp = nextSSA()
+            lines.append("\(castTmp) = ptrtoint ptr \(tmp) to i64")
+            return castTmp
+        }
+        if argType == "i1" {
+            let castTmp = nextSSA()
+            lines.append("\(castTmp) = zext i1 \(tmp) to i64")
+            return castTmp
+        }
+        return tmp
+    }
+
+    /// Emit rockit_list_append(ptr, i64) — void return
+    private func emitNativeListAppend(args: [String]) -> [String] {
+        guard args.count >= 2 else { return [] }
+        var lines: [String] = []
+        let listPtr = loadArgAsPtr(args[0], lines: &lines)
+        let val = loadArgAsI64(args[1], lines: &lines)
+        lines.append("call void @rockit_list_append(ptr \(listPtr), i64 \(val))")
+        return lines
+    }
+
+    /// Emit rockit_list_set(ptr, i64, i64) — void return
+    private func emitNativeListSet(args: [String]) -> [String] {
+        guard args.count >= 3 else { return [] }
+        var lines: [String] = []
+        let listPtr = loadArgAsPtr(args[0], lines: &lines)
+        let idx = loadArgAsI64(args[1], lines: &lines)
+        let val = loadArgAsI64(args[2], lines: &lines)
+        lines.append("call void @rockit_list_set(ptr \(listPtr), i64 \(idx), i64 \(val))")
+        return lines
+    }
+
+    /// Emit a native collection call with ptr first arg and i64 remaining args
+    private func emitNativeCollectionCall(dest: String?, nativeFn: String, args: [String], retType: String) -> [String] {
+        var lines: [String] = []
+        // First arg is the collection (ptr)
+        var argStrs: [String] = []
+        for (i, arg) in args.enumerated() {
+            if i == 0 {
+                let ptr = loadArgAsPtr(arg, lines: &lines)
+                argStrs.append("ptr \(ptr)")
+            } else {
+                let val = loadArgAsI64(arg, lines: &lines)
+                argStrs.append("i64 \(val)")
+            }
+        }
+        let argList = argStrs.joined(separator: ", ")
+        if let dest = dest {
+            let resultTmp = nextSSA()
+            lines.append("\(resultTmp) = call \(retType) @\(nativeFn)(\(argList))")
+            let destType = typeOf(dest)
+            if retType != destType {
+                if retType == "ptr" && destType == "i64" {
+                    let conv = nextSSA()
+                    lines.append("\(conv) = ptrtoint ptr \(resultTmp) to i64")
+                    lines.append(storeToTemp(dest, value: conv, type: destType))
+                } else if retType == "i64" && destType == "ptr" {
+                    let conv = nextSSA()
+                    lines.append("\(conv) = inttoptr i64 \(resultTmp) to ptr")
+                    lines.append(storeToTemp(dest, value: conv, type: destType))
+                } else {
+                    lines.append(storeToTemp(dest, value: resultTmp, type: retType))
+                }
+            } else {
+                lines.append(storeToTemp(dest, value: resultTmp, type: retType))
+            }
+        } else {
+            lines.append("call \(retType) @\(nativeFn)(\(argList))")
+        }
+        return lines
+    }
+
+    /// Emit a native collection call returning i1 (bool)
+    private func emitNativeCollectionCallBool(dest: String?, nativeFn: String, args: [String]) -> [String] {
+        var lines: [String] = []
+        var argStrs: [String] = []
+        for (i, arg) in args.enumerated() {
+            if i == 0 {
+                let ptr = loadArgAsPtr(arg, lines: &lines)
+                argStrs.append("ptr \(ptr)")
+            } else {
+                let val = loadArgAsI64(arg, lines: &lines)
+                argStrs.append("i64 \(val)")
+            }
+        }
+        let argList = argStrs.joined(separator: ", ")
+        if let dest = dest {
+            let resultTmp = nextSSA()
+            lines.append("\(resultTmp) = call i8 @\(nativeFn)(\(argList))")
+            let destType = typeOf(dest)
+            if destType == "i1" {
+                let trunc = nextSSA()
+                lines.append("\(trunc) = trunc i8 \(resultTmp) to i1")
+                lines.append(storeToTemp(dest, value: trunc, type: "i1"))
+            } else if destType == "i64" {
+                let ext = nextSSA()
+                lines.append("\(ext) = zext i8 \(resultTmp) to i64")
+                lines.append(storeToTemp(dest, value: ext, type: "i64"))
+            } else {
+                lines.append(storeToTemp(dest, value: resultTmp, type: "i8"))
+            }
+        }
+        return lines
+    }
+
+    /// Emit rockit_map_put(ptr, i64, i64) — void return
+    private func emitNativeMapPut(args: [String]) -> [String] {
+        guard args.count >= 3 else { return [] }
+        var lines: [String] = []
+        let mapPtr = loadArgAsPtr(args[0], lines: &lines)
+        let key = loadArgAsI64(args[1], lines: &lines)
+        let val = loadArgAsI64(args[2], lines: &lines)
+        lines.append("call void @rockit_map_put(ptr \(mapPtr), i64 \(key), i64 \(val))")
+        return lines
+    }
+
+    /// Emit rockit_map_remove(ptr, i64) — void return
+    private func emitNativeMapRemove(args: [String]) -> [String] {
+        guard args.count >= 2 else { return [] }
+        var lines: [String] = []
+        let mapPtr = loadArgAsPtr(args[0], lines: &lines)
+        let key = loadArgAsI64(args[1], lines: &lines)
+        lines.append("call void @rockit_map_remove(ptr \(mapPtr), i64 \(key))")
+        return lines
     }
 
     // MARK: - Collection Builtins

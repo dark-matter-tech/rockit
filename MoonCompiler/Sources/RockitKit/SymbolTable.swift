@@ -229,10 +229,24 @@ public final class SymbolTable {
             ("stringLength",    .function(parameterTypes: [.string], returnType: .int)),
             ("stringSubstring", .function(parameterTypes: [.string, .int, .int], returnType: .string)),
 
-            // Math
+            // Math (integer)
             ("abs", .function(parameterTypes: [.int], returnType: .int)),
             ("min", .function(parameterTypes: [.int, .int], returnType: .int)),
             ("max", .function(parameterTypes: [.int, .int], returnType: .int)),
+
+            // Math (floating point) — delegate to C runtime
+            ("rockit_math_sqrt",  .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_sin",   .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_cos",   .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_tan",   .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_pow",   .function(parameterTypes: [.double, .double], returnType: .double)),
+            ("rockit_math_floor", .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_ceil",  .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_round", .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_log",   .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_exp",   .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_abs",   .function(parameterTypes: [.double], returnType: .double)),
+            ("rockit_math_atan2", .function(parameterTypes: [.double, .double], returnType: .double)),
 
             // Diagnostics
             ("panic",  .function(parameterTypes: [], returnType: .nothing)),

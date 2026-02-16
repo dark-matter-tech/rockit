@@ -380,6 +380,56 @@ public final class BuiltinRegistry {
             }
         }
 
+        // Math (floating point)
+        register(name: "rockit_math_sqrt") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.sqrt(v))
+        }
+        register(name: "rockit_math_sin") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.sin(v))
+        }
+        register(name: "rockit_math_cos") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.cos(v))
+        }
+        register(name: "rockit_math_tan") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.tan(v))
+        }
+        register(name: "rockit_math_pow") { args in
+            guard args.count >= 2, case .float(let base) = args[0], case .float(let exp) = args[1] else { return .float(0.0) }
+            return .float(Foundation.pow(base, exp))
+        }
+        register(name: "rockit_math_floor") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.floor(v))
+        }
+        register(name: "rockit_math_ceil") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.ceil(v))
+        }
+        register(name: "rockit_math_round") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.round(v))
+        }
+        register(name: "rockit_math_log") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.log(v))
+        }
+        register(name: "rockit_math_exp") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.exp(v))
+        }
+        register(name: "rockit_math_abs") { args in
+            guard case .float(let v) = args.first else { return .float(0.0) }
+            return .float(Foundation.fabs(v))
+        }
+        register(name: "rockit_math_atan2") { args in
+            guard args.count >= 2, case .float(let y) = args[0], case .float(let x) = args[1] else { return .float(0.0) }
+            return .float(Foundation.atan2(y, x))
+        }
+
         // Diagnostics
         register(name: "panic") { _ in
             throw VMError.unreachable

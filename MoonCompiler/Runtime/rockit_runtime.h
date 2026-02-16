@@ -99,6 +99,8 @@ void     rockit_list_set(RockitList* list, int64_t index, int64_t value);
 int64_t  rockit_list_size(RockitList* list);
 int8_t   rockit_list_is_empty(RockitList* list);
 void     rockit_list_release(RockitList* list);
+int8_t   rockit_list_contains(RockitList* list, int64_t value);
+int64_t  rockit_list_remove_at(RockitList* list, int64_t index);
 
 // ── RockitMap ───────────────────────────────────────────────────────────────
 
@@ -122,6 +124,9 @@ int8_t   rockit_map_contains_key(RockitMap* map, int64_t key);
 int64_t  rockit_map_size(RockitMap* map);
 int8_t   rockit_map_is_empty(RockitMap* map);
 void     rockit_map_release(RockitMap* map);
+RockitList* rockit_map_keys(RockitMap* map);
+RockitList* rockit_map_values(RockitMap* map);
+void     rockit_map_remove(RockitMap* map, int64_t key);
 
 // ── I/O ─────────────────────────────────────────────────────────────────────
 
@@ -200,5 +205,20 @@ void rockit_run_event_loop(void);
 
 /// Check if a return value indicates suspension.
 int64_t rockit_is_suspended(int64_t value);
+
+// ── Math Functions ──────────────────────────────────────────────────────────
+
+double rockit_math_sqrt(double x);
+double rockit_math_sin(double x);
+double rockit_math_cos(double x);
+double rockit_math_tan(double x);
+double rockit_math_pow(double base, double exp);
+double rockit_math_floor(double x);
+double rockit_math_ceil(double x);
+double rockit_math_round(double x);
+double rockit_math_log(double x);
+double rockit_math_exp(double x);
+double rockit_math_abs(double x);
+double rockit_math_atan2(double y, double x);
 
 #endif // ROCKIT_RUNTIME_H

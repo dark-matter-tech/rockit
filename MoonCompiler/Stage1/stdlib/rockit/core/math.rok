@@ -59,3 +59,92 @@ fun isEven(n: Int): Bool {
 fun isOdd(n: Int): Bool {
     return n % 2 != 0
 }
+
+// ── Floating-Point Math ─────────────────────────────────────────────────
+
+// Constants (as functions since Rockit doesn't have top-level val yet)
+fun PI(): Double {
+    return 3.141592653589793
+}
+
+fun E(): Double {
+    return 2.718281828459045
+}
+
+fun TAU(): Double {
+    return 6.283185307179586
+}
+
+// Square root
+fun sqrt(x: Double): Double {
+    return rockit_math_sqrt(x)
+}
+
+// Trigonometric functions
+fun sin(x: Double): Double {
+    return rockit_math_sin(x)
+}
+
+fun cos(x: Double): Double {
+    return rockit_math_cos(x)
+}
+
+fun tan(x: Double): Double {
+    return rockit_math_tan(x)
+}
+
+fun atan2(y: Double, x: Double): Double {
+    return rockit_math_atan2(y, x)
+}
+
+// Exponential and logarithmic
+fun pow(base: Double, exp: Double): Double {
+    return rockit_math_pow(base, exp)
+}
+
+fun log(x: Double): Double {
+    return rockit_math_log(x)
+}
+
+fun exp(x: Double): Double {
+    return rockit_math_exp(x)
+}
+
+// Rounding
+fun floor(x: Double): Double {
+    return rockit_math_floor(x)
+}
+
+fun ceil(x: Double): Double {
+    return rockit_math_ceil(x)
+}
+
+fun round(x: Double): Double {
+    return rockit_math_round(x)
+}
+
+fun absFloat(x: Double): Double {
+    return rockit_math_abs(x)
+}
+
+// Convert degrees to radians
+fun toRadians(degrees: Double): Double {
+    return degrees * 3.141592653589793 / 180.0
+}
+
+// Convert radians to degrees
+fun toDegrees(radians: Double): Double {
+    return radians * 180.0 / 3.141592653589793
+}
+
+// Linear interpolation
+fun lerp(a: Double, b: Double, t: Double): Double {
+    return a + (b - a) * t
+}
+
+// Clamp a float between bounds
+fun clampFloat(value: Double, lo: Double, hi: Double): Double {
+    if (value < lo) { return lo }
+    if (value > hi) { return hi }
+    return value
+}

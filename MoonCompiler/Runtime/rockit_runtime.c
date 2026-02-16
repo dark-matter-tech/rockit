@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 // ── RockitString ────────────────────────────────────────────────────────────
 
@@ -260,6 +261,24 @@ void rockit_list_release(RockitList* list) {
     }
 }
 
+int8_t rockit_list_contains(RockitList* list, int64_t value) {
+    if (!list) return 0;
+    for (int64_t i = 0; i < list->size; i++) {
+        if (list->data[i] == value) return 1;
+    }
+    return 0;
+}
+
+int64_t rockit_list_remove_at(RockitList* list, int64_t index) {
+    if (!list || index < 0 || index >= list->size) return 0;
+    int64_t removed = list->data[index];
+    for (int64_t i = index; i < list->size - 1; i++) {
+        list->data[i] = list->data[i + 1];
+    }
+    list->size--;
+    return removed;
+}
+
 // ── RockitMap ───────────────────────────────────────────────────────────────
 
 RockitMap* rockit_map_create(void) {
@@ -367,6 +386,45 @@ void rockit_map_release(RockitMap* map) {
         }
         free(map->entries);
         free(map);
+    }
+}
+
+RockitList* rockit_map_keys(RockitMap* map) {
+    RockitList* list = rockit_list_create();
+    if (!map) return list;
+    for (int64_t i = 0; i < map->capacity; i++) {
+        if (map->entries[i].occupied) {
+            rockit_list_append(list, map->entries[i].key);
+        }
+    }
+    return list;
+}
+
+RockitList* rockit_map_values(RockitMap* map) {
+    RockitList* list = rockit_list_create();
+    if (!map) return list;
+    for (int64_t i = 0; i < map->capacity; i++) {
+        if (map->entries[i].occupied) {
+            rockit_list_append(list, map->entries[i].value);
+        }
+    }
+    return list;
+}
+
+void rockit_map_remove(RockitMap* map, int64_t key) {
+    if (!map || map->size == 0) return;
+    uint64_t h = ((uint64_t)key * 2654435761ULL) % (uint64_t)map->capacity;
+    uint64_t start = h;
+    while (map->entries[h].occupied) {
+        if (map->entries[h].key == key) {
+            map->entries[h].occupied = 0;
+            rockit_release_value(map->entries[h].key);
+            rockit_release_value(map->entries[h].value);
+            map->size--;
+            return;
+        }
+        h = (h + 1) % (uint64_t)map->capacity;
+        if (h == start) break;
     }
 }
 
@@ -1055,3 +1113,18 @@ void rockit_run_event_loop(void) {
 int64_t rockit_is_suspended(int64_t value) {
     return value == ROCKIT_COROUTINE_SUSPENDED;
 }
+
+// ── Math Functions ──────────────────────────────────────────────────────────
+
+double rockit_math_sqrt(double x)  { return sqrt(x); }
+double rockit_math_sin(double x)   { return sin(x); }
+double rockit_math_cos(double x)   { return cos(x); }
+double rockit_math_tan(double x)   { return tan(x); }
+double rockit_math_pow(double base, double exp) { return pow(base, exp); }
+double rockit_math_floor(double x) { return floor(x); }
+double rockit_math_ceil(double x)  { return ceil(x); }
+double rockit_math_round(double x) { return round(x); }
+double rockit_math_log(double x)   { return log(x); }
+double rockit_math_exp(double x)   { return exp(x); }
+double rockit_math_abs(double x)   { return fabs(x); }
+double rockit_math_atan2(double y, double x) { return atan2(y, x); }
