@@ -1822,11 +1822,24 @@ fun parseFunDecl(p: Map): Map {
         isSuspend = true
     }
     expect(p, "KW_FUN")
-    var name: String = toString(mapGet(expect(p, "IDENT"), "value"))
     val node = makeNodeAt("funDecl", line, col)
     if (isSuspend) {
         mapPut(node, "isSuspend", true)
     }
+
+    // Support Kotlin-style type params before name: fun <T> name(...)
+    if (check(p, "LESS")) {
+        advance(p)
+        val typeParams = listCreate()
+        listAppend(typeParams, parseTypeParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(typeParams, parseTypeParam(p))
+        }
+        expect(p, "GREATER")
+        mapPut(node, "typeParams", typeParams)
+    }
+
+    var name: String = toString(mapGet(expect(p, "IDENT"), "value"))
 
     // Extension function: fun TypeName.methodName(...)
     if (check(p, "DOT")) {
@@ -1837,16 +1850,18 @@ fun parseFunDecl(p: Map): Map {
     }
     mapPut(node, "name", name)
 
-    // Type parameters: <T, U>
-    if (check(p, "LESS")) {
-        advance(p)
-        val typeParams = listCreate()
-        listAppend(typeParams, parseTypeParam(p))
-        while (matchToken(p, "COMMA")) {
+    // Also support type params after name: fun name<T>(...)
+    if (mapGet(node, "typeParams") == 0) {
+        if (check(p, "LESS")) {
+            advance(p)
+            val typeParams = listCreate()
             listAppend(typeParams, parseTypeParam(p))
+            while (matchToken(p, "COMMA")) {
+                listAppend(typeParams, parseTypeParam(p))
+            }
+            expect(p, "GREATER")
+            mapPut(node, "typeParams", typeParams)
         }
-        expect(p, "GREATER")
-        mapPut(node, "typeParams", typeParams)
     }
 
     // Parameters

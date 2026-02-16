@@ -1,0 +1,19 @@
+// test_f30_generic_functions.rok — Minimal generic function type inference
+// Tests that return type of generic functions is inferred at call site
+
+fun <T> identity(x: T): T {
+    return x
+}
+
+fun <T> first(a: T, b: Int): T {
+    return a
+}
+
+fun main() {
+    val n = identity(42)
+    println(n)
+    val s = identity("hello")
+    println(s)
+    val f = first(99, 0)
+    println(f)
+}

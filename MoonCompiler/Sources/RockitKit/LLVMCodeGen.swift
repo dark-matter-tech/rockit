@@ -31,6 +31,8 @@ public final class LLVMCodeGen {
     private var typeDecls: [String: MIRTypeDecl] = [:]
     /// Map from function name → return type for user-defined functions.
     private var functionSignatures: [String: MIRType] = [:]
+    /// Map from function name → parameter types for generic call-site conversions.
+    private var functionParamTypes: [String: [MIRType]] = [:]
     /// Current class name when emitting a method (for `global.X` → field resolution).
     private var currentClassName: String? = nil
     /// String pool for type name constants (separate from string literals).
@@ -66,6 +68,7 @@ public final class LLVMCodeGen {
         externalDecls = []
         typeDecls = [:]
         functionSignatures = [:]
+        functionParamTypes = [:]
         currentClassName = nil
         typeNamePool = [:]
         typeNameCounter = 0
@@ -82,6 +85,7 @@ public final class LLVMCodeGen {
         // Index function signatures for call-site return type resolution
         for f in module.functions {
             functionSignatures[f.name] = f.returnType
+            functionParamTypes[f.name] = f.parameters.map { $0.1 }
         }
 
         // Pre-pass: find which function parameters are used as callIndirect targets.
@@ -1870,11 +1874,29 @@ public final class LLVMCodeGen {
             deferredRelease = (flagTmp: flagTmp, savedTmp: savedTmp, savedType: savedType, kind: kind)
         }
 
+        let formalParamTypes = functionParamTypes[function]
         var argStrs: [String] = []
-        for arg in args {
+        for (i, arg) in args.enumerated() {
             let argType = typeOf(arg)
             let tmp = nextSSA()
             lines.append("\(tmp) = load \(argType), ptr \(addrOf(arg))")
+            // Convert arg type to match formal parameter type if needed (generic erasure)
+            if let fpt = formalParamTypes, i < fpt.count {
+                let formalType = llvmType(fpt[i])
+                if argType != formalType {
+                    if argType == "ptr" && formalType == "i64" {
+                        let conv = nextSSA()
+                        lines.append("\(conv) = ptrtoint ptr \(tmp) to i64")
+                        argStrs.append("i64 \(conv)")
+                        continue
+                    } else if argType == "i64" && formalType == "ptr" {
+                        let conv = nextSSA()
+                        lines.append("\(conv) = inttoptr i64 \(tmp) to ptr")
+                        argStrs.append("ptr \(conv)")
+                        continue
+                    }
+                }
+            }
             argStrs.append("\(argType) \(tmp)")
         }
 
@@ -1882,10 +1904,33 @@ public final class LLVMCodeGen {
         let funcName = llvmFunctionName(function)
 
         if let dest = dest {
-            let retType = typeOf(dest)
+            let destType = typeOf(dest)
+            // Use the function's formal return type for the call instruction
+            let formalRetType: String
+            if let sig = functionSignatures[function] {
+                let lt = llvmType(sig)
+                formalRetType = lt != "void" ? lt : destType
+            } else {
+                formalRetType = destType
+            }
             let resultTmp = nextSSA()
-            lines.append("\(resultTmp) = call \(retType) @\(funcName)(\(argList))")
-            lines.append(storeToTemp(dest, value: resultTmp, type: retType))
+            lines.append("\(resultTmp) = call \(formalRetType) @\(funcName)(\(argList))")
+            // Convert return value if formal type differs from dest type
+            if formalRetType != destType {
+                let convTmp: String
+                if formalRetType == "ptr" && destType == "i64" {
+                    convTmp = nextSSA()
+                    lines.append("\(convTmp) = ptrtoint ptr \(resultTmp) to i64")
+                } else if formalRetType == "i64" && destType == "ptr" {
+                    convTmp = nextSSA()
+                    lines.append("\(convTmp) = inttoptr i64 \(resultTmp) to ptr")
+                } else {
+                    convTmp = resultTmp
+                }
+                lines.append(storeToTemp(dest, value: convTmp, type: destType))
+            } else {
+                lines.append(storeToTemp(dest, value: resultTmp, type: destType))
+            }
 
             // ARC: track heap-allocating calls
             if let kind = heapKindForFunction(function) {

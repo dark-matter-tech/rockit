@@ -102,9 +102,18 @@ public final class MIRLowering {
             params.append(("this", mirType))
         }
 
-        params += f.parameters.map { p in
+        // Get formal parameter types from the function's symbol table entry
+        var formalParamTypes: [Type] = []
+        if let sym = result.symbolTable.lookup(f.name),
+           case .function(let paramTypes, _) = sym.type {
+            formalParamTypes = paramTypes
+        }
+
+        params += f.parameters.enumerated().map { (i, p) in
             let type: MIRType
-            if let typeNode = p.type {
+            if i < formalParamTypes.count {
+                type = MIRType.from(formalParamTypes[i])
+            } else if let typeNode = p.type {
                 let resolved = result.symbolTable.lookup(p.name)?.type ?? .error
                 type = MIRType.from(resolved)
                 _ = typeNode // suppress unused warning
@@ -547,6 +556,9 @@ public final class MIRLowering {
         let type: MIRType
         if let sym = result.symbolTable.lookup(p.name) {
             type = MIRType.from(sym.type)
+        } else if let init_ = p.initializer {
+            // Fallback: infer type from initializer expression via typeMap
+            type = lookupExprType(init_)
         } else {
             type = .unit
         }

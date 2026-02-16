@@ -39,6 +39,11 @@ public final class Parser {
         while !check(.eof) {
             skipNewlines()
             if check(.eof) { break }
+            // Skip stray closing braces at top level to avoid infinite loops
+            if check(.rightBrace) {
+                advance()
+                continue
+            }
             if let decl = parseDeclarationRecovering() {
                 declarations.append(decl)
             }
@@ -375,6 +380,14 @@ public final class Parser {
                                    modifiers: Set<Modifier>) -> FunctionDecl {
         let start = expect(.kwFun, "expected 'fun'")
         skipNewlines()
+
+        // Support Kotlin-style type params before name: fun <T> name(...)
+        var typeParams: [TypeParameter] = []
+        if check(.less) {
+            typeParams = parseTypeParameterList()
+            skipNewlines()
+        }
+
         let firstName = expectIdentifier("expected function name")
 
         // Check for extension function: fun TypeName.methodName(...)
@@ -392,7 +405,10 @@ public final class Parser {
             }
         }
 
-        let typeParams = parseTypeParameterList()
+        // Also support type params after name: fun name<T>(...)
+        if typeParams.isEmpty {
+            typeParams = parseTypeParameterList()
+        }
         expect(.leftParen, "expected '(' after function name")
         parenDepth += 1
         let params = parseParameterList()

@@ -1142,9 +1142,10 @@ public final class TypeChecker {
     private func checkCall(callee: Expression, arguments: [CallArgument], trailingLambda: LambdaExpr?, span: SourceSpan) -> Type {
         let calleeType = checkExpression(callee)
 
-        // Check arguments
+        // Check arguments and collect their types
+        var argTypes: [Type] = []
         for arg in arguments {
-            let _ = checkExpression(arg.value)
+            argTypes.append(checkExpression(arg.value))
         }
 
         // Check trailing lambda
@@ -1161,6 +1162,11 @@ public final class TypeChecker {
                 // Allow variadic-like built-in functions (println accepts any number)
                 // For Stage 0, just warn if significantly off
                 // Skip strict arity check for builtins
+            }
+            // Substitute type parameters if the return type contains them
+            if returnType.isTypeParameter {
+                let substituted = substituteTypeParams(paramTypes: paramTypes, argTypes: argTypes, returnType: returnType)
+                return substituted
             }
             return returnType
         }
@@ -1181,6 +1187,37 @@ public final class TypeChecker {
         }
 
         return .error
+    }
+
+    // MARK: - Generic Type Substitution
+
+    /// Build a type parameter binding map by matching param types to arg types,
+    /// then substitute in the return type.
+    private func substituteTypeParams(paramTypes: [Type], argTypes: [Type], returnType: Type) -> Type {
+        var bindings: [String: Type] = [:]
+        for (paramType, argType) in zip(paramTypes, argTypes) {
+            if case .typeParameter(let name, _) = paramType, !argType.isError {
+                bindings[name] = argType
+            }
+        }
+        return substitute(returnType, bindings: bindings)
+    }
+
+    /// Substitute type parameters in a type using a binding map.
+    private func substitute(_ type: Type, bindings: [String: Type]) -> Type {
+        switch type {
+        case .typeParameter(let name, _):
+            return bindings[name] ?? type
+        case .function(let params, let ret):
+            return .function(
+                parameterTypes: params.map { substitute($0, bindings: bindings) },
+                returnType: substitute(ret, bindings: bindings)
+            )
+        case .nullable(let inner):
+            return .nullable(substitute(inner, bindings: bindings))
+        default:
+            return type
+        }
     }
 
     // MARK: - If Expression
