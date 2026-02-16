@@ -4632,6 +4632,7 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "fileRead", "ptr|ptr")
     mapPut(t, "fileWriteBytes", "i64|ptr,i64")
     mapPut(t, "fileExists", "i8|ptr")
+    mapPut(t, "fileDelete", "i64|ptr")
     mapPut(t, "readLine", "ptr|")
     mapPut(t, "evalRockit", "i64|ptr")
     mapPut(t, "stringToBytes", "i64|ptr")

@@ -415,14 +415,11 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i64 @rockit_list_size(ptr)")
         externalDecls.insert("declare i1 @rockit_list_is_empty(ptr)")
         externalDecls.insert("declare void @rockit_list_release(ptr)")
-        // Map runtime
-        externalDecls.insert("declare ptr @rockit_map_create()")
-        externalDecls.insert("declare void @rockit_map_put(ptr, i64, i64)")
-        externalDecls.insert("declare i64 @rockit_map_get(ptr, i64)")
-        externalDecls.insert("declare i1 @rockit_map_contains_key(ptr, i64)")
-        externalDecls.insert("declare i64 @rockit_map_size(ptr)")
-        externalDecls.insert("declare i1 @rockit_map_is_empty(ptr)")
-        externalDecls.insert("declare void @rockit_map_release(ptr)")
+        // Map runtime (string-keyed)
+        externalDecls.insert("declare i64 @mapCreate()")
+        externalDecls.insert("declare i64 @mapPut(i64, ptr, i64)")
+        externalDecls.insert("declare i64 @mapGet(i64, ptr)")
+        externalDecls.insert("declare i64 @mapKeys(i64)")
         // Exception handling
         externalDecls.insert("declare ptr @rockit_exc_push()")
         externalDecls.insert("declare void @rockit_exc_pop()")
@@ -455,9 +452,6 @@ public final class LLVMCodeGen {
         // Additional native runtime (remapped from bytecode builtins in emitCall)
         externalDecls.insert("declare i8 @rockit_list_contains(ptr, i64)")
         externalDecls.insert("declare i64 @rockit_list_remove_at(ptr, i64)")
-        externalDecls.insert("declare ptr @rockit_map_keys(ptr)")
-        externalDecls.insert("declare ptr @rockit_map_values(ptr)")
-        externalDecls.insert("declare void @rockit_map_remove(ptr, i64)")
         // I/O operations
         externalDecls.insert("declare ptr @readLine()")
         externalDecls.insert("declare i1 @fileExists(ptr)")
@@ -2097,7 +2091,7 @@ public final class LLVMCodeGen {
         case "listCreate":
             return emitNativeCollectionCreate(dest: dest, nativeFn: "rockit_list_create", kind: .list)
         case "mapCreate":
-            return emitNativeCollectionCreate(dest: dest, nativeFn: "rockit_map_create", kind: .map)
+            return emitStringMapCreate(dest: dest)
         case "listAppend":
             return emitNativeListAppend(args: args)
         case "listGet":
@@ -2111,19 +2105,14 @@ public final class LLVMCodeGen {
         case "listRemoveAt":
             return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_list_remove_at", args: args, retType: "i64")
         case "mapPut":
-            return emitNativeMapPut(args: args)
+            return emitStringMapPut(args: args)
         case "mapGet":
-            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_map_get", args: args, retType: "i64")
+            return emitStringMapGet(dest: dest, args: args)
         case "mapKeys":
-            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_map_keys", args: args, retType: "ptr")
-        case "mapValues":
-            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_map_values", args: args, retType: "ptr")
-        case "mapSize":
-            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_map_size", args: args, retType: "i64")
-        case "mapContainsKey":
-            return emitNativeCollectionCallBool(dest: dest, nativeFn: "rockit_map_contains_key", args: args)
-        case "mapRemove":
-            return emitNativeMapRemove(args: args)
+            return emitStringMapKeys(dest: dest, args: args)
+        case "mapValues", "mapSize", "mapContainsKey", "mapRemove":
+            // These are not used by Stage 1; fall through to normal call
+            return nil
         default:
             return nil
         }
@@ -2266,24 +2255,56 @@ public final class LLVMCodeGen {
         return lines
     }
 
-    /// Emit rockit_map_put(ptr, i64, i64) — void return
-    private func emitNativeMapPut(args: [String]) -> [String] {
-        guard args.count >= 3 else { return [] }
+    /// Emit mapCreate() — returns i64 (StringMap handle)
+    private func emitStringMapCreate(dest: String?) -> [String] {
+        guard let dest = dest else { return [] }
         var lines: [String] = []
-        let mapPtr = loadArgAsPtr(args[0], lines: &lines)
-        let key = loadArgAsI64(args[1], lines: &lines)
-        let val = loadArgAsI64(args[2], lines: &lines)
-        lines.append("call void @rockit_map_put(ptr \(mapPtr), i64 \(key), i64 \(val))")
+        let tmp = nextSSA()
+        lines.append("\(tmp) = call i64 @mapCreate()")
+        lines.append(storeToTemp(dest, value: tmp, type: "i64"))
+        registerTypes[dest] = "i64"
         return lines
     }
 
-    /// Emit rockit_map_remove(ptr, i64) — void return
-    private func emitNativeMapRemove(args: [String]) -> [String] {
+    /// Emit mapPut(i64, ptr, i64) — string-keyed map put
+    private func emitStringMapPut(args: [String]) -> [String] {
+        guard args.count >= 3 else { return [] }
+        var lines: [String] = []
+        let mapVal = loadArgAsI64(args[0], lines: &lines)
+        let key = loadArgAsPtr(args[1], lines: &lines)
+        let val = loadArgAsI64(args[2], lines: &lines)
+        lines.append("call i64 @mapPut(i64 \(mapVal), ptr \(key), i64 \(val))")
+        return lines
+    }
+
+    /// Emit mapGet(i64, ptr) — string-keyed map get
+    private func emitStringMapGet(dest: String?, args: [String]) -> [String] {
         guard args.count >= 2 else { return [] }
         var lines: [String] = []
-        let mapPtr = loadArgAsPtr(args[0], lines: &lines)
-        let key = loadArgAsI64(args[1], lines: &lines)
-        lines.append("call void @rockit_map_remove(ptr \(mapPtr), i64 \(key))")
+        let mapVal = loadArgAsI64(args[0], lines: &lines)
+        let key = loadArgAsPtr(args[1], lines: &lines)
+        if let dest = dest {
+            let tmp = nextSSA()
+            lines.append("\(tmp) = call i64 @mapGet(i64 \(mapVal), ptr \(key))")
+            lines.append(storeToTemp(dest, value: tmp, type: "i64"))
+        } else {
+            lines.append("call i64 @mapGet(i64 \(mapVal), ptr \(key))")
+        }
+        return lines
+    }
+
+    /// Emit mapKeys(i64) — string-keyed map keys
+    private func emitStringMapKeys(dest: String?, args: [String]) -> [String] {
+        guard args.count >= 1 else { return [] }
+        var lines: [String] = []
+        let mapVal = loadArgAsI64(args[0], lines: &lines)
+        if let dest = dest {
+            let tmp = nextSSA()
+            lines.append("\(tmp) = call i64 @mapKeys(i64 \(mapVal))")
+            lines.append(storeToTemp(dest, value: tmp, type: "i64"))
+        } else {
+            lines.append("call i64 @mapKeys(i64 \(mapVal))")
+        }
         return lines
     }
 
@@ -2326,7 +2347,7 @@ public final class LLVMCodeGen {
         guard let dest = dest else { return [] }
         var lines: [String] = []
         let mapTmp = nextSSA()
-        lines.append("\(mapTmp) = call ptr @rockit_map_create()")
+        lines.append("\(mapTmp) = call i64 @mapCreate()")
         // mapOf takes pairs: key1, val1, key2, val2, ...
         var i = 0
         while i + 1 < args.count {
@@ -2334,11 +2355,14 @@ public final class LLVMCodeGen {
             let valTmp = nextSSA()
             lines.append("\(keyTmp) = load i64, ptr \(addrOf(args[i]))")
             lines.append("\(valTmp) = load i64, ptr \(addrOf(args[i+1]))")
-            lines.append("call void @rockit_map_put(ptr \(mapTmp), i64 \(keyTmp), i64 \(valTmp))")
+            // Key is a string pointer — convert i64 to ptr for mapPut
+            let keyPtr = nextSSA()
+            lines.append("\(keyPtr) = inttoptr i64 \(keyTmp) to ptr")
+            lines.append("call i64 @mapPut(i64 \(mapTmp), ptr \(keyPtr), i64 \(valTmp))")
             i += 2
         }
         lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .map))
-        lines.append(storeToTemp(dest, value: mapTmp, type: "ptr"))
+        lines.append(storeToTemp(dest, value: mapTmp, type: "i64"))
         ownedHeapTemps.append((allocaName: dest, kind: .map))
         if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines

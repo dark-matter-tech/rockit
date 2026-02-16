@@ -771,9 +771,7 @@ int64_t listRemoveAt(int64_t list, int64_t index) {
 
 // -- Map operations (i64 wrapper API) --
 
-int64_t mapCreate(void) {
-    return (int64_t)(intptr_t)rockit_map_create();
-}
+int64_t mapCreate(void);  // defined after mapCreate_string below
 
 // String-keyed map — hash by string content, not pointer address
 static uint64_t string_hash(RockitString* s) {
@@ -821,8 +819,10 @@ int64_t mapCreate_string(void) {
     return (int64_t)(intptr_t)map;
 }
 
-// Override mapCreate to use string maps for Stage 1
-// Actually, we need mapCreate to return a StringMap since Stage 1 uses string keys
+// mapCreate creates a string-keyed map (StringMap), used by Stage 1
+int64_t mapCreate(void) {
+    return mapCreate_string();
+}
 
 int64_t mapPut(int64_t mapVal, RockitString* key, int64_t value) {
     StringMap* map = (StringMap*)(intptr_t)mapVal;
