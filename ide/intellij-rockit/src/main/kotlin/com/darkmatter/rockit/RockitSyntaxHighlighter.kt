@@ -85,6 +85,14 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
             BOOLEAN_LITERAL
         )
 
+        // Function calls: identifier followed by ( — yellow
+        @JvmField
+        @Suppress("DEPRECATION")
+        val FUNCTION_CALL = createTextAttributesKey(
+            "ROCKIT_FUNCTION_CALL",
+            attrs(JBColor(Color(0x7A, 0x5E, 0x2D), Color(0xDC, 0xDC, 0xAA)))
+        )
+
         // Built-in types: String, Int, Bool, etc. — teal
         @JvmField
         @Suppress("DEPRECATION")
@@ -226,6 +234,7 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
         private val OPTIONAL_OPERATOR_KEYS = arrayOf(OPTIONAL_OPERATOR)
         private val FORCE_UNWRAP_KEYS = arrayOf(FORCE_UNWRAP)
         private val BOOLEAN_IDENTIFIER_KEYS = arrayOf(BOOLEAN_IDENTIFIER)
+        private val FUNCTION_CALL_KEYS = arrayOf(FUNCTION_CALL)
         private val BUILTIN_TYPE_KEYS = arrayOf(BUILTIN_TYPE)
         private val BUILTIN_FUNCTION_KEYS = arrayOf(BUILTIN_FUNCTION)
         private val STRING_KEYS = arrayOf(STRING)
@@ -292,6 +301,9 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
 
             // Boolean-prefixed identifiers
             RockitTokenTypes.BOOLEAN_IDENTIFIER -> BOOLEAN_IDENTIFIER_KEYS
+
+            // Function calls
+            RockitTokenTypes.FUNCTION_CALL -> FUNCTION_CALL_KEYS
 
             // Built-in types
             RockitTokenTypes.BUILTIN_TYPE -> BUILTIN_TYPE_KEYS

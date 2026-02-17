@@ -65,6 +65,13 @@
         </value>
     </option>
 
+    <!-- Function calls — yellow -->
+    <option name="ROCKIT_FUNCTION_CALL">
+        <value>
+            <option name="FOREGROUND" value="dcdcaa"/>
+        </value>
+    </option>
+
     <!-- Built-in types: String, Int, Bool, List, etc. — teal -->
     <option name="ROCKIT_BUILTIN_TYPE">
         <value>

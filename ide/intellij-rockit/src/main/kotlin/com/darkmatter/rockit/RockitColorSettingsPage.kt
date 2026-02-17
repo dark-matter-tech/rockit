@@ -16,6 +16,7 @@ class RockitColorSettingsPage : ColorSettingsPage {
             AttributesDescriptor("Keywords//Rockit keyword (view, actor, suspend...)", RockitSyntaxHighlighter.ROCKIT_KEYWORD),
             AttributesDescriptor("Keywords//Boolean literal (true, false)", RockitSyntaxHighlighter.BOOLEAN_LITERAL),
             AttributesDescriptor("Identifiers//Boolean identifier (is..., has..., can...)", RockitSyntaxHighlighter.BOOLEAN_IDENTIFIER),
+            AttributesDescriptor("Identifiers//Function call", RockitSyntaxHighlighter.FUNCTION_CALL),
             AttributesDescriptor("Keywords//Null literal", RockitSyntaxHighlighter.NULL_LITERAL),
             AttributesDescriptor("Operators//Optional operator (?, ?., ?:)", RockitSyntaxHighlighter.OPTIONAL_OPERATOR),
             AttributesDescriptor("Operators//Force unwrap (!!)", RockitSyntaxHighlighter.FORCE_UNWRAP),

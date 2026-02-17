@@ -64,6 +64,13 @@
         </value>
     </option>
 
+    <!-- Function calls — dark gold -->
+    <option name="ROCKIT_FUNCTION_CALL">
+        <value>
+            <option name="FOREGROUND" value="7a5e2d"/>
+        </value>
+    </option>
+
     <!-- Built-in types: String, Int, Bool, List, etc. — dark teal -->
     <option name="ROCKIT_BUILTIN_TYPE">
         <value>
