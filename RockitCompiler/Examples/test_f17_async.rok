@@ -1,5 +1,5 @@
 // Test: async/await and concurrent block support
-// Stage 0 executes synchronously; scheduler infrastructure ready for true async
+// Sequential awaits + concurrent block with multiple awaits + join counter
 
 suspend fun fetchPayload(): String {
     return "network payload"
@@ -14,17 +14,24 @@ suspend fun fetchHeader(): String {
     return "header-ok"
 }
 
+suspend fun fetchStatus(): String {
+    return "status-200"
+}
+
 suspend fun main(): Unit {
+    // Sequential awaits (outside concurrent block)
     val result = await processPayload()
     println(result)
 
     val raw = await fetchPayload()
     println(raw)
 
-    // concurrent block: runs body (sequentially in Stage 0)
+    // Concurrent block with multiple awaits
     concurrent {
         val h = await fetchHeader()
         println(h)
+        val s = await fetchStatus()
+        println(s)
     }
 
     println("async test complete")

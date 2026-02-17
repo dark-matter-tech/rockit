@@ -1084,12 +1084,12 @@ void rockit_task_schedule(void* resume_fn, void* frame, int64_t result) {
 }
 
 // Frame header: first fields of every continuation frame
-// struct { i64 state, ptr parent_resume, ptr parent_frame }
-// Layout as i64 array: [0]=state, [1]=parent_resume, [2]=parent_frame
+// Layout as i64 array: [0]=state, [1]=parent_resume, [2]=parent_frame, [3]=join_counter
 typedef struct {
     int64_t state;
     int64_t (*parent_resume)(void*, int64_t);
     void*   parent_frame;
+    int64_t join_counter;
 } RockitFrameHeader;
 
 void* rockit_frame_alloc(int64_t size_bytes) {
@@ -1124,6 +1124,11 @@ void rockit_run_event_loop(void) {
             // Task completed — resume parent if one exists
             RockitFrameHeader* hdr = (RockitFrameHeader*)task.frame;
             if (hdr->parent_resume) {
+                // Decrement parent's join counter
+                RockitFrameHeader* parent_hdr = (RockitFrameHeader*)hdr->parent_frame;
+                if (parent_hdr->join_counter > 0) {
+                    parent_hdr->join_counter--;
+                }
                 rockit_task_schedule(
                     (void*)hdr->parent_resume,
                     hdr->parent_frame,

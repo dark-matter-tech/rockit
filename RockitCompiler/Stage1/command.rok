@@ -5865,8 +5865,8 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
     }
     llvmLine(buf, "entry:")
 
-    // Frame: [0]=state, [1]=parent_resume, [2]=parent_frame, [3..]=registers
-    val headerSlots = 3
+    // Frame: [0]=state, [1]=parent_resume, [2]=parent_frame, [3]=join_counter, [4..]=registers
+    val headerSlots = 4
     val frameSlots = regCount + headerSlots
     val frameBytes = frameSlots * 8
     llvmLine(buf, stringConcat("  %frame = call ptr @rockit_frame_alloc(i64 ", stringConcat(toString(frameBytes), ")")))
@@ -6449,7 +6449,7 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
                 val sv = llvmNextSSA(rState)
                 val sg = llvmNextSSA(rState)
                 llvmLine(buf, stringConcat("  ", stringConcat(sv, stringConcat(" = load i64, ptr %t", toString(sr)))))
-                llvmLine(buf, stringConcat("  ", stringConcat(sg, stringConcat(" = getelementptr i64, ptr %frame, i32 ", toString(sr + 3)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(sg, stringConcat(" = getelementptr i64, ptr %frame, i32 ", toString(sr + 4)))))
                 llvmLine(buf, stringConcat("  store i64 ", stringConcat(sv, stringConcat(", ptr ", sg))))
                 sr = sr + 1
             }
@@ -6463,6 +6463,7 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             if (concurrentDepth > 0) {
                 // === Event-loop path (inside concurrent block) ===
                 mapPut(rExterns, "rockit_frame_alloc", true)
+                mapPut(rExterns, "rockit_task_schedule", true)
                 mapPut(rExterns, "rockit_await", true)
 
                 // 3a. Allocate child frame using child's frame_size global
@@ -6471,19 +6472,28 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
                 val cframe = llvmNextSSA(rState)
                 llvmLine(buf, stringConcat("  ", stringConcat(cframe, stringConcat(" = call ptr @rockit_frame_alloc(i64 ", stringConcat(cfsz, ")")))))
 
-                // 3b. Store call arguments into child frame[3..3+argc-1]
+                // 3b. Store call arguments into child frame[4..4+argc-1]
                 var awi: Int = 0
                 while (awi < awArgc) {
                     val argReg = llvmReadU16(bc, ip + 7 + awi * 2)
                     val ta = llvmNextSSA(rState)
                     val cg = llvmNextSSA(rState)
                     llvmLine(buf, stringConcat("  ", stringConcat(ta, stringConcat(" = load i64, ptr %t", toString(argReg)))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(cg, stringConcat(" = getelementptr i64, ptr ", stringConcat(cframe, stringConcat(", i32 ", toString(awi + 3)))))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(cg, stringConcat(" = getelementptr i64, ptr ", stringConcat(cframe, stringConcat(", i32 ", toString(awi + 4)))))))
                     llvmLine(buf, stringConcat("  store i64 ", stringConcat(ta, stringConcat(", ptr ", cg))))
                     awi = awi + 1
                 }
 
-                // 3c. Call rockit_await(child_resume, child_frame, self_resume, self_frame)
+                // 3c. Increment join counter: frame[3] += 1
+                val jcGep = llvmNextSSA(rState)
+                val jcOld = llvmNextSSA(rState)
+                val jcNew = llvmNextSSA(rState)
+                llvmLine(buf, stringConcat("  ", stringConcat(jcGep, " = getelementptr i64, ptr %frame, i32 3")))
+                llvmLine(buf, stringConcat("  ", stringConcat(jcOld, stringConcat(" = load i64, ptr ", jcGep))))
+                llvmLine(buf, stringConcat("  ", stringConcat(jcNew, stringConcat(" = add i64 ", stringConcat(jcOld, ", 1")))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(jcNew, stringConcat(", ptr ", jcGep))))
+
+                // 3d. Schedule child via rockit_await (links parent, schedules child)
                 val awRet = llvmNextSSA(rState)
                 llvmLine(buf, stringConcat("  ", stringConcat(awRet, stringConcat(" = call i64 @rockit_await(ptr @", stringConcat(awResumeName, stringConcat(", ptr ", stringConcat(cframe, stringConcat(", ptr @", stringConcat(resumeName, ", ptr %frame)")))))))))
                 llvmLine(buf, stringConcat("  ret i64 ", awRet))
@@ -6517,14 +6527,31 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             currentSeg = currentSeg + 1
             ip = ip + llvmInstrSize(192, bc, ip)
         } else if (op == 193) {
-            // CONCURRENT_BEGIN — enter concurrent region
+            // CONCURRENT_BEGIN — enter concurrent region, init join counter
             concurrentDepth = concurrentDepth + 1
+            val cbGep = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(cbGep, " = getelementptr i64, ptr %frame, i32 3")))
+            llvmLine(buf, stringConcat("  store i64 0, ptr ", cbGep))
             ip = ip + 3
         } else if (op == 194) {
-            // CONCURRENT_END — leave concurrent region, drain event loop
+            // CONCURRENT_END — leave concurrent region, drain while join_counter > 0
             concurrentDepth = concurrentDepth - 1
             mapPut(rExterns, "rockit_run_event_loop", true)
+            val ceLoop = stringConcat("ce.loop.", toString(ip))
+            val ceDone = stringConcat("ce.done.", toString(ip))
+            llvmLine(buf, stringConcat("  br label %", ceLoop))
+            llvmLine(buf, stringConcat(ceLoop, ":"))
+            val ceGep = llvmNextSSA(rState)
+            val ceVal = llvmNextSSA(rState)
+            val ceCmp = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(ceGep, " = getelementptr i64, ptr %frame, i32 3")))
+            llvmLine(buf, stringConcat("  ", stringConcat(ceVal, stringConcat(" = load i64, ptr ", ceGep))))
+            llvmLine(buf, stringConcat("  ", stringConcat(ceCmp, stringConcat(" = icmp sgt i64 ", stringConcat(ceVal, ", 0")))))
+            llvmLine(buf, stringConcat("  br i1 ", stringConcat(ceCmp, stringConcat(", label %", stringConcat(stringConcat("ce.body.", toString(ip)), stringConcat(", label %", ceDone))))))
+            llvmLine(buf, stringConcat("ce.body.", stringConcat(toString(ip), ":")))
             llvmLine(buf, "  call void @rockit_run_event_loop()")
+            llvmLine(buf, stringConcat("  br label %", ceLoop))
+            llvmLine(buf, stringConcat(ceDone, ":"))
             ip = ip + 3
         } else if (op == 224) {
             // OP_RET: src(u16) — always i64 in _resume
