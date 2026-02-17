@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Rockit Language Definition — Single source of truth for all editor syntax highlighting. Dark Matter Tech.",
+
+  "language": {
+    "name": "Rockit",
+    "scopeName": "source.rockit",
+    "fileExtensions": [".rok"],
+    "binaryExtensions": [".rokb"],
+    "lineComment": "//",
+    "blockCommentStart": "/*",
+    "blockCommentEnd": "*/",
+    "blockCommentNestable": true
+  },
+
+  "keywords": {
+    "declaration": [
+      "fun", "val", "var", "class", "interface", "object", "enum",
+      "data", "sealed", "abstract", "open", "override",
+      "private", "internal", "public", "protected", "companion",
+      "typealias", "vararg", "import", "package",
+      "this", "super", "constructor", "init", "where", "out"
+    ],
+    "controlFlow": [
+      "if", "else", "when", "for", "while", "do",
+      "return", "break", "continue",
+      "in", "is", "as",
+      "throw", "try", "catch", "finally"
+    ],
+    "rockit": [
+      "view", "actor", "navigation", "route", "theme", "style",
+      "suspend", "async", "await", "concurrent",
+      "weak", "unowned"
+    ],
+    "literal": [
+      "true", "false", "null"
+    ]
+  },
+
+  "builtinTypes": [
+    "Int", "Int8", "Int16", "Int32", "Int64",
+    "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
+    "Float", "Double", "Bool", "String", "Char",
+    "Any", "Unit", "Nothing", "Void",
+    "List", "Map", "Set", "Array", "Pair", "Triple",
+    "Result", "Optional", "Sequence", "Iterable",
+    "Comparable", "Throwable", "Error", "Exception"
+  ],
+
+  "builtinFunctions": [
+    "println", "print", "readLine", "assert",
+    "listOf", "mapOf", "setOf", "arrayOf",
+    "mutableListOf", "mutableMapOf", "mutableSetOf",
+    "maxOf", "minOf", "repeat", "TODO",
+    "require", "check", "error"
+  ],
+
+  "booleanPrefixes": [
+    "is", "has", "can", "should", "was", "will", "did", "does"
+  ],
+
+  "operators": {
+    "arithmetic": ["+", "-", "*", "/", "%"],
+    "comparison": ["==", "!=", "<", "<=", ">", ">="],
+    "logical": ["&&", "||", "!"],
+    "assignment": ["=", "+=", "-=", "*=", "/=", "%="],
+    "optional": ["?", "?.", "?:"],
+    "forceUnwrap": ["!!"],
+    "range": ["..", "..<"],
+    "arrow": ["->", "=>"],
+    "scope": ["::"]
+  },
+
+  "brackets": {
+    "open":  ["(", "{", "["],
+    "close": [")", "}", "]"]
+  },
+
+  "autoClosingPairs": [
+    { "open": "(", "close": ")" },
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "\"", "close": "\"" },
+    { "open": "'", "close": "'" }
+  ],
+
+  "surroundingPairs": [
+    { "open": "(", "close": ")" },
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "\"", "close": "\"" },
+    { "open": "'", "close": "'" }
+  ],
+
+  "strings": {
+    "singleLine": { "open": "\"", "close": "\"" },
+    "multiLine": { "open": "\"\"\"", "close": "\"\"\"" },
+    "escapes": ["\\\\", "\\\"", "\\n", "\\t", "\\r", "\\0", "\\'", "\\$"],
+    "unicodeEscape": "\\u{HHHH}",
+    "interpolation": {
+      "simple": "$identifier",
+      "expression": "${expression}"
+    }
+  },
+
+  "numbers": {
+    "decimal": "[0-9]([0-9_]*[0-9])?",
+    "hexadecimal": "0[xX][0-9a-fA-F]([0-9a-fA-F_]*[0-9a-fA-F])?",
+    "binary": "0[bB][01]([01_]*[01])?",
+    "float": "[0-9]([0-9_]*[0-9])?(\\.[0-9]([0-9_]*[0-9])?)?([eE][+-]?[0-9]([0-9_]*[0-9])?)?"
+  },
+
+  "theme": {
+    "$comment": "Colors as [lightHex, darkHex]. Font styles: bold, italic, bold-italic, plain.",
+    "keyword":             { "color": ["#0033B3", "#FF7AB2"], "style": "bold" },
+    "controlKeyword":      { "color": ["#0033B3", "#FF7AB2"], "style": "bold" },
+    "rockitKeyword":       { "color": ["#871094", "#B381CF"], "style": "bold" },
+    "booleanLiteral":      { "color": ["#E57C00", "#FFA030"], "style": "bold" },
+    "nullLiteral":         { "color": ["#C62828", "#FF6B68"], "style": "bold" },
+    "optionalOperator":    { "color": ["#00838F", "#56B6C2"], "style": "bold" },
+    "forceUnwrap":         { "color": ["#C62828", "#FF6B68"], "style": "bold" },
+    "builtinType":         { "color": ["#00627A", "#5DD8B4"], "style": "plain" },
+    "builtinFunction":     { "color": ["#00627A", "#67B7A4"], "style": "italic" },
+    "string":              { "color": ["#067D17", "#FC6A5D"], "style": "plain" },
+    "stringEscape":        { "color": ["#0037A6", "#E9B96E"], "style": "bold" },
+    "stringInterpolation": { "color": ["#0037A6", "#41A1C0"], "style": "bold" },
+    "number":              { "color": ["#1750EB", "#D0BF69"], "style": "plain" },
+    "lineComment":         { "color": ["#8C8C8C", "#7F8C98"], "style": "italic" },
+    "blockComment":        { "color": ["#8C8C8C", "#7F8C98"], "style": "italic" },
+    "annotation":          { "color": ["#BBB529", "#FFA14F"], "style": "plain" },
+    "identifier":          { "color": ["#000000", "#D4D4D4"], "style": "plain" }
+  }
+}

@@ -1,0 +1,12 @@
+// Test: import resolution — load functions from another file
+
+import lib.math_utils
+
+fun main(): Unit {
+    greetLib()
+    val d = double(21)
+    println(toString(d))
+    val s = square(5)
+    println(toString(s))
+    println("import test complete")
+}

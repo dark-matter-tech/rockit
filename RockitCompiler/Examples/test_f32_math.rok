@@ -1,0 +1,46 @@
+// test_f32_math.rok — Math module functions
+// Expected output:
+// 4.0
+// 1.0
+// -1.0
+// 2.0
+// 8.0
+// 3.0
+// 4.0
+// 3.0
+
+fun main() {
+    // sqrt
+    val a: Double = rockit_math_sqrt(16.0)
+    println(a)
+
+    // sin(PI/2) ≈ 1.0
+    val b: Double = rockit_math_sin(1.5707963267948966)
+    val bRounded: Double = rockit_math_round(b)
+    println(bRounded)
+
+    // cos(PI) ≈ -1.0
+    val c: Double = rockit_math_cos(3.141592653589793)
+    val cRounded: Double = rockit_math_round(c)
+    println(cRounded)
+
+    // pow(2, 1) = 2.0
+    val d: Double = rockit_math_pow(2.0, 1.0)
+    println(d)
+
+    // pow(2, 3) = 8.0
+    val e: Double = rockit_math_pow(2.0, 3.0)
+    println(e)
+
+    // floor(3.7) = 3.0
+    val f: Double = rockit_math_floor(3.7)
+    println(f)
+
+    // ceil(3.2) = 4.0
+    val g: Double = rockit_math_ceil(3.2)
+    println(g)
+
+    // round(3.4) = 3.0
+    val h: Double = rockit_math_round(3.4)
+    println(h)
+}

@@ -1,0 +1,50 @@
+{
+  "name": "rockit-lang",
+  "displayName": "Rockit Language",
+  "description": "Syntax highlighting, snippets, and editor support for the Rockit programming language",
+  "version": "0.1.0",
+  "publisher": "darkmattertech",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dark-Matter/moon"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "rockit",
+    "rok",
+    "dark matter",
+    "compiler",
+    "language"
+  ],
+  "icon": "icon.png",
+  "contributes": {
+    "languages": [
+      {
+        "id": "rockit",
+        "aliases": ["Rockit", "rockit"],
+        "extensions": [".rok"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "rockit",
+        "scopeName": "source.rockit",
+        "path": "./syntaxes/rockit.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "rockit",
+        "path": "./snippets/rockit.json"
+      }
+    ]
+  }
+}

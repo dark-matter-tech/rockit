@@ -1,0 +1,17 @@
+// Test: Runtime type checking with `is` operator
+sealed class Shape
+class Circle(val radius: Int) : Shape
+class Rect(val w: Int, val h: Int) : Shape
+
+fun main(): Unit {
+    val c = Circle(5)
+    val r = Rect(3, 4)
+
+    // Direct type checks
+    println(c is Circle)
+    println(r is Rect)
+
+    // Subtype checks (via hierarchy)
+    println(c is Shape)
+    println(r is Shape)
+}

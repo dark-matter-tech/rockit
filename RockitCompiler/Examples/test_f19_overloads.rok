@@ -1,0 +1,20 @@
+// Test: function overloading by parameter count
+
+fun greet(): String {
+    return "hello"
+}
+
+fun greet(name: String): String {
+    return stringConcat("hello, ", name)
+}
+
+fun greet(name: String, greeting: String): String {
+    return stringConcat(greeting, stringConcat(", ", name))
+}
+
+fun main(): Unit {
+    println(greet())
+    println(greet("world"))
+    println(greet("world", "hi"))
+    println("overloads test complete")
+}

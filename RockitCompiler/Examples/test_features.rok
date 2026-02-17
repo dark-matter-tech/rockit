@@ -1,0 +1,114 @@
+// test_features.rok — Comprehensive language feature audit
+
+// ── 1. String interpolation ────────────────────────────────
+
+fun testStringInterp(): Unit {
+    val name: String = "Rockit"
+    val greeting: String = "Hello, $name!"
+    println(greeting)
+    val x: Int = 3
+    val y: Int = 4
+    val math: String = "${x} + ${y} = ${x + y}"
+    println(math)
+}
+
+// ── 2. For loops ───────────────────────────────────────────
+
+fun testForLoops(): Unit {
+    // For over a list
+    val items = listCreate()
+    listAppend(items, 10)
+    listAppend(items, 20)
+    listAppend(items, 30)
+    var sum: Int = 0
+    for (item in items) {
+        sum = sum + item
+    }
+    println(sum)
+}
+
+// ── 3. Lambdas ─────────────────────────────────────────────
+
+fun applyOp(a: Int, b: Int, op: (Int, Int) -> Int): Int {
+    return op(a, b)
+}
+
+fun testLambdas(): Unit {
+    val add = { a: Int, b: Int -> a + b }
+    println(add(3, 4))
+    val result = applyOp(10, 5, { a: Int, b: Int -> a - b })
+    println(result)
+}
+
+// ── 4. When expressions ────────────────────────────────────
+
+fun describe(n: Int): String {
+    return when (n) {
+        1 -> "one"
+        2 -> "two"
+        3 -> "three"
+        else -> "other"
+    }
+}
+
+fun testWhen(): Unit {
+    println(describe(1))
+    println(describe(2))
+    println(describe(99))
+}
+
+// ── 5. Nullable types ──────────────────────────────────────
+
+fun testNullable(): Unit {
+    val s: String? = null
+    if (s == null) {
+        println("null: pass")
+    }
+    val t: String? = "hello"
+    if (t != null) {
+        println("not null: pass")
+    }
+    // Elvis operator
+    val result: String = s ?: "default"
+    println(result)
+}
+
+// ── 6. Enum ────────────────────────────────────────────────
+
+enum class Color {
+    RED,
+    GREEN,
+    BLUE
+}
+
+fun colorName(c: Color): String {
+    return when (c) {
+        Color.RED -> "red"
+        Color.GREEN -> "green"
+        Color.BLUE -> "blue"
+        else -> "unknown"
+    }
+}
+
+fun testEnum(): Unit {
+    val c = Color.GREEN
+    println(colorName(c))
+}
+
+// ── Main ───────────────────────────────────────────────────
+
+fun main(): Unit {
+    println("=== String Interpolation ===")
+    testStringInterp()
+    println("=== For Loops ===")
+    testForLoops()
+    println("=== Lambdas ===")
+    testLambdas()
+    println("=== When ===")
+    testWhen()
+    println("=== Nullable ===")
+    testNullable()
+    println("=== Enum ===")
+    testEnum()
+    println("=== DONE ===")
+}

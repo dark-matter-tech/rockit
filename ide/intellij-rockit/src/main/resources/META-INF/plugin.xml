@@ -1,0 +1,60 @@
+<idea-plugin>
+    <id>com.darkmatter.rockit</id>
+    <name>Rockit Language Support</name>
+    <version>0.1.0</version>
+    <vendor email="support@darkmatter.tech" url="https://github.com/Dark-Matter/moon">Dark Matter Tech</vendor>
+
+    <description><![CDATA[
+    Syntax highlighting, brace matching, and commenting for the
+    <b>Rockit</b> programming language (<code>.rok</code> files).
+
+    <h3>Features</h3>
+    <ul>
+        <li>Full syntax highlighting for all 47 keywords and operators</li>
+        <li>String interpolation highlighting (<code>$name</code> and <code>${expr}</code>)</li>
+        <li>Nestable block comment support</li>
+        <li>Brace, bracket, and parenthesis matching</li>
+        <li>Line and block comment toggling (Cmd+/ / Ctrl+/)</li>
+        <li>Auto-close quotes</li>
+        <li>Configurable color scheme (Settings &gt; Editor &gt; Color Scheme &gt; Rockit)</li>
+    </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType
+                name="Rockit"
+                implementationClass="com.darkmatter.rockit.RockitFileType"
+                fieldName="INSTANCE"
+                language="Rockit"
+                extensions="rok;rokb"/>
+
+        <lang.syntaxHighlighterFactory
+                language="Rockit"
+                implementationClass="com.darkmatter.rockit.RockitSyntaxHighlighterFactory"/>
+
+        <colorSettingsPage
+                implementation="com.darkmatter.rockit.RockitColorSettingsPage"/>
+
+        <lang.commenter
+                language="Rockit"
+                implementationClass="com.darkmatter.rockit.RockitCommenter"/>
+
+        <lang.braceMatcher
+                language="Rockit"
+                implementationClass="com.darkmatter.rockit.RockitBraceMatcher"/>
+
+        <lang.quoteHandler
+                language="Rockit"
+                implementationClass="com.darkmatter.rockit.RockitQuoteHandler"/>
+
+        <lang.foldingBuilder
+                language="Rockit"
+                implementationClass="com.darkmatter.rockit.RockitFoldingBuilder"/>
+
+        <!-- Color scheme addons — provide distinct default colors per theme -->
+        <additionalTextAttributesScheme scheme="Darcula" file="colorSchemes/RockitDarcula.xml"/>
+        <additionalTextAttributesScheme scheme="Default" file="colorSchemes/RockitDefault.xml"/>
+    </extensions>
+</idea-plugin>

@@ -1,0 +1,44 @@
+// moon.core.result — Result type for error handling
+
+sealed class Result(val isSuccess: Bool)
+
+class Success(val value: Int) : Result(true)
+
+class Failure(val error: String) : Result(false)
+
+// Unwrap a Success value, or return the default if Failure
+fun resultOrElse(r: Result, default: Int): Int {
+    when (r) {
+        is Success -> return r.value
+        is Failure -> return default
+    }
+    return default
+}
+
+// Get the error message from a Failure (or empty string for Success)
+fun resultError(r: Result): String {
+    when (r) {
+        is Failure -> return r.error
+        is Success -> return ""
+    }
+    return ""
+}
+
+// Map a function over a Result value
+fun resultMap(r: Result, transform: (Int) -> Int): Result {
+    when (r) {
+        is Success -> return Success(transform(r.value))
+        is Failure -> return r
+    }
+    return r
+}
+
+// Check if a Result is successful
+fun isSuccess(r: Result): Bool {
+    return r.isSuccess
+}
+
+// Check if a Result is a failure
+fun isFailure(r: Result): Bool {
+    return !r.isSuccess
+}

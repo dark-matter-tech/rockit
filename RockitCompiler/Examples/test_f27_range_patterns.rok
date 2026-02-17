@@ -1,0 +1,27 @@
+// test_f27_range_patterns.rok — Range patterns in when expressions
+
+fun classify(x: Int): String {
+    return when (x) {
+        in 1..5 -> "small"
+        in 6..10 -> "medium"
+        in 11..100 -> "large"
+        else -> "out of range"
+    }
+}
+
+fun main() {
+    // Test range matching
+    println(classify(3))
+    println(classify(7))
+    println(classify(50))
+    println(classify(0))
+    println(classify(101))
+
+    // Test boundary values
+    println(classify(1))
+    println(classify(5))
+    println(classify(6))
+    println(classify(10))
+    println(classify(11))
+    println(classify(100))
+}

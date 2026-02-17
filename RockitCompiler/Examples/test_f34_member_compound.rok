@@ -1,0 +1,17 @@
+// Test: member compound assignment (x.y += 1)
+
+class Counter(var count: Int)
+
+fun main(): Unit {
+    val c = Counter(10)
+    println(c.count)
+
+    c.count += 5
+    println(c.count)
+
+    c.count -= 3
+    println(c.count)
+
+    c.count *= 2
+    println(c.count)
+}

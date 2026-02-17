@@ -1,460 +1,293 @@
-# 🌙 Moon
+# Rockit
 
-**A type-safe, compiled, memory-safe programming language designed to replace JavaScript and the DOM.**
+A statically-typed, compiled, memory-safe programming language designed to replace JavaScript, HTML, CSS, and the DOM as the foundational technology of the web platform.
 
-> Codename: Mars | Status: Draft Specification | Confidential
-
----
-
-## What is Moon?
-
-Moon is a ground-up replacement for the web's execution model. It eliminates JavaScript, the DOM, and CSS, replacing them with a compiled language, a declarative UI scene graph, and a platform-aware runtime that bridges to native capabilities.
-
-Moon isn't an incremental improvement. It's the language the web would have if we built it today.
-
-```
-view HelloWorld() {
-    @State var name = ""
-
-    Column(spacing = 16.dp, padding = 24.dp) {
-        Text("Hello, ${name.ifEmpty { "Moon" }}!")
-            .font(.display)
-
-        TextField(value = name, onChanged = { name = it })
-            .placeholder("Enter your name")
-
-        Button("Greet") {
-            Platform.notifications.send(
-                title = "Hello!",
-                body = "Welcome to Moon, $name"
-            )
-        }
-        .style(.primary)
-    }
-}
-```
-
-No HTML. No CSS. No JavaScript. No DOM. Just code.
+Built by [Dark Matter Tech](https://github.com/Dark-Matter).
 
 ---
 
-## Why Moon?
+## Status
 
-JavaScript was built in 10 days. The DOM is a document model tortured into an application platform. CSS specificity rules have caused more developer suffering than any technology in history. npm downloads 400MB of `node_modules` to center a div.
+The compiler is **self-hosting** — Rockit compiles itself. All compiler phases are complete and 539+ tests pass across the full pipeline.
 
-Moon fixes all of it.
-
-| Problem | Legacy Web | Moon |
-|---|---|---|
-| Type safety | Runtime errors everywhere | Every type known at compile time |
-| Memory | GC pauses cause UI jank | ARC — deterministic, no pauses |
-| UI model | Imperative DOM mutation | Declarative reactive scene graph |
-| Styling | CSS cascade + specificity | Type-safe scoped properties |
-| Packages | npm supply chain attacks | Signed binaries, no install scripts |
-| Payments | 3 different browser APIs | One call, runtime resolves native |
-| Push notifications | Different per browser | One API — APNs, FCM, WNS |
-| Security | Software-only Web Crypto | Hardware HSM bridge, keys never exposed |
-| Null safety | `undefined is not a function` | Nullable types enforced at compile time |
-
----
-
-## Core Design Principles
-
-**Declare intent, not mechanics.** Write what you want. The runtime figures out how, based on the platform.
-
-**One codebase, native everywhere.** Moon runs on WebKit (Apple) and Blink (everything else). Each platform gets its best native experience — not lowest common denominator.
-
-**Fail at compile time, not runtime.** If it compiles, it works. The type system, null safety, and exhaustive pattern matching catch errors before deployment.
-
-**Security is not optional.** Hardware-backed crypto, signed packages, capability-based permissions, and zero-trust networking are built in — not bolted on.
-
-**Performance is a feature.** ARC memory management and AOT compilation ensure consistent 60/120fps without GC pauses.
+| Component | Status |
+|-----------|--------|
+| Lexer | Complete |
+| Parser | Complete |
+| Type Checker | Complete |
+| MIR Lowering | Complete |
+| Optimizer | Complete |
+| Codegen (bytecode + native) | Complete |
+| Runtime (ARC, actors, coroutines) | Complete |
+| Structured concurrency (VM) | Complete |
+| Self-hosting bootstrap | Complete |
+| Editor support | VS Code, JetBrains, Vim/Neovim |
 
 ---
 
-## Language at a Glance
+## Quick Start
 
-### Kotlin-Inspired Syntax
-```
-data class User(
-    val id: String,
-    val name: String,
-    val email: String,
-    val role: Role = Role.Viewer
-)
+### Install
 
-fun greet(user: User): String = "Hello, ${user.name}!"
-
-val admins = users.filter { it.role == Role.Admin }
-                  .sortedBy { it.name }
-```
-
-### Null Safety
-```
-val name: String = "Moon"       // cannot be null
-val alias: String? = null       // explicitly nullable
-val len = alias?.length ?: 0    // safe call + elvis operator
-```
-
-### Sealed Classes + Exhaustive Matching
-```
-sealed class Result<out T> {
-    data class Success<T>(val data: T) : Result<T>()
-    data class Error(val message: String) : Result<Nothing>()
-    object Loading : Result<Nothing>()
-}
-
-val output = when (result) {
-    is Result.Success -> render(result.data)
-    is Result.Error -> showError(result.message)
-    Result.Loading -> showSpinner()
-    // No default needed — compiler enforces exhaustiveness
-}
-```
-
-### Structured Concurrency
-```
-suspend fun loadDashboard() {
-    val (user, orders, alerts) = concurrent {
-        val user = async { fetchUser(userId) }
-        val orders = async { fetchOrders(userId) }
-        val alerts = async { fetchAlerts(userId) }
-        Triple(user.await(), orders.await(), alerts.await())
-    }
-    render(Dashboard(user, orders, alerts))
-}
-```
-
-### Actors for Thread Safety
-```
-actor ShoppingCart {
-    private var items: MutableList<CartItem> = mutableListOf()
-
-    fun add(item: CartItem) { items.add(item) }
-    fun total(): Float64 = items.sumOf { it.price * it.quantity }
-}
-```
-
----
-
-## MoonView — The UI Framework
-
-MoonView replaces HTML, CSS, and the DOM with a declarative, reactive scene graph. If you've used SwiftUI or Jetpack Compose, you already know how to think in MoonView.
-
-### Declarative Components
-```
-view ProductCard(product: Product) {
-    Column(spacing = 12.dp, padding = 16.dp) {
-        Image(product.thumbnailUrl)
-            .size(200.dp, 200.dp)
-            .cornerRadius(8.dp)
-
-        Text(product.name)
-            .font(.headline)
-
-        Text("$${product.price}")
-            .font(.body)
-            .color(.secondary)
-
-        Button("Add to Cart") { cart.add(product) }
-            .style(.primary)
-            .fullWidth()
-    }
-}
-```
-
-### Reactive State
-```
-view SearchPage() {
-    @State var query = ""
-    @State var results: List<Product> = emptyList()
-
-    Column {
-        TextField(value = query, onChanged = { query = it })
-        
-        for (product in results) {
-            ProductCard(product)
-        }
-    }
-    .onAppear { results = api.search(query) }
-}
-```
-
-### Declarative Navigation
-```
-navigation App {
-    route("/") { HomePage() }
-    route("/products/{id}") { params ->
-        ProductDetail(productId = params["id"])
-    }
-    route("/cart") { CartPage() }
-    route("/checkout") { CheckoutFlow() }
-}
-```
-
-### Type-Safe Styling (No CSS)
-```
-val cardStyle = Style {
-    background(.surface)
-    cornerRadius(12.dp)
-    shadow(elevation = 4.dp, color = .black.opacity(0.1))
-    padding(16.dp)
-}
-
-theme AppTheme {
-    colors {
-        primary = Color(0x5B21B6)
-        surface = Color(0xFFFFFF)
-    }
-    typography {
-        headline = Font("Inter", size = 24.sp, weight = .semibold)
-    }
-}
-```
-
----
-
-## Platform Capability API
-
-Moon's runtime detects the underlying platform and bridges to native capabilities. Developers declare intent — the runtime resolves implementation.
-
-### Payments
-```
-@Capability(requires = Capability.Payments)
-suspend fun checkout(cart: Cart): PaymentResult {
-    // Apple → Apple Pay | Android → Native Pay | Fallback → Stripe
-    return Platform.payments.request(
-        Payment(amount = cart.total, currency = Currency.USD)
-    )
-}
-```
-
-### Push Notifications
-```
-@Capability(requires = Capability.Notifications)
-suspend fun registerPush() {
-    // Apple → APNs | Android → FCM | Windows → WNS
-    val token = Platform.notifications.register()
-    api.registerDevice(token)
-}
-```
-
-### Biometrics
-```
-@Capability(requires = Capability.Biometrics)
-suspend fun authenticate(): AuthResult {
-    // Apple → Face ID / Touch ID | Android → BiometricPrompt | Windows → Hello
-    return Platform.biometrics.authenticate(reason = "Confirm your identity")
-}
-```
-
----
-
-## Hardware Security Bridge
-
-Moon treats hardware security as a first-class citizen. Orion discovers HSMs, secure enclaves, and hardware tokens, and provides a unified cryptographic API. **Private keys never leave the hardware.**
-
-```
-@Capability(requires = Capability.HardwareCrypto)
-suspend fun signDocument(document: ByteArray): Signature {
-    val key = Platform.crypto.getKey(
-        id = "signing-key",
-        type = KeyType.Ed25519,
-        requireHardware = true
-    )
-    return key.sign(document)
-}
-```
-
-### Supported Hardware
-- YubiKey / Titan (FIDO2, USB/NFC)
-- Apple Secure Enclave
-- TPM 2.0
-- Ledger / Trezor (BLE/USB)
-- Smart cards (PKCS#11)
-- Custom USB/BLE HSMs
-
-### Capability Manifest
-```yaml
-crypto:
-  operations: [sign, verify, encrypt, decrypt, keyExchange]
-  key_types: [ed25519, x25519, ecdsa-p256]
-  requires_hardware: true
-  fallback: none    # hardware or nothing
-  attestation: required
-```
-
----
-
-## Aurora — Package Manager
-
-Aurora replaces npm, webpack, babel, eslint, and all associated configuration. One tool. One manifest. No `node_modules`.
-
-### Commands
+**macOS / Linux (one-liner):**
 ```bash
-aurora init my-app           # scaffold new project
-aurora add moon-http         # add dependency (exact version pinned)
-aurora dev                   # dev server + hot reload
-aurora build --release       # AOT compile for production
-aurora test                  # run test suite
-aurora publish --sign        # publish (requires signing key)
-aurora audit --deep          # security audit
+curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.sh | bash
 ```
 
-### Manifest
-```yaml
-# aurora.manifest
-name: my-app
-version: 1.0.0
-target: web
-moon: 1.0
-
-platform_capabilities:
-  - payments
-  - notifications
-  - crypto:
-      requires_hardware: true
-
-dependencies:
-  moon-ui: 2.1.0
-  moon-http: 1.4.0
-  moon-json: 3.0.0
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.ps1 | iex
 ```
 
-### Security Model
-- All packages are **cryptographically signed** by the author
-- Packages are distributed as **compiled artifacts**, not source code
-- **No install scripts** execute during dependency resolution
-- **Flat dependency resolution** — no nested `node_modules` hell
-- **Exact version pinning** — nothing changes under you silently
-- **Registry-level scanning** for vulnerabilities and malicious code
+The installer downloads a prebuilt binary if available, or builds from source as a fallback.
 
----
-
-## Interoperability
-
-Moon is a polyglot compilation target. Write in Moon directly, or use a supported source language.
-
-| Language | Tier | Path |
-|---|---|---|
-| Moon | Primary | Moon → MIR → Bytecode |
-| Kotlin | Tier 1 | Kotlin → KIR → MIR → Bytecode |
-| Swift | Tier 1 | Swift → SIL → MIR → Bytecode |
-| Rust | Tier 2 | Rust → LLVM IR → MIR → Bytecode |
-| TypeScript | Migration | TS → AST → MIR (limited) |
-
-### MIR (Moon Intermediate Representation)
-MIR is the stable contract. If any upstream language introduces breaking changes, compiled MIR packages continue to function. Developers who need maximum stability can write MIR directly.
-
----
-
-## Compilation Pipeline
-
-### Development
-```
-aurora dev
-→ Incremental compilation (< 50ms)
-→ Hot reload (no page refresh)
-→ Real-time type checking
-→ http://localhost:3000
+**Or build manually:**
+```bash
+git clone https://github.com/Dark-Matter/moon.git
+cd moon/RockitCompiler
+make release && sudo make install
 ```
 
-### Production
+### Update
+
+```bash
+rockit update
 ```
-aurora build --release
-→ Full type check + null safety verification
-→ Capability validation
-→ MIR optimization + tree shaking
-→ AOT bytecode generation
-→ Output: dist/app.moonpkg
+
+### Hello World
+
+```kotlin
+// hello.rok
+fun main() {
+    println("Hello, Rockit!")
+}
+```
+
+```bash
+rockit run hello.rok
 ```
 
 ---
 
-## Memory Model
+## Language Overview
 
-Moon uses **Automatic Reference Counting (ARC)** with a lightweight cycle detector.
+Rockit's syntax is Kotlin-inspired with purpose-built constructs for UI, concurrency, and styling:
 
-- **Deterministic deallocation** — no GC pauses, smooth 60/120fps rendering
-- **`weak` and `unowned` references** to break cycles
-- **Compile-time cycle analysis** — objects proven cycle-free skip the detector entirely
-- **Background cycle detector** runs incrementally on a low-priority thread for edge cases
+```kotlin
+// Data classes with null safety
+data class User(val name: String, val email: String?)
+
+// Pattern matching
+fun greet(user: User) {
+    val display = user.email ?: "no email"
+    println("Hello, ${user.name} ($display)")
+}
+
+// Declarative UI
+view Greeting(val name: String) {
+    Text("Hello, $name!")
+}
+
+// Thread-safe concurrency
+actor Counter {
+    private var count: Int = 0
+    suspend fun increment() { count += 1 }
+    suspend fun get(): Int = count
+}
+
+// Structured concurrency
+suspend fun loadData(client: HttpClient) {
+    concurrent {
+        val users = await client.get("/users")
+        val posts = await client.get("/posts")
+    }
+}
+
+// Type-safe styling
+theme AppTheme {
+    val primary = Color.BLUE
+    val background = "#1E1E2E"
+}
+
+// Declarative navigation
+navigation AppRouter {
+    route("/") { Greeting("Rockit") }
+    route("/counter") { Counter() }
+}
+```
+
+### Key Features
+
+- **Null safety** enforced at compile time (`String` vs `String?`, `?.`, `?:`, `!!`)
+- **Sealed classes** with exhaustive `when` matching
+- **Data classes** with destructuring
+- **Generics** with variance (`out`, `in`)
+- **String interpolation** (`"Hello, ${name}"`)
+- **ARC memory model** with compile-time cycle analysis — no garbage collector
+- **Actors** for thread-safe concurrent objects
+- **Structured concurrency** with `suspend`, `async`, `await`, `concurrent`
+- **Views** for declarative UI components
+- **Themes** and **styles** for type-safe styling
 
 ---
 
-## Orion Runtime Architecture
+## Ecosystem
 
-```
-┌──────────────────────────────────┐
-│      Moon Application Code       │
-├──────────────────────────────────┤
-│      Universal Capability API    │
-│   (payments, push, crypto, etc)  │
-├──────────────────────────────────┤
-│      Platform Detection &        │
-│      Native Bridge Router        │
-├────────┬─────────┬───────────────┤
-│ Apple  │ Dark    │   Microsoft   │
-│ WebKit │ Blink   │   Blink       │
-│ APNs   │ FCM     │   WNS         │
-│ PassKit│ GPay    │   Win Hello   │
-│ Sec.Enc│ Android │   TPM         │
-└────────┴─────────┴───────────────┘
-```
+| Tool | Name | Description |
+|------|------|-------------|
+| Language | **Rockit** | `.rok` / `.rokb` files |
+| Compiler | **Command** | Compiles, runs, and manages Rockit projects |
+| Package Manager | **Fuel** | Dependency management |
+| Test Framework | **Probe** | Built-in testing |
+| Registry | **Silo** | Package registry |
+| REPL | **Launch** | Interactive shell |
 
 ---
 
-## Roadmap
+## Editor Support
 
-| Phase | Target | Milestone |
-|---|---|---|
-| Alpha | 2026 Q3 | Language spec finalized, compiler prototype |
-| Beta | 2027 Q1 | Aurora registry, MoonView beta, Orion canary builds |
-| Dev Preview | 2027 Q3 | Public SDK, docs, example apps |
-| Orion Integration | 2028 Q1 | Moon runtime ships in Orion stable (behind flag) |
-| GA | 2028 Q3 | Flag removed, available to all Orion users |
-| Legacy Deprecation | 2030+ | Begin JS engine deprecation signaling |
+All editors share a single canonical syntax definition (`ide/shared/rockit-language.json`). Add a keyword once, regenerate, and every editor updates.
+
+### VS Code
+
+Full extension with syntax highlighting, 25+ snippets, bracket matching, and auto-close pairs.
+
+**Install from source:**
+```bash
+cd ide/vscode
+# Install with: code --install-extension .
+# Or copy to ~/.vscode/extensions/rockit-lang-0.1.0/
+```
+
+### JetBrains (IntelliJ IDEA, WebStorm, CLion, etc.)
+
+Full plugin with JFlex lexer, syntax highlighting, code folding, brace matching, and configurable Xcode/Swift-inspired color themes.
+
+**Install:** Settings > Plugins > gear icon > Install Plugin from Disk > select `intellij-rockit-0.1.0.zip`
+
+```bash
+cd ide/intellij-rockit
+./gradlew buildPlugin
+# Output: build/distributions/intellij-rockit-0.1.0.zip
+```
+
+### Vim / Neovim
+
+Syntax highlighting and filetype detection.
+
+**Install manually:**
+```bash
+cp ide/vim/syntax/rockit.vim ~/.vim/syntax/
+cp ide/vim/ftdetect/rockit.vim ~/.vim/ftdetect/
+```
+
+**Or with a plugin manager (e.g. vim-plug):**
+```vim
+Plug 'Dark-Matter/moon', { 'rtp': 'ide/vim' }
+```
+
+### Regenerating Editor Files
+
+When you modify `rockit-language.json`, regenerate all editor syntax files:
+
+```bash
+cd ide/shared
+python3 generate.py
+```
 
 ---
 
 ## Project Structure
 
 ```
-my-app/
-  aurora.manifest
-  aurora.lock
-  src/
-    main.moon
-    views/
-    models/
-    services/
-  tests/
-  assets/
+moon/
+├── RockitCompiler/
+│   ├── Sources/RockitKit/       # Core compiler library (37+ files)
+│   ├── Sources/RockitCLI/       # CLI entry point
+│   ├── Tests/                   # 539+ tests
+│   ├── Runtime/                 # C runtime (ARC, actors, coroutines)
+│   ├── Stage1/                  # Self-hosting compiler in Rockit
+│   └── Examples/                # Example .rok files
+├── ide/
+│   ├── shared/                  # Canonical syntax definition + generator
+│   ├── vscode/                  # VS Code extension
+│   ├── vim/                     # Vim/Neovim plugin
+│   └── intellij-rockit/         # JetBrains IDE plugin
+├── .github/workflows/           # CI + release automation
+└── CLAUDE.md                    # Compiler specification
 ```
 
 ---
 
-## Migration
+## Building from Source
+
+### Prerequisites
+
+| Prerequisite | Version | macOS | Linux | Windows |
+|---|---|---|---|---|
+| **Swift** | 5.9+ | Xcode or [swift.org](https://swift.org/download) | [swift.org](https://swift.org/download) | [swift.org](https://swift.org/download) |
+| **Clang/LLVM** | 14+ | `xcode-select --install` | `apt install clang` | [releases.llvm.org](https://releases.llvm.org) |
+| **Git** | any | Included with Xcode | `apt install git` | [git-scm.com](https://git-scm.com) |
+
+### Build
 
 ```bash
-# Convert an existing TypeScript project
-aurora migrate --from typescript --source ./src
+cd RockitCompiler
+
+# Debug
+make build
+
+# Release
+make release
+
+# Run tests
+make test
 ```
 
-Orion ships with a dual-runtime engine — legacy HTML/CSS/JS sites continue working unchanged while new applications target the Moon runtime. Gradual migration, not a cliff.
+### Install
+
+```bash
+# macOS/Linux (installs to /usr/local)
+sudo make install
+
+# Custom prefix
+make install PREFIX=$HOME/.local
+
+# Verify
+rockit version
+rockit run Examples/hello.rok
+```
 
 ---
 
-## Contributing
+## CLI Commands
 
-This project is in early specification phase. Contact the Dark Matter Tech team for access.
+```
+rockit run <file>            Execute a .rok or .rokb file
+rockit build <file.rok>      Compile to bytecode (.rokb)
+rockit build-native <file>   Compile to native executable via LLVM
+rockit run-native <file>     Compile to native and execute
+rockit emit-llvm <file>      Emit LLVM IR (.ll) for inspection
+rockit launch                Start interactive REPL
+rockit init [name]           Create a new Rockit project
+rockit test [file]           Run tests
+rockit update                Update rockit to the latest version
+rockit version               Print version
+```
+
+---
+
+## Platforms
+
+| Platform | Build | Run bytecode | Native compile |
+|----------|-------|-------------|----------------|
+| **macOS** (arm64, x86_64) | Yes | Yes | Yes |
+| **Linux** (x86_64, arm64) | Yes | Yes | Yes |
+| **Windows** (x86_64) | Yes | Yes | Yes |
+| **Docker** | Yes | Yes | Yes |
+
+---
 
 ## License
 
-Proprietary. Dark Matter Tech Confidential.
-
----
-
-<p align="center">
-  <strong>Moon</strong> · Codename Mars · The language the web deserves.
-</p>
+Apache 2.0. Copyright 2026 Dark Matter Tech.

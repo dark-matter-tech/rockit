@@ -1,0 +1,43 @@
+// test_collections.rok — Native codegen test for List and Map
+
+fun main(): Unit {
+    // List basics
+    val list = listCreate()
+    listAppend(list, 10)
+    listAppend(list, 20)
+    listAppend(list, 30)
+    println(listSize(list))
+    println(listGet(list, 0))
+    println(listGet(list, 1))
+    println(listGet(list, 2))
+
+    // listSet
+    listSet(list, 1, 99)
+    println(listGet(list, 1))
+
+    // listContains
+    if (listContains(list, 99)) { println("contains: pass") } else { println("contains: FAIL") }
+    if (!listContains(list, 42)) { println("not contains: pass") } else { println("not contains: FAIL") }
+
+    // Iterate list
+    var i: Int = 0
+    var sum: Int = 0
+    while (i < listSize(list)) {
+        sum = sum + listGet(list, i)
+        i = i + 1
+    }
+    println(sum)
+
+    // Map basics
+    val m = mapCreate()
+    mapPut(m, "x", 100)
+    mapPut(m, "y", 200)
+    mapPut(m, "z", 300)
+    println(mapGet(m, "x"))
+    println(mapGet(m, "y"))
+    println(mapGet(m, "z"))
+
+    // Map keys
+    val keys = mapKeys(m)
+    println(listSize(keys))
+}

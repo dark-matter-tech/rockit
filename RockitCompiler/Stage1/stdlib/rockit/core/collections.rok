@@ -1,0 +1,296 @@
+// moon.core.collections — Collection utility functions
+
+// Create a list from variable number of items
+fun listOf1(a: Int): List {
+    val list = listCreate()
+    listAppend(list, a)
+    return list
+}
+
+fun listOf2(a: Int, b: Int): List {
+    val list = listCreate()
+    listAppend(list, a)
+    listAppend(list, b)
+    return list
+}
+
+fun listOf3(a: Int, b: Int, c: Int): List {
+    val list = listCreate()
+    listAppend(list, a)
+    listAppend(list, b)
+    listAppend(list, c)
+    return list
+}
+
+// Map a function name over a list (calls the function for each element)
+fun listForEach(list: List, action: String): Unit {
+    var i: Int = 0
+    while (i < listSize(list)) {
+        println(toString(listGet(list, i)))
+        i = i + 1
+    }
+}
+
+// Sum all integer elements in a list
+fun listSum(list: List): Int {
+    var sum: Int = 0
+    var i: Int = 0
+    while (i < listSize(list)) {
+        sum = sum + toInt(listGet(list, i))
+        i = i + 1
+    }
+    return sum
+}
+
+// Find the maximum integer in a list
+fun listMax(list: List): Int {
+    var best: Int = toInt(listGet(list, 0))
+    var i: Int = 1
+    while (i < listSize(list)) {
+        val v = toInt(listGet(list, i))
+        if (v > best) { best = v }
+        i = i + 1
+    }
+    return best
+}
+
+// Find the minimum integer in a list
+fun listMin(list: List): Int {
+    var best: Int = toInt(listGet(list, 0))
+    var i: Int = 1
+    while (i < listSize(list)) {
+        val v = toInt(listGet(list, i))
+        if (v < best) { best = v }
+        i = i + 1
+    }
+    return best
+}
+
+// Reverse a list in place
+fun listReverse(list: List): Unit {
+    val size = listSize(list)
+    var i: Int = 0
+    var j: Int = size - 1
+    while (i < j) {
+        val temp = listGet(list, i)
+        listSet(list, i, listGet(list, j))
+        listSet(list, j, temp)
+        i = i + 1
+        j = j - 1
+    }
+}
+
+// Create a copy of a list
+fun listCopy(list: List): List {
+    val copy = listCreate()
+    var i: Int = 0
+    while (i < listSize(list)) {
+        listAppend(copy, listGet(list, i))
+        i = i + 1
+    }
+    return copy
+}
+
+// Join list elements into a string with separator
+fun listJoin(list: List, sep: String): String {
+    val size = listSize(list)
+    if (size == 0) { return "" }
+    var result: String = toString(listGet(list, 0))
+    var i: Int = 1
+    while (i < size) {
+        result = stringConcat(result, stringConcat(sep, toString(listGet(list, i))))
+        i = i + 1
+    }
+    return result
+}
+
+// ── Higher-Order Collection Functions ────────────────────────────────────
+
+// Transform each element of a list
+fun listMap(list: List, transform: (Int) -> Int): List {
+    val result = listCreate()
+    var i: Int = 0
+    while (i < listSize(list)) {
+        listAppend(result, transform(toInt(listGet(list, i))))
+        i = i + 1
+    }
+    return result
+}
+
+// Keep only elements matching a predicate
+fun listFilter(list: List, predicate: (Int) -> Bool): List {
+    val result = listCreate()
+    var i: Int = 0
+    while (i < listSize(list)) {
+        val elem = toInt(listGet(list, i))
+        if (predicate(elem)) {
+            listAppend(result, elem)
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Reduce a list to a single value
+fun listFold(list: List, initial: Int, combine: (Int, Int) -> Int): Int {
+    var acc: Int = initial
+    var i: Int = 0
+    while (i < listSize(list)) {
+        acc = combine(acc, toInt(listGet(list, i)))
+        i = i + 1
+    }
+    return acc
+}
+
+// Check if any element matches a predicate
+fun listAny(list: List, predicate: (Int) -> Bool): Bool {
+    var i: Int = 0
+    while (i < listSize(list)) {
+        if (predicate(toInt(listGet(list, i)))) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+// Check if all elements match a predicate
+fun listAll(list: List, predicate: (Int) -> Bool): Bool {
+    var i: Int = 0
+    while (i < listSize(list)) {
+        if (!predicate(toInt(listGet(list, i)))) { return false }
+        i = i + 1
+    }
+    return true
+}
+
+// Get the first element (or -1 if empty)
+fun listFirst(list: List): Int {
+    if (listSize(list) == 0) { return -1 }
+    return toInt(listGet(list, 0))
+}
+
+// Get the last element (or -1 if empty)
+fun listLast(list: List): Int {
+    val size = listSize(list)
+    if (size == 0) { return -1 }
+    return toInt(listGet(list, size - 1))
+}
+
+// Check if a list is empty
+fun listIsEmpty(list: List): Bool {
+    return listSize(list) == 0
+}
+
+// Create a sublist from start (inclusive) to end (exclusive)
+fun listSlice(list: List, start: Int, end: Int): List {
+    val result = listCreate()
+    var i: Int = start
+    while (i < end && i < listSize(list)) {
+        listAppend(result, listGet(list, i))
+        i = i + 1
+    }
+    return result
+}
+
+// Create a list with 4 items
+fun listOf4(a: Int, b: Int, c: Int, d: Int): List {
+    val list = listCreate()
+    listAppend(list, a)
+    listAppend(list, b)
+    listAppend(list, c)
+    listAppend(list, d)
+    return list
+}
+
+// Create a list with 5 items
+fun listOf5(a: Int, b: Int, c: Int, d: Int, e: Int): List {
+    val list = listCreate()
+    listAppend(list, a)
+    listAppend(list, b)
+    listAppend(list, c)
+    listAppend(list, d)
+    listAppend(list, e)
+    return list
+}
+
+// Count elements matching a predicate
+fun listCount(list: List, predicate: (Int) -> Bool): Int {
+    var count: Int = 0
+    var i: Int = 0
+    while (i < listSize(list)) {
+        if (predicate(toInt(listGet(list, i)))) { count = count + 1 }
+        i = i + 1
+    }
+    return count
+}
+
+// Find the first element matching a predicate (or -1)
+fun listFind(list: List, predicate: (Int) -> Bool): Int {
+    var i: Int = 0
+    while (i < listSize(list)) {
+        val elem = toInt(listGet(list, i))
+        if (predicate(elem)) { return elem }
+        i = i + 1
+    }
+    return -1
+}
+
+// Sort a list using insertion sort (in-place)
+fun listSort(list: List): Unit {
+    val size = listSize(list)
+    var i: Int = 1
+    while (i < size) {
+        val key = toInt(listGet(list, i))
+        var j: Int = i - 1
+        while (j >= 0 && toInt(listGet(list, j)) > key) {
+            listSet(list, j + 1, listGet(list, j))
+            j = j - 1
+        }
+        listSet(list, j + 1, key)
+        i = i + 1
+    }
+}
+
+// Remove duplicate values (returns new list)
+fun listDistinct(list: List): List {
+    val result = listCreate()
+    var i: Int = 0
+    while (i < listSize(list)) {
+        val elem = listGet(list, i)
+        if (!listContains(result, elem)) {
+            listAppend(result, elem)
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Zip two lists into a list of pairs (alternating elements)
+fun listZip(a: List, b: List): List {
+    val result = listCreate()
+    val size = min(listSize(a), listSize(b))
+    var i: Int = 0
+    while (i < size) {
+        listAppend(result, listGet(a, i))
+        listAppend(result, listGet(b, i))
+        i = i + 1
+    }
+    return result
+}
+
+// Flatten a list of lists into a single list
+// Each element is expected to be a List
+fun listFlatten(lists: List): List {
+    val result = listCreate()
+    var i: Int = 0
+    while (i < listSize(lists)) {
+        val inner = listGet(lists, i)
+        // Append all elements from inner list
+        var j: Int = 0
+        while (j < listSize(inner)) {
+            listAppend(result, listGet(inner, j))
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return result
+}

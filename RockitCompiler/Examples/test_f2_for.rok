@@ -1,0 +1,13 @@
+// Test for loops
+
+fun main(): Unit {
+    val items = listCreate()
+    listAppend(items, 10)
+    listAppend(items, 20)
+    listAppend(items, 30)
+    var sum: Int = 0
+    for (item in items) {
+        sum = sum + item
+    }
+    println(sum)
+}

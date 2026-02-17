@@ -1,0 +1,20 @@
+// test_f29_when_destructure.rok — Destructuring patterns in when expressions
+
+sealed class Shape
+class Circle(val radius: Int) : Shape
+class Rect(val width: Int, val height: Int) : Shape
+
+fun describe(s: Shape): String {
+    return when (s) {
+        is Circle(val r) -> stringConcat("Circle with radius ", toString(r))
+        is Rect(val w, val h) -> stringConcat("Rect ", stringConcat(toString(w), stringConcat("x", toString(h))))
+        else -> "unknown"
+    }
+}
+
+fun main() {
+    val c = Circle(5)
+    val r = Rect(10, 20)
+    println(describe(c))
+    println(describe(r))
+}

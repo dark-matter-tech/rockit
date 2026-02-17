@@ -1,0 +1,27 @@
+// Test: type aliases
+
+typealias Number = Int
+typealias Text = String
+
+fun double(x: Number): Number {
+    return x * 2
+}
+
+fun greet(name: Text): Text {
+    return stringConcat("Hello, ", name)
+}
+
+fun main(): Unit {
+    val n: Number = 21
+    val result = double(n)
+    println(toString(result))
+
+    val t: Text = "world"
+    println(greet(t))
+
+    // Alias in expressions
+    val sum: Number = 10 + 20
+    println(toString(sum))
+
+    println("type alias test complete")
+}

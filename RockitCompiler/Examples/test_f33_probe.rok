@@ -1,0 +1,35 @@
+// test_f33_probe.rok — Probe test framework demonstration
+// Tests using @Test annotation and assertion builtins
+
+@Test
+fun testAddition() {
+    assertEquals(2 + 3, 5)
+    assertEquals(0 + 0, 0)
+    assertEquals(-1 + 1, 0)
+}
+
+@Test
+fun testBooleanAssertions() {
+    assertTrue(1 == 1)
+    assertFalse(1 == 2)
+    assert(true)
+}
+
+@Test
+fun testStringEquality() {
+    val greeting = "hello"
+    assertEquals(greeting, "hello")
+    assertNotEquals(greeting, "world")
+}
+
+@Test
+fun testNullAssertions() {
+    val x: Int? = null
+    assertNull(x)
+    val y: Int? = 42
+    assertNotNull(y)
+}
+
+fun main() {
+    println("Probe test framework works!")
+}

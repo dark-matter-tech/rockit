@@ -1,0 +1,130 @@
+// moon.core.strings — String utility functions
+
+fun padLeft(s: String, width: Int, ch: String = " "): String {
+    var result: String = s
+    while (stringLength(result) < width) {
+        result = stringConcat(ch, result)
+    }
+    return result
+}
+
+fun padRight(s: String, width: Int, ch: String = " "): String {
+    var result: String = s
+    while (stringLength(result) < width) {
+        result = stringConcat(result, ch)
+    }
+    return result
+}
+
+fun repeat(s: String, count: Int): String {
+    var result: String = ""
+    var i: Int = 0
+    while (i < count) {
+        result = stringConcat(result, s)
+        i = i + 1
+    }
+    return result
+}
+
+fun join(items: List, separator: String): String {
+    val size = listSize(items)
+    if (size == 0) { return "" }
+    var result: String = toString(listGet(items, 0))
+    var i: Int = 1
+    while (i < size) {
+        result = stringConcat(result, stringConcat(separator, toString(listGet(items, i))))
+        i = i + 1
+    }
+    return result
+}
+
+fun split(s: String, delimiter: String): List {
+    return stringSplit(s, delimiter)
+}
+
+fun reversed(s: String): String {
+    val len = stringLength(s)
+    var result: String = ""
+    var i: Int = len - 1
+    while (i >= 0) {
+        result = stringConcat(result, charAt(s, i))
+        i = i - 1
+    }
+    return result
+}
+
+fun toUpper(s: String): String {
+    return stringToUpper(s)
+}
+
+fun toLower(s: String): String {
+    return stringToLower(s)
+}
+
+fun trim(s: String): String {
+    return stringTrim(s)
+}
+
+fun contains(s: String, sub: String): Bool {
+    return stringContains(s, sub)
+}
+
+fun replace(s: String, old: String, new: String): String {
+    return stringReplace(s, old, new)
+}
+
+// Note: startsWith(s, prefix) and endsWith(s, suffix) are available as builtins
+
+fun indexOf(s: String, sub: String): Int {
+    return stringIndexOf(s, sub)
+}
+
+fun substring(s: String, start: Int, end: Int): String {
+    return stringSubstring(s, start, end)
+}
+
+fun isEmpty(s: String): Bool {
+    return stringLength(s) == 0
+}
+
+fun isNotEmpty(s: String): Bool {
+    return stringLength(s) > 0
+}
+
+fun length(s: String): Int {
+    return stringLength(s)
+}
+
+fun charAtPos(s: String, index: Int): String {
+    return charAt(s, index)
+}
+
+// Count occurrences of a substring
+fun countOccurrences(s: String, sub: String): Int {
+    var count: Int = 0
+    var pos: Int = 0
+    val subLen = stringLength(sub)
+    val sLen = stringLength(s)
+    while (pos <= sLen - subLen) {
+        val slice = stringSubstring(s, pos, pos + subLen)
+        if (slice == sub) {
+            count = count + 1
+            pos = pos + subLen
+        } else {
+            pos = pos + 1
+        }
+    }
+    return count
+}
+
+// Truncate a string to max length, appending "..." if truncated
+fun truncate(s: String, maxLen: Int): String {
+    if (stringLength(s) <= maxLen) { return s }
+    return stringConcat(stringSubstring(s, 0, maxLen), "...")
+}
+
+// Left pad a string with zeros (useful for number formatting)
+fun zeroPad(s: String, width: Int): String {
+    return padLeft(s, width, "0")
+}
+

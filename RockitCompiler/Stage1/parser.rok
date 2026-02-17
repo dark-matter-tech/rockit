@@ -1,0 +1,2005 @@
+// parser.rok — Stage 1 Rockit Parser (self-hosted)
+// Recursive descent parser with Pratt expression parsing.
+// Produces an AST represented as nested Map/List structures.
+// Each AST node is a Map with a "kind" key indicating its type.
+
+// ---------------------------------------------------------------------------
+// Parser state
+// ---------------------------------------------------------------------------
+
+fun makeParser(tokens: List): Map {
+    val p = mapCreate()
+    mapPut(p, "tokens", tokens)
+    mapPut(p, "pos", 0)
+    mapPut(p, "count", listSize(tokens))
+    mapPut(p, "errors", listCreate())
+    return p
+}
+
+// ---------------------------------------------------------------------------
+// Token access helpers
+// ---------------------------------------------------------------------------
+
+fun parserPos(p: Map): Int {
+    return toInt(mapGet(p, "pos"))
+}
+
+fun parserCount(p: Map): Int {
+    return toInt(mapGet(p, "count"))
+}
+
+fun parserAtEnd(p: Map): Bool {
+    return parserPos(p) >= parserCount(p)
+}
+
+fun peekToken(p: Map): Map {
+    if (parserAtEnd(p)) {
+        return makeToken("EOF", "", 0, 0)
+    }
+    return listGet(mapGet(p, "tokens"), parserPos(p))
+}
+
+fun peekType(p: Map): String {
+    return toString(mapGet(peekToken(p), "type"))
+}
+
+fun peekValue(p: Map): String {
+    return toString(mapGet(peekToken(p), "value"))
+}
+
+fun peekLine(p: Map): Int {
+    return toInt(mapGet(peekToken(p), "line"))
+}
+
+fun peekCol(p: Map): Int {
+    return toInt(mapGet(peekToken(p), "col"))
+}
+
+fun advance(p: Map): Map {
+    val tok = peekToken(p)
+    if (!parserAtEnd(p)) {
+        mapPut(p, "pos", parserPos(p) + 1)
+    }
+    return tok
+}
+
+fun skipNewlines(p: Map): Unit {
+    while (peekType(p) == "NEWLINE") {
+        advance(p)
+    }
+}
+
+fun expect(p: Map, expectedType: String): Map {
+    skipNewlines(p)
+    val tok = peekToken(p)
+    val tokType = toString(mapGet(tok, "type"))
+    if (tokType == expectedType) {
+        return advance(p)
+    }
+    // Error: unexpected token
+    val err = stringConcat("expected ", stringConcat(expectedType, stringConcat(" but got ", stringConcat(tokType, stringConcat(" '", stringConcat(toString(mapGet(tok, "value")), stringConcat("' at ", stringConcat(toString(toInt(mapGet(tok, "line"))), stringConcat(":", toString(toInt(mapGet(tok, "col"))))))))))))
+    listAppend(mapGet(p, "errors"), err)
+    // Return a dummy token to avoid cascading errors
+    return tok
+}
+
+fun matchToken(p: Map, expectedType: String): Bool {
+    skipNewlines(p)
+    if (peekType(p) == expectedType) {
+        advance(p)
+        return true
+    }
+    return false
+}
+
+fun check(p: Map, expectedType: String): Bool {
+    skipNewlines(p)
+    return peekType(p) == expectedType
+}
+
+// ---------------------------------------------------------------------------
+// AST node constructors
+// ---------------------------------------------------------------------------
+
+fun makeNode(kind: String): Map {
+    val node = mapCreate()
+    mapPut(node, "kind", kind)
+    return node
+}
+
+fun makeNodeAt(kind: String, line: Int, col: Int): Map {
+    val node = makeNode(kind)
+    mapPut(node, "line", line)
+    mapPut(node, "col", col)
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Type parsing
+// ---------------------------------------------------------------------------
+
+fun parseType(p: Map): Map {
+    skipNewlines(p)
+    val tt = peekType(p)
+
+    // Function type: (ParamTypes) -> ReturnType
+    if (tt == "LPAREN") {
+        // Could be parenthesized type or function type
+        // Look ahead for "->" to distinguish
+        val saved = parserPos(p)
+        advance(p)  // consume (
+        val params = listCreate()
+        if (!check(p, "RPAREN")) {
+            listAppend(params, parseType(p))
+            while (matchToken(p, "COMMA")) {
+                listAppend(params, parseType(p))
+            }
+        }
+        expect(p, "RPAREN")
+        if (check(p, "ARROW")) {
+            advance(p)  // consume ->
+            val returnType = parseType(p)
+            val node = makeNode("funcType")
+            mapPut(node, "paramTypes", params)
+            mapPut(node, "returnType", returnType)
+            return node
+        }
+        // Not a function type — if single param, treat as that type
+        if (listSize(params) == 1) {
+            return listGet(params, 0)
+        }
+        // Tuple type
+        val node = makeNode("tupleType")
+        mapPut(node, "types", params)
+        return node
+    }
+
+    // Simple type: Name or Name.Nested or Name<TypeArgs>
+    val nameTok = expect(p, "IDENT")
+    var name: String = toString(mapGet(nameTok, "value"))
+    // Handle dotted type names like Shape.Circle
+    while (check(p, "DOT")) {
+        val savedPos = parserPos(p)
+        advance(p)  // consume DOT
+        if (check(p, "IDENT")) {
+            val nextTok = advance(p)
+            name = stringConcat(name, stringConcat(".", toString(mapGet(nextTok, "value"))))
+        } else {
+            // Not an identifier after dot — restore and stop
+            mapPut(p, "pos", savedPos)
+            break
+        }
+    }
+    val node = makeNode("type")
+    mapPut(node, "name", name)
+
+    // Type arguments: <T, U>
+    if (check(p, "LESS")) {
+        advance(p)  // consume <
+        val typeArgs = listCreate()
+        listAppend(typeArgs, parseType(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(typeArgs, parseType(p))
+        }
+        expect(p, "GREATER")
+        mapPut(node, "typeArgs", typeArgs)
+    }
+
+    // Nullable: Type?
+    if (check(p, "QUESTION")) {
+        advance(p)
+        mapPut(node, "nullable", true)
+    }
+
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Expression parsing — Pratt parser
+// ---------------------------------------------------------------------------
+
+fun getPrecedence(tokenType: String): Int {
+    if (tokenType == "QUESTION_COLON") { return 2 }
+    if (tokenType == "PIPE_PIPE") { return 3 }
+    if (tokenType == "AMP_AMP") { return 4 }
+    if (tokenType == "EQ_EQ") { return 5 }
+    if (tokenType == "BANG_EQ") { return 5 }
+    if (tokenType == "LESS") { return 6 }
+    if (tokenType == "LESS_EQ") { return 6 }
+    if (tokenType == "GREATER") { return 6 }
+    if (tokenType == "GREATER_EQ") { return 6 }
+    if (tokenType == "KW_IS") { return 6 }
+    if (tokenType == "KW_AS") { return 6 }
+    if (tokenType == "DOT_DOT") { return 7 }
+    if (tokenType == "DOT_DOT_LESS") { return 7 }
+    if (tokenType == "PLUS") { return 8 }
+    if (tokenType == "MINUS") { return 8 }
+    if (tokenType == "STAR") { return 9 }
+    if (tokenType == "SLASH") { return 9 }
+    if (tokenType == "PERCENT") { return 9 }
+    return 0
+}
+
+fun isInfixOp(tokenType: String): Bool {
+    return getPrecedence(tokenType) > 0
+}
+
+fun parsePrimary(p: Map): Map {
+    skipNewlines(p)
+    val tt = peekType(p)
+    val line = peekLine(p)
+    val col = peekCol(p)
+
+    // Integer literal
+    if (tt == "INT_LIT") {
+        val tok = advance(p)
+        val node = makeNodeAt("intLit", line, col)
+        mapPut(node, "value", toString(mapGet(tok, "value")))
+        return node
+    }
+
+    // Float literal
+    if (tt == "FLOAT_LIT") {
+        val tok = advance(p)
+        val node = makeNodeAt("floatLit", line, col)
+        mapPut(node, "value", toString(mapGet(tok, "value")))
+        return node
+    }
+
+    // String literal
+    if (tt == "STRING_LIT") {
+        val tok = advance(p)
+        val node = makeNodeAt("stringLit", line, col)
+        mapPut(node, "value", toString(mapGet(tok, "value")))
+        return node
+    }
+
+    // Boolean literals
+    if (tt == "BOOL_TRUE") {
+        advance(p)
+        val node = makeNodeAt("boolLit", line, col)
+        mapPut(node, "value", true)
+        return node
+    }
+    if (tt == "BOOL_FALSE") {
+        advance(p)
+        val node = makeNodeAt("boolLit", line, col)
+        mapPut(node, "value", false)
+        return node
+    }
+
+    // Null literal
+    if (tt == "NULL") {
+        advance(p)
+        return makeNodeAt("nullLit", line, col)
+    }
+
+    // Unary minus
+    if (tt == "MINUS") {
+        advance(p)
+        var operand = parsePrimary(p)
+        operand = parsePostfix(p, operand)
+        val node = makeNodeAt("unary", line, col)
+        mapPut(node, "op", "-")
+        mapPut(node, "operand", operand)
+        return node
+    }
+
+    // Logical NOT
+    if (tt == "BANG") {
+        advance(p)
+        var operand = parsePrimary(p)
+        operand = parsePostfix(p, operand)
+        val node = makeNodeAt("unary", line, col)
+        mapPut(node, "op", "!")
+        mapPut(node, "operand", operand)
+        return node
+    }
+
+    // Await expression: await expr
+    if (tt == "KW_AWAIT") {
+        advance(p)
+        val operand = parseExpression(p, 0)
+        val node = makeNodeAt("awaitExpr", line, col)
+        mapPut(node, "operand", operand)
+        return node
+    }
+
+    // Parenthesized expression
+    if (tt == "LPAREN") {
+        advance(p)
+        val expr = parseExpression(p, 0)
+        expect(p, "RPAREN")
+        return expr
+    }
+
+    // Lambda expression: { params -> body } or { body }
+    if (tt == "LBRACE") {
+        return parseLambda(p)
+    }
+
+    // If expression
+    if (tt == "KW_IF") {
+        return parseIfExpr(p)
+    }
+
+    // When expression
+    if (tt == "KW_WHEN") {
+        return parseWhenExpr(p)
+    }
+
+    // Try expression (inline)
+    if (tt == "KW_TRY") {
+        return parseTryCatch(p)
+    }
+
+    // Identifier (or keyword used as identifier)
+    if (tt == "IDENT" || tt == "KW_THIS" || tt == "KW_SUPER") {
+        val tok = advance(p)
+        val node = makeNodeAt("ident", line, col)
+        mapPut(node, "name", toString(mapGet(tok, "value")))
+        return node
+    }
+
+    // Error: unexpected token
+    val tok = advance(p)
+    val err = stringConcat("unexpected token: ", stringConcat(tt, stringConcat(" '", stringConcat(toString(mapGet(tok, "value")), stringConcat("' at ", stringConcat(toString(line), stringConcat(":", toString(col))))))))
+    listAppend(mapGet(p, "errors"), err)
+    val node = makeNodeAt("error", line, col)
+    mapPut(node, "message", err)
+    return node
+}
+
+fun parsePostfix(p: Map, left: Map): Map {
+    var expr: Map = left
+    while (true) {
+        val noNL = mapGet(p, "noNewlineInfix")
+        if (noNL != true) {
+            skipNewlines(p)
+        } else {
+            if (peekType(p) == "NEWLINE") { break }
+        }
+        val tt = peekType(p)
+
+        // Function call: expr(args)
+        if (tt == "LPAREN") {
+            advance(p)
+            val args = listCreate()
+            if (!check(p, "RPAREN")) {
+                listAppend(args, parseCallArg(p))
+                while (matchToken(p, "COMMA")) {
+                    listAppend(args, parseCallArg(p))
+                }
+            }
+            expect(p, "RPAREN")
+            val node = makeNode("call")
+            mapPut(node, "callee", expr)
+            mapPut(node, "args", args)
+            expr = node
+            continue
+        }
+
+        // Member access: expr.member
+        if (tt == "DOT") {
+            advance(p)
+            val memberTok = expect(p, "IDENT")
+            val node = makeNode("member")
+            mapPut(node, "object", expr)
+            mapPut(node, "name", toString(mapGet(memberTok, "value")))
+            expr = node
+            continue
+        }
+
+        // Null-safe member access: expr?.member
+        if (tt == "QUESTION_DOT") {
+            advance(p)
+            val memberTok = expect(p, "IDENT")
+            val node = makeNode("nullSafeMember")
+            mapPut(node, "object", expr)
+            mapPut(node, "name", toString(mapGet(memberTok, "value")))
+            expr = node
+            continue
+        }
+
+        // Non-null assertion: expr!!
+        if (tt == "BANG_BANG") {
+            advance(p)
+            val node = makeNode("nonNullAssert")
+            mapPut(node, "operand", expr)
+            expr = node
+            continue
+        }
+
+        // Subscript: expr[index]
+        if (tt == "LBRACKET") {
+            advance(p)
+            val index = parseExpression(p, 0)
+            expect(p, "RBRACKET")
+            val node = makeNode("subscript")
+            mapPut(node, "object", expr)
+            mapPut(node, "index", index)
+            expr = node
+            continue
+        }
+
+        break
+    }
+    return expr
+}
+
+fun parseCallArg(p: Map): Map {
+    skipNewlines(p)
+    // Check for named argument: name = value
+    // Look ahead: IDENT followed by EQ (but not EQ_EQ)
+    if (peekType(p) == "IDENT") {
+        val saved = parserPos(p)
+        val nameTok = advance(p)
+        if (check(p, "EQ")) {
+            advance(p)  // consume =
+            val value = parseExpression(p, 0)
+            val node = makeNode("namedArg")
+            mapPut(node, "name", toString(mapGet(nameTok, "value")))
+            mapPut(node, "value", value)
+            return node
+        }
+        // Not a named arg — backtrack
+        mapPut(p, "pos", saved)
+    }
+    return parseExpression(p, 0)
+}
+
+fun parseExpression(p: Map, minPrec: Int): Map {
+    var left = parsePrimary(p)
+    left = parsePostfix(p, left)
+
+    while (true) {
+        val noNL = mapGet(p, "noNewlineInfix")
+        if (noNL != true) {
+            skipNewlines(p)
+        } else {
+            // In no-newline mode, stop at newlines
+            if (peekType(p) == "NEWLINE") { break }
+        }
+        val tt = peekType(p)
+        val prec = getPrecedence(tt)
+        if (prec <= minPrec) {
+            break
+        }
+
+        val opTok = advance(p)
+        val op = toString(mapGet(opTok, "value"))
+
+        // Type operators: is, as
+        if (tt == "KW_IS") {
+            val typeNode = parseType(p)
+            val node = makeNode("typeCheck")
+            mapPut(node, "operand", left)
+            mapPut(node, "type", typeNode)
+            left = node
+            continue
+        }
+        if (tt == "KW_AS") {
+            // Check for as? (safe cast)
+            val safe = check(p, "QUESTION")
+            if (safe) {
+                advance(p)
+            }
+            val typeNode = parseType(p)
+            val node = makeNode("typeCast")
+            mapPut(node, "operand", left)
+            mapPut(node, "type", typeNode)
+            mapPut(node, "safe", safe)
+            left = node
+            continue
+        }
+
+        // Regular binary operator — parse right operand with higher precedence
+        val right = parseExpression(p, prec)
+        val node = makeNode("binary")
+        mapPut(node, "op", op)
+        mapPut(node, "left", left)
+        mapPut(node, "right", right)
+        left = node
+    }
+    return left
+}
+
+// ---------------------------------------------------------------------------
+// Lambda expression
+// ---------------------------------------------------------------------------
+
+fun parseLambda(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "LBRACE")
+    skipNewlines(p)
+    val node = makeNodeAt("lambda", line, col)
+    val params = listCreate()
+
+    // Try to detect parameter list: { ident [: type] [, ...] -> body }
+    // Save position to backtrack if this isn't a param list
+    val savedPos = toInt(mapGet(p, "pos"))
+
+    // Look ahead: scan for ARROW before any statement-like tokens
+    var hasArrow: Bool = false
+    var scanPos: Int = savedPos
+    val tokens = mapGet(p, "tokens")
+    while (scanPos < listSize(tokens)) {
+        val scanTok = listGet(tokens, scanPos)
+        val scanType = toString(mapGet(scanTok, "type"))
+        if (scanType == "ARROW") {
+            hasArrow = true
+            break
+        }
+        if (scanType == "RBRACE" || scanType == "NEWLINE" || scanType == "SEMICOLON" || scanType == "KW_VAL" || scanType == "KW_VAR" || scanType == "KW_IF" || scanType == "KW_WHILE" || scanType == "KW_RETURN") {
+            break
+        }
+        scanPos = scanPos + 1
+    }
+
+    if (hasArrow) {
+        // Parse parameters
+        skipNewlines(p)
+        if (!check(p, "ARROW")) {
+            listAppend(params, parseLambdaParam(p))
+            while (matchToken(p, "COMMA")) {
+                skipNewlines(p)
+                listAppend(params, parseLambdaParam(p))
+            }
+        }
+        expect(p, "ARROW")
+    }
+
+    mapPut(node, "params", params)
+
+    // Parse body statements
+    val stmts = listCreate()
+    skipNewlines(p)
+    while (!check(p, "RBRACE") && !parserAtEnd(p)) {
+        skipNewlines(p)
+        if (check(p, "RBRACE")) { break }
+        listAppend(stmts, parseStatement(p))
+        skipNewlines(p)
+    }
+    expect(p, "RBRACE")
+
+    val body = makeNode("block")
+    mapPut(body, "stmts", stmts)
+    mapPut(node, "body", body)
+    return node
+}
+
+fun parseLambdaParam(p: Map): Map {
+    skipNewlines(p)
+    val param = makeNode("param")
+    val nameTok = expect(p, "IDENT")
+    mapPut(param, "name", toString(mapGet(nameTok, "value")))
+    if (matchToken(p, "COLON")) {
+        mapPut(param, "type", parseType(p))
+    }
+    return param
+}
+
+// ---------------------------------------------------------------------------
+// If expression
+// ---------------------------------------------------------------------------
+
+fun parseIfExpr(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_IF")
+    expect(p, "LPAREN")
+    val condition = parseExpression(p, 0)
+    expect(p, "RPAREN")
+    val thenBody = parseBlock(p)
+    val node = makeNodeAt("if", line, col)
+    mapPut(node, "condition", condition)
+    mapPut(node, "then", thenBody)
+    skipNewlines(p)
+    if (matchToken(p, "KW_ELSE")) {
+        skipNewlines(p)
+        if (check(p, "KW_IF")) {
+            mapPut(node, "else", parseIfExpr(p))
+        } else {
+            mapPut(node, "else", parseBlock(p))
+        }
+    }
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// When expression
+// ---------------------------------------------------------------------------
+
+fun parseWhenExpr(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_WHEN")
+    val node = makeNodeAt("when", line, col)
+
+    // Optional subject: when (expr) { ... }
+    if (check(p, "LPAREN")) {
+        advance(p)
+        mapPut(node, "subject", parseExpression(p, 0))
+        expect(p, "RPAREN")
+    }
+
+    expect(p, "LBRACE")
+    val branches = listCreate()
+    while (!check(p, "RBRACE") && !parserAtEnd(p)) {
+        skipNewlines(p)
+        if (check(p, "RBRACE")) { break }
+        val branch = mapCreate()
+        if (matchToken(p, "KW_ELSE")) {
+            mapPut(branch, "isElse", true)
+        } else {
+            val patterns = listCreate()
+            // Check for "is Type" or "in range" pattern
+            if (check(p, "KW_IS")) {
+                advance(p)
+                val typeNode = parseType(p)
+                // Check for destructuring: is Type(val a, val b)
+                if (check(p, "LPAREN")) {
+                    advance(p)
+                    val bindings = listCreate()
+                    while (!check(p, "RPAREN") && !parserAtEnd(p)) {
+                        skipNewlines(p)
+                        if (check(p, "KW_VAL")) { advance(p) }
+                        val bname = toString(mapGet(expect(p, "IDENT"), "value"))
+                        listAppend(bindings, bname)
+                        if (!check(p, "RPAREN")) {
+                            expect(p, "COMMA")
+                        }
+                        skipNewlines(p)
+                    }
+                    expect(p, "RPAREN")
+                    val isDestructPattern = makeNode("isDestructPattern")
+                    mapPut(isDestructPattern, "type", typeNode)
+                    mapPut(isDestructPattern, "bindings", bindings)
+                    listAppend(patterns, isDestructPattern)
+                } else {
+                    val isPattern = makeNode("isPattern")
+                    mapPut(isPattern, "type", typeNode)
+                    listAppend(patterns, isPattern)
+                }
+            } else {
+                if (check(p, "KW_IN")) {
+                    advance(p)
+                    val rangeExpr = parseExpression(p, 0)
+                    // Range is parsed as binary with op ".." or "..<"
+                    val rangeKind = toString(mapGet(rangeExpr, "kind"))
+                    val rangeOp = toString(mapGet(rangeExpr, "op"))
+                    if (rangeKind == "binary" && (rangeOp == ".." || rangeOp == "..<")) {
+                        val inPattern = makeNode("inRangePattern")
+                        mapPut(inPattern, "start", mapGet(rangeExpr, "left"))
+                        mapPut(inPattern, "end", mapGet(rangeExpr, "right"))
+                        listAppend(patterns, inPattern)
+                    } else {
+                        listAppend(patterns, rangeExpr)
+                    }
+                } else {
+                    listAppend(patterns, parseExpression(p, 0))
+                }
+            }
+            while (matchToken(p, "COMMA")) {
+                if (check(p, "KW_IS")) {
+                    advance(p)
+                    val typeNode = parseType(p)
+                    if (check(p, "LPAREN")) {
+                        advance(p)
+                        val bindings = listCreate()
+                        while (!check(p, "RPAREN") && !parserAtEnd(p)) {
+                            skipNewlines(p)
+                            if (check(p, "KW_VAL")) { advance(p) }
+                            val bname = toString(mapGet(expect(p, "IDENT"), "value"))
+                            listAppend(bindings, bname)
+                            if (!check(p, "RPAREN")) {
+                                expect(p, "COMMA")
+                            }
+                            skipNewlines(p)
+                        }
+                        expect(p, "RPAREN")
+                        val isDestructPattern = makeNode("isDestructPattern")
+                        mapPut(isDestructPattern, "type", typeNode)
+                        mapPut(isDestructPattern, "bindings", bindings)
+                        listAppend(patterns, isDestructPattern)
+                    } else {
+                        val isPattern = makeNode("isPattern")
+                        mapPut(isPattern, "type", typeNode)
+                        listAppend(patterns, isPattern)
+                    }
+                } else {
+                    if (check(p, "KW_IN")) {
+                        advance(p)
+                        val rangeExpr = parseExpression(p, 0)
+                        val rangeKind = toString(mapGet(rangeExpr, "kind"))
+                        val rangeOp = toString(mapGet(rangeExpr, "op"))
+                        if (rangeKind == "binary" && (rangeOp == ".." || rangeOp == "..<")) {
+                            val inPattern = makeNode("inRangePattern")
+                            mapPut(inPattern, "start", mapGet(rangeExpr, "left"))
+                            mapPut(inPattern, "end", mapGet(rangeExpr, "right"))
+                            listAppend(patterns, inPattern)
+                        } else {
+                            listAppend(patterns, rangeExpr)
+                        }
+                    } else {
+                        listAppend(patterns, parseExpression(p, 0))
+                    }
+                }
+            }
+            mapPut(branch, "patterns", patterns)
+        }
+        // Optional guard: `if condition`
+        skipNewlines(p)
+        if (check(p, "KW_IF")) {
+            advance(p)
+            skipNewlines(p)
+            mapPut(branch, "guard", parseExpression(p, 0))
+        }
+        skipNewlines(p)
+        expect(p, "ARROW")
+        // Branch body: either a block or a single expression
+        skipNewlines(p)
+        if (check(p, "LBRACE")) {
+            mapPut(branch, "body", parseBlock(p))
+        } else {
+            // Parse expression without crossing newlines (prevents eating next branch's 'is')
+            mapPut(p, "noNewlineInfix", true)
+            mapPut(branch, "body", parseExpression(p, 0))
+            mapPut(p, "noNewlineInfix", false)
+        }
+        listAppend(branches, branch)
+        skipNewlines(p)
+    }
+    expect(p, "RBRACE")
+    mapPut(node, "branches", branches)
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Try/catch
+// ---------------------------------------------------------------------------
+
+fun parseTryCatch(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_TRY")
+    val tryBody = parseBlock(p)
+    val node = makeNodeAt("tryCatch", line, col)
+    mapPut(node, "tryBody", tryBody)
+
+    skipNewlines(p)
+    if (matchToken(p, "KW_CATCH")) {
+        expect(p, "LPAREN")
+        val catchVar = toString(mapGet(expect(p, "IDENT"), "value"))
+        // Optional type annotation
+        if (matchToken(p, "COLON")) {
+            mapPut(node, "catchType", parseType(p))
+        }
+        expect(p, "RPAREN")
+        mapPut(node, "catchVar", catchVar)
+        mapPut(node, "catchBody", parseBlock(p))
+    }
+    skipNewlines(p)
+    if (matchToken(p, "KW_FINALLY")) {
+        mapPut(node, "finallyBody", parseBlock(p))
+    }
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Block parsing
+// ---------------------------------------------------------------------------
+
+fun parseBlock(p: Map): Map {
+    skipNewlines(p)
+    expect(p, "LBRACE")
+    val stmts = listCreate()
+    while (!check(p, "RBRACE") && !parserAtEnd(p)) {
+        skipNewlines(p)
+        if (check(p, "RBRACE")) { break }
+        listAppend(stmts, parseStatement(p))
+        skipNewlines(p)
+    }
+    expect(p, "RBRACE")
+    val node = makeNode("block")
+    mapPut(node, "stmts", stmts)
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Statement parsing
+// ---------------------------------------------------------------------------
+
+fun parseStatement(p: Map): Map {
+    skipNewlines(p)
+    val tt = peekType(p)
+
+    // Variable/value declarations
+    if (tt == "KW_VAL") { return parseValDecl(p) }
+    if (tt == "KW_VAR" || tt == "KW_WEAK" || tt == "KW_UNOWNED") { return parseVarDecl(p) }
+
+    // Control flow
+    if (tt == "KW_RETURN") { return parseReturn(p) }
+    if (tt == "KW_BREAK") {
+        val line = peekLine(p)
+        val col = peekCol(p)
+        advance(p)
+        return makeNodeAt("break", line, col)
+    }
+    if (tt == "KW_CONTINUE") {
+        val line = peekLine(p)
+        val col = peekCol(p)
+        advance(p)
+        return makeNodeAt("continue", line, col)
+    }
+    if (tt == "KW_THROW") { return parseThrow(p) }
+    if (tt == "KW_IF") { return parseIfExpr(p) }
+    if (tt == "KW_WHILE") { return parseWhile(p) }
+    if (tt == "KW_DO") { return parseDoWhile(p) }
+    if (tt == "KW_FOR") { return parseFor(p) }
+    if (tt == "KW_TRY") { return parseTryCatch(p) }
+    if (tt == "KW_CONCURRENT") { return parseConcurrent(p) }
+
+    // Nested declarations
+    if (tt == "KW_FUN" || tt == "KW_SUSPEND") { return parseFunDecl(p) }
+    if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") { return parseClassDecl(p) }
+    if (tt == "KW_INTERFACE") { return parseInterfaceDecl(p) }
+    if (tt == "KW_ENUM") { return parseEnumDecl(p) }
+    if (tt == "KW_OBJECT") { return parseObjectDecl(p) }
+
+    // Expression statement (including assignment)
+    return parseExpressionStatement(p)
+}
+
+fun parseValDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_VAL")
+
+    // Check for destructuring: val (a, b, c) = expr
+    if (check(p, "LPAREN")) {
+        advance(p)
+        val names = listCreate()
+        listAppend(names, toString(mapGet(expect(p, "IDENT"), "value")))
+        while (matchToken(p, "COMMA")) {
+            listAppend(names, toString(mapGet(expect(p, "IDENT"), "value")))
+        }
+        expect(p, "RPAREN")
+        expect(p, "EQ")
+        val node = makeNodeAt("destructure", line, col)
+        mapPut(node, "names", names)
+        mapPut(node, "init", parseExpression(p, 0))
+        return node
+    }
+
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("valDecl", line, col)
+    mapPut(node, "name", name)
+    // Optional type annotation
+    if (matchToken(p, "COLON")) {
+        mapPut(node, "type", parseType(p))
+    }
+    expect(p, "EQ")
+    mapPut(node, "init", parseExpression(p, 0))
+    return node
+}
+
+fun parseVarDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    var modifier: String = ""
+    if (check(p, "KW_WEAK")) {
+        advance(p)
+        modifier = "weak"
+    }
+    if (check(p, "KW_UNOWNED")) {
+        advance(p)
+        modifier = "unowned"
+    }
+    expect(p, "KW_VAR")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("varDecl", line, col)
+    mapPut(node, "name", name)
+    if (stringLength(modifier) > 0) {
+        mapPut(node, "refModifier", modifier)
+    }
+    // Optional type annotation
+    if (matchToken(p, "COLON")) {
+        mapPut(node, "type", parseType(p))
+    }
+    expect(p, "EQ")
+    mapPut(node, "init", parseExpression(p, 0))
+    return node
+}
+
+fun parseReturn(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_RETURN")
+    val node = makeNodeAt("return", line, col)
+    // Optional return value — check if next token could be an expression
+    skipNewlines(p)
+    val tt = peekType(p)
+    if (tt != "RBRACE" && tt != "EOF" && tt != "NEWLINE") {
+        mapPut(node, "value", parseExpression(p, 0))
+    }
+    return node
+}
+
+fun parseThrow(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_THROW")
+    val node = makeNodeAt("throw", line, col)
+    mapPut(node, "value", parseExpression(p, 0))
+    return node
+}
+
+fun parseWhile(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_WHILE")
+    expect(p, "LPAREN")
+    val condition = parseExpression(p, 0)
+    expect(p, "RPAREN")
+    val body = parseBlock(p)
+    val node = makeNodeAt("while", line, col)
+    mapPut(node, "condition", condition)
+    mapPut(node, "body", body)
+    return node
+}
+
+fun parseDoWhile(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_DO")
+    val body = parseBlock(p)
+    skipNewlines(p)
+    expect(p, "KW_WHILE")
+    expect(p, "LPAREN")
+    val condition = parseExpression(p, 0)
+    expect(p, "RPAREN")
+    val node = makeNodeAt("doWhile", line, col)
+    mapPut(node, "condition", condition)
+    mapPut(node, "body", body)
+    return node
+}
+
+fun parseConcurrent(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_CONCURRENT")
+    val body = parseBlock(p)
+    val node = makeNodeAt("concurrent", line, col)
+    mapPut(node, "body", body)
+    return node
+}
+
+fun parseFor(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_FOR")
+    expect(p, "LPAREN")
+
+    // Check for destructuring: for ((k, v) in map)
+    if (check(p, "LPAREN")) {
+        advance(p)
+        val vars = listCreate()
+        listAppend(vars, toString(mapGet(expect(p, "IDENT"), "value")))
+        while (matchToken(p, "COMMA")) {
+            listAppend(vars, toString(mapGet(expect(p, "IDENT"), "value")))
+        }
+        expect(p, "RPAREN")
+        expect(p, "KW_IN")
+        val iterable = parseExpression(p, 0)
+        expect(p, "RPAREN")
+        val body = parseBlock(p)
+        val node = makeNodeAt("forDestructure", line, col)
+        mapPut(node, "variables", vars)
+        mapPut(node, "iterable", iterable)
+        mapPut(node, "body", body)
+        return node
+    }
+
+    val varName = toString(mapGet(expect(p, "IDENT"), "value"))
+    expect(p, "KW_IN")
+    val iterable = parseExpression(p, 0)
+    expect(p, "RPAREN")
+    val body = parseBlock(p)
+    val node = makeNodeAt("for", line, col)
+    mapPut(node, "variable", varName)
+    mapPut(node, "iterable", iterable)
+    mapPut(node, "body", body)
+    return node
+}
+
+fun parseExpressionStatement(p: Map): Map {
+    val expr = parseExpression(p, 0)
+    skipNewlines(p)
+    val tt = peekType(p)
+
+    // Assignment: expr = value
+    if (tt == "EQ") {
+        advance(p)
+        val value = parseExpression(p, 0)
+        val node = makeNode("assign")
+        mapPut(node, "target", expr)
+        mapPut(node, "value", value)
+        return node
+    }
+
+    // Compound assignment: +=, -=, *=, /=, %=
+    if (tt == "PLUS_EQ" || tt == "MINUS_EQ" || tt == "STAR_EQ" || tt == "SLASH_EQ" || tt == "PERCENT_EQ") {
+        val opTok = advance(p)
+        val op = toString(mapGet(opTok, "value"))
+        val value = parseExpression(p, 0)
+        val node = makeNode("compoundAssign")
+        mapPut(node, "target", expr)
+        mapPut(node, "op", op)
+        mapPut(node, "value", value)
+        return node
+    }
+
+    return expr
+}
+
+// ---------------------------------------------------------------------------
+// Declaration parsing
+// ---------------------------------------------------------------------------
+
+fun parseFunDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    var isSuspend: Bool = false
+    if (check(p, "KW_SUSPEND")) {
+        advance(p)
+        isSuspend = true
+    }
+    expect(p, "KW_FUN")
+    val node = makeNodeAt("funDecl", line, col)
+    if (isSuspend) {
+        mapPut(node, "isSuspend", true)
+    }
+
+    // Support Kotlin-style type params before name: fun <T> name(...)
+    if (check(p, "LESS")) {
+        advance(p)
+        val typeParams = listCreate()
+        listAppend(typeParams, parseTypeParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(typeParams, parseTypeParam(p))
+        }
+        expect(p, "GREATER")
+        mapPut(node, "typeParams", typeParams)
+    }
+
+    var name: String = toString(mapGet(expect(p, "IDENT"), "value"))
+
+    // Extension function: fun TypeName.methodName(...)
+    if (check(p, "DOT")) {
+        advance(p)
+        val methodName = toString(mapGet(expect(p, "IDENT"), "value"))
+        mapPut(node, "receiverType", name)
+        name = stringConcat(name, stringConcat(".", methodName))
+    }
+    mapPut(node, "name", name)
+
+    // Also support type params after name: fun name<T>(...)
+    if (mapGet(node, "typeParams") == 0) {
+        if (check(p, "LESS")) {
+            advance(p)
+            val typeParams = listCreate()
+            listAppend(typeParams, parseTypeParam(p))
+            while (matchToken(p, "COMMA")) {
+                listAppend(typeParams, parseTypeParam(p))
+            }
+            expect(p, "GREATER")
+            mapPut(node, "typeParams", typeParams)
+        }
+    }
+
+    // Parameters
+    expect(p, "LPAREN")
+    val params = listCreate()
+    if (!check(p, "RPAREN")) {
+        listAppend(params, parseParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(params, parseParam(p))
+        }
+    }
+    expect(p, "RPAREN")
+    mapPut(node, "params", params)
+
+    // Return type
+    if (matchToken(p, "COLON")) {
+        mapPut(node, "returnType", parseType(p))
+    }
+
+    // Body: block or = expression
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseBlock(p))
+    } else {
+        if (matchToken(p, "EQ")) {
+            mapPut(node, "body", parseExpression(p, 0))
+        }
+    }
+
+    return node
+}
+
+fun parseParam(p: Map): Map {
+    skipNewlines(p)
+    val node = makeNode("param")
+    // Handle var/val/vararg prefix (for constructor params that become fields)
+    if (check(p, "KW_VAR")) {
+        advance(p)
+        mapPut(node, "isVar", true)
+    } else {
+        if (check(p, "KW_VAL")) {
+            advance(p)
+            mapPut(node, "isVal", true)
+        } else {
+            if (check(p, "KW_VARARG")) {
+                advance(p)
+                mapPut(node, "isVararg", true)
+            }
+        }
+    }
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    mapPut(node, "name", name)
+    if (matchToken(p, "COLON")) {
+        mapPut(node, "type", parseType(p))
+    }
+    // Default value
+    if (matchToken(p, "EQ")) {
+        mapPut(node, "default", parseExpression(p, 0))
+    }
+    return node
+}
+
+fun parseTypeParam(p: Map): Map {
+    skipNewlines(p)
+    val node = makeNode("typeParam")
+    // Variance: out/in
+    if (check(p, "KW_OUT")) {
+        advance(p)
+        mapPut(node, "variance", "out")
+    } else {
+        if (check(p, "KW_IN")) {
+            advance(p)
+            mapPut(node, "variance", "in")
+        }
+    }
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    mapPut(node, "name", name)
+    // Upper bound: T : Comparable
+    if (matchToken(p, "COLON")) {
+        mapPut(node, "bound", parseType(p))
+    }
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Class declaration
+// ---------------------------------------------------------------------------
+
+fun parseClassDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    val node = makeNodeAt("classDecl", line, col)
+
+    // Modifiers: data, sealed
+    if (matchToken(p, "KW_DATA")) {
+        mapPut(node, "isData", true)
+    }
+    if (matchToken(p, "KW_SEALED")) {
+        mapPut(node, "isSealed", true)
+    }
+    expect(p, "KW_CLASS")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    mapPut(node, "name", name)
+
+    // Type parameters
+    if (check(p, "LESS")) {
+        advance(p)
+        val typeParams = listCreate()
+        listAppend(typeParams, parseTypeParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(typeParams, parseTypeParam(p))
+        }
+        expect(p, "GREATER")
+        mapPut(node, "typeParams", typeParams)
+    }
+
+    // Constructor parameters
+    if (check(p, "LPAREN")) {
+        advance(p)
+        val ctorParams = listCreate()
+        if (!check(p, "RPAREN")) {
+            listAppend(ctorParams, parseParam(p))
+            while (matchToken(p, "COMMA")) {
+                listAppend(ctorParams, parseParam(p))
+            }
+        }
+        expect(p, "RPAREN")
+        mapPut(node, "ctorParams", ctorParams)
+    }
+
+    // Supertype list
+    if (matchToken(p, "COLON")) {
+        val superTypes = listCreate()
+        listAppend(superTypes, parseType(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(superTypes, parseType(p))
+        }
+        mapPut(node, "superTypes", superTypes)
+    }
+
+    // Body
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseClassBody(p))
+    }
+
+    return node
+}
+
+fun parseClassBody(p: Map): Map {
+    expect(p, "LBRACE")
+    val members = listCreate()
+    while (!check(p, "RBRACE") && !parserAtEnd(p)) {
+        skipNewlines(p)
+        if (check(p, "RBRACE")) { break }
+        val tt = peekType(p)
+        if (tt == "KW_FUN") {
+            listAppend(members, parseFunDecl(p))
+        } else if (tt == "KW_VAL" || tt == "KW_VAR") {
+            listAppend(members, parseStatement(p))
+        } else if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") {
+            listAppend(members, parseClassDecl(p))
+        } else if (tt == "KW_ENUM") {
+            listAppend(members, parseEnumDecl(p))
+        } else if (tt == "KW_OVERRIDE") {
+            advance(p)
+            val member = parseFunDecl(p)
+            mapPut(member, "isOverride", true)
+            listAppend(members, member)
+        } else if (tt == "KW_COMPANION") {
+            advance(p)
+            expect(p, "KW_OBJECT")
+            skipNewlines(p)
+            val companionBody = parseClassBody(p)
+            val compNode = makeNode("companionObject")
+            mapPut(compNode, "body", companionBody)
+            listAppend(members, compNode)
+        } else {
+            // Skip unknown tokens in class body
+            advance(p)
+        }
+        skipNewlines(p)
+    }
+    expect(p, "RBRACE")
+    val node = makeNode("classBody")
+    mapPut(node, "members", members)
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Interface, Enum, Object declarations
+// ---------------------------------------------------------------------------
+
+fun parseInterfaceDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_INTERFACE")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("interfaceDecl", line, col)
+    mapPut(node, "name", name)
+
+    // Type parameters
+    if (check(p, "LESS")) {
+        advance(p)
+        val typeParams = listCreate()
+        listAppend(typeParams, parseTypeParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(typeParams, parseTypeParam(p))
+        }
+        expect(p, "GREATER")
+        mapPut(node, "typeParams", typeParams)
+    }
+
+    // Supertype list
+    if (matchToken(p, "COLON")) {
+        val superTypes = listCreate()
+        listAppend(superTypes, parseType(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(superTypes, parseType(p))
+        }
+        mapPut(node, "superTypes", superTypes)
+    }
+
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseClassBody(p))
+    }
+    return node
+}
+
+fun parseEnumDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_ENUM")
+    expect(p, "KW_CLASS")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("enumDecl", line, col)
+    mapPut(node, "name", name)
+
+    expect(p, "LBRACE")
+    val entries = listCreate()
+    while (!check(p, "RBRACE") && !parserAtEnd(p)) {
+        skipNewlines(p)
+        if (check(p, "RBRACE")) { break }
+        if (check(p, "IDENT")) {
+            val entryName = toString(mapGet(advance(p), "value"))
+            val entry = makeNode("enumEntry")
+            mapPut(entry, "name", entryName)
+            // Constructor args
+            if (check(p, "LPAREN")) {
+                advance(p)
+                val args = listCreate()
+                if (!check(p, "RPAREN")) {
+                    listAppend(args, parseExpression(p, 0))
+                    while (matchToken(p, "COMMA")) {
+                        listAppend(args, parseExpression(p, 0))
+                    }
+                }
+                expect(p, "RPAREN")
+                mapPut(entry, "args", args)
+            }
+            listAppend(entries, entry)
+            matchToken(p, "COMMA")
+        } else {
+            // Non-entry token — switch to method parsing
+            break
+        }
+    }
+    mapPut(node, "entries", entries)
+
+    // Parse member methods after entries
+    val methods = listCreate()
+    skipNewlines(p)
+    while (!check(p, "RBRACE") && !parserAtEnd(p)) {
+        skipNewlines(p)
+        if (check(p, "RBRACE")) { break }
+        val tt2 = peekType(p)
+        if (tt2 == "KW_FUN") {
+            listAppend(methods, parseFunDecl(p))
+        } else if (tt2 == "KW_OVERRIDE") {
+            advance(p)
+            val m = parseFunDecl(p)
+            mapPut(m, "isOverride", true)
+            listAppend(methods, m)
+        } else {
+            advance(p)
+        }
+        skipNewlines(p)
+    }
+    mapPut(node, "methods", methods)
+    expect(p, "RBRACE")
+    return node
+}
+
+fun parseObjectDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_OBJECT")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("objectDecl", line, col)
+    mapPut(node, "name", name)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseClassBody(p))
+    }
+    return node
+}
+
+fun parseTypeAlias(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_TYPEALIAS")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    expect(p, "EQ")
+    val target = parseType(p)
+    val node = makeNodeAt("typeAlias", line, col)
+    mapPut(node, "name", name)
+    mapPut(node, "target", target)
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Actor, View, Navigation, Theme declarations
+// ---------------------------------------------------------------------------
+
+fun parseActorDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_ACTOR")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("actorDecl", line, col)
+    mapPut(node, "name", name)
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseClassBody(p))
+    }
+    return node
+}
+
+fun parseViewDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_VIEW")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("viewDecl", line, col)
+    mapPut(node, "name", name)
+    // View parameters
+    expect(p, "LPAREN")
+    val params = listCreate()
+    if (!check(p, "RPAREN")) {
+        listAppend(params, parseParam(p))
+        while (matchToken(p, "COMMA")) {
+            listAppend(params, parseParam(p))
+        }
+    }
+    expect(p, "RPAREN")
+    mapPut(node, "params", params)
+    // View body (block of statements)
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseBlock(p))
+    }
+    return node
+}
+
+fun parseNavigationDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_NAVIGATION")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("navigationDecl", line, col)
+    mapPut(node, "name", name)
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseBlock(p))
+    }
+    return node
+}
+
+fun parseThemeDecl(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_THEME")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("themeDecl", line, col)
+    mapPut(node, "name", name)
+    skipNewlines(p)
+    if (check(p, "LBRACE")) {
+        mapPut(node, "body", parseBlock(p))
+    }
+    return node
+}
+
+fun parseAnnotation(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "AT")
+    val name = toString(mapGet(expect(p, "IDENT"), "value"))
+    val node = makeNodeAt("annotation", line, col)
+    mapPut(node, "name", name)
+    // Optional arguments: @Name(key = value, ...) or @Name(expr, ...)
+    if (check(p, "LPAREN")) {
+        advance(p)
+        val args = listCreate()
+        while (!check(p, "RPAREN") && !parserAtEnd(p)) {
+            val argNode = makeNode("annotationArg")
+            // Check for named argument: IDENT followed by EQ
+            if (check(p, "IDENT")) {
+                val savedPos = mapGet(p, "pos")
+                val ident = toString(mapGet(advance(p), "value"))
+                if (check(p, "EQ")) {
+                    advance(p)
+                    mapPut(argNode, "name", ident)
+                    mapPut(argNode, "value", parseExpression(p, 0))
+                } else {
+                    // Not a named arg — backtrack and parse as expression
+                    mapPut(p, "pos", savedPos)
+                    mapPut(argNode, "value", parseExpression(p, 0))
+                }
+            } else {
+                mapPut(argNode, "value", parseExpression(p, 0))
+            }
+            listAppend(args, argNode)
+            if (!check(p, "RPAREN")) {
+                matchToken(p, "COMMA")
+            }
+        }
+        expect(p, "RPAREN")
+        mapPut(node, "args", args)
+    }
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// Top-level program parsing
+// ---------------------------------------------------------------------------
+
+fun parseProgram(p: Map): Map {
+    val decls = listCreate()
+    while (!parserAtEnd(p) && peekType(p) != "EOF") {
+        skipNewlines(p)
+        if (parserAtEnd(p) || peekType(p) == "EOF") { break }
+        val tt = peekType(p)
+
+        // Annotations: collect @Name(...) before the next declaration
+        if (tt == "AT") {
+            val annotations = listCreate()
+            while (check(p, "AT")) {
+                listAppend(annotations, parseAnnotation(p))
+                skipNewlines(p)
+            }
+            // Now parse the annotated declaration
+            val tt2 = peekType(p)
+            var decl: Map = mapCreate()
+            if (tt2 == "KW_FUN") {
+                decl = parseFunDecl(p)
+            } else if (tt2 == "KW_CLASS" || tt2 == "KW_DATA" || tt2 == "KW_SEALED") {
+                decl = parseClassDecl(p)
+            } else if (tt2 == "KW_ACTOR") {
+                decl = parseActorDecl(p)
+            } else if (tt2 == "KW_VIEW") {
+                decl = parseViewDecl(p)
+            } else if (tt2 == "KW_INTERFACE") {
+                decl = parseInterfaceDecl(p)
+            } else {
+                decl = parseStatement(p)
+            }
+            mapPut(decl, "annotations", annotations)
+            listAppend(decls, decl)
+        } else if (tt == "KW_FUN" || tt == "KW_SUSPEND") {
+            listAppend(decls, parseFunDecl(p))
+        } else if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") {
+            listAppend(decls, parseClassDecl(p))
+        } else if (tt == "KW_INTERFACE") {
+            listAppend(decls, parseInterfaceDecl(p))
+        } else if (tt == "KW_ENUM") {
+            listAppend(decls, parseEnumDecl(p))
+        } else if (tt == "KW_OBJECT") {
+            listAppend(decls, parseObjectDecl(p))
+        } else if (tt == "KW_ACTOR") {
+            listAppend(decls, parseActorDecl(p))
+        } else if (tt == "KW_VIEW") {
+            listAppend(decls, parseViewDecl(p))
+        } else if (tt == "KW_NAVIGATION") {
+            listAppend(decls, parseNavigationDecl(p))
+        } else if (tt == "KW_THEME") {
+            listAppend(decls, parseThemeDecl(p))
+        } else if (tt == "KW_VAL" || tt == "KW_VAR") {
+            listAppend(decls, parseStatement(p))
+        } else if (tt == "KW_IMPORT") {
+            listAppend(decls, parseImport(p))
+        } else if (tt == "KW_PACKAGE") {
+            listAppend(decls, parsePackage(p))
+        } else if (tt == "KW_TYPEALIAS") {
+            listAppend(decls, parseTypeAlias(p))
+        } else {
+            // Skip unknown top-level tokens
+            val tok = advance(p)
+            val err = stringConcat("unexpected top-level token: ", stringConcat(tt, stringConcat(" at ", stringConcat(toString(peekLine(p)), stringConcat(":", toString(peekCol(p)))))))
+            listAppend(mapGet(p, "errors"), err)
+        }
+        skipNewlines(p)
+    }
+    val node = makeNode("program")
+    mapPut(node, "decls", decls)
+    return node
+}
+
+fun parseImport(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_IMPORT")
+    var path: String = toString(mapGet(expect(p, "IDENT"), "value"))
+    while (matchToken(p, "DOT")) {
+        path = stringConcat(path, stringConcat(".", toString(mapGet(expect(p, "IDENT"), "value"))))
+    }
+    // Wildcard import: import foo.bar.*
+    if (matchToken(p, "DOT_STAR")) {
+        path = stringConcat(path, ".*")
+    }
+    val node = makeNodeAt("import", line, col)
+    mapPut(node, "path", path)
+    return node
+}
+
+fun parsePackage(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_PACKAGE")
+    var path: String = toString(mapGet(expect(p, "IDENT"), "value"))
+    while (matchToken(p, "DOT")) {
+        path = stringConcat(path, stringConcat(".", toString(mapGet(expect(p, "IDENT"), "value"))))
+    }
+    val node = makeNodeAt("package", line, col)
+    mapPut(node, "path", path)
+    return node
+}
+
+// ---------------------------------------------------------------------------
+// AST printing
+// ---------------------------------------------------------------------------
+
+fun dumpAST(node: Map, indent: Int): Unit {
+    val kind = toString(mapGet(node, "kind"))
+    val pad = makeIndent(indent)
+
+    if (kind == "program") {
+        println(stringConcat(pad, "Program"))
+        val decls = mapGet(node, "decls")
+        var i: Int = 0
+        while (i < listSize(decls)) {
+            dumpAST(listGet(decls, i), indent + 2)
+            i = i + 1
+        }
+        return
+    }
+
+    if (kind == "package") {
+        println(stringConcat(pad, stringConcat("Package: ", toString(mapGet(node, "path")))))
+        return
+    }
+
+    if (kind == "funDecl" || kind == "viewDecl") {
+        val name = toString(mapGet(node, "name"))
+        val params = mapGet(node, "params")
+        var paramStr: String = ""
+        var i: Int = 0
+        while (i < listSize(params)) {
+            if (i > 0) { paramStr = stringConcat(paramStr, ", ") }
+            val param = listGet(params, i)
+            paramStr = stringConcat(paramStr, toString(mapGet(param, "name")))
+            val ptype = mapGet(param, "type")
+            if (ptype != null) {
+                paramStr = stringConcat(paramStr, stringConcat(": ", formatType(ptype)))
+            }
+            i = i + 1
+        }
+        var sig: String = stringConcat("fun ", stringConcat(name, stringConcat("(", stringConcat(paramStr, ")"))))
+        val retType = mapGet(node, "returnType")
+        if (retType != null) {
+            sig = stringConcat(sig, stringConcat(": ", formatType(retType)))
+        }
+        println(stringConcat(pad, sig))
+        val body = mapGet(node, "body")
+        if (body != null) {
+            dumpAST(body, indent + 2)
+        }
+        return
+    }
+
+    if (kind == "block") {
+        val stmts = mapGet(node, "stmts")
+        var i: Int = 0
+        while (i < listSize(stmts)) {
+            dumpAST(listGet(stmts, i), indent)
+            i = i + 1
+        }
+        return
+    }
+
+    if (kind == "valDecl" || kind == "varDecl") {
+        val keyword = toString(mapGet(node, "kind"))
+        val name = toString(mapGet(node, "name"))
+        var decl: String = keyword
+        decl = stringConcat(decl, stringConcat(" ", name))
+        val dtype = mapGet(node, "type")
+        if (dtype != null) {
+            decl = stringConcat(decl, stringConcat(": ", formatType(dtype)))
+        }
+        println(stringConcat(pad, decl))
+        val initExpr = mapGet(node, "init")
+        if (initExpr != null) {
+            dumpAST(initExpr, indent + 2)
+        }
+        return
+    }
+
+    if (kind == "if") {
+        println(stringConcat(pad, "if"))
+        dumpAST(mapGet(node, "condition"), indent + 2)
+        println(stringConcat(pad, "then"))
+        dumpAST(mapGet(node, "then"), indent + 2)
+        val elseNode = mapGet(node, "else")
+        if (elseNode != null) {
+            println(stringConcat(pad, "else"))
+            dumpAST(elseNode, indent + 2)
+        }
+        return
+    }
+
+    if (kind == "while") {
+        println(stringConcat(pad, "while"))
+        dumpAST(mapGet(node, "condition"), indent + 2)
+        dumpAST(mapGet(node, "body"), indent + 2)
+        return
+    }
+
+    if (kind == "doWhile") {
+        println(stringConcat(pad, "do-while"))
+        dumpAST(mapGet(node, "body"), indent + 2)
+        dumpAST(mapGet(node, "condition"), indent + 2)
+        return
+    }
+
+    if (kind == "for") {
+        println(stringConcat(pad, stringConcat("for ", stringConcat(toString(mapGet(node, "variable")), " in"))))
+        dumpAST(mapGet(node, "iterable"), indent + 2)
+        dumpAST(mapGet(node, "body"), indent + 2)
+        return
+    }
+
+    if (kind == "return") {
+        val val_ = mapGet(node, "value")
+        if (val_ != null) {
+            println(stringConcat(pad, "return"))
+            dumpAST(val_, indent + 2)
+        } else {
+            println(stringConcat(pad, "return"))
+        }
+        return
+    }
+
+    if (kind == "throw") {
+        println(stringConcat(pad, "throw"))
+        dumpAST(mapGet(node, "value"), indent + 2)
+        return
+    }
+
+    if (kind == "break") { println(stringConcat(pad, "break")) return }
+    if (kind == "continue") { println(stringConcat(pad, "continue")) return }
+
+    if (kind == "binary") {
+        println(stringConcat(pad, stringConcat("(", stringConcat(toString(mapGet(node, "op")), ")"))))
+        dumpAST(mapGet(node, "left"), indent + 2)
+        dumpAST(mapGet(node, "right"), indent + 2)
+        return
+    }
+
+    if (kind == "unary") {
+        println(stringConcat(pad, stringConcat("unary ", toString(mapGet(node, "op")))))
+        dumpAST(mapGet(node, "operand"), indent + 2)
+        return
+    }
+
+    if (kind == "call") {
+        println(stringConcat(pad, "call"))
+        dumpAST(mapGet(node, "callee"), indent + 2)
+        val args = mapGet(node, "args")
+        var i: Int = 0
+        while (i < listSize(args)) {
+            dumpAST(listGet(args, i), indent + 2)
+            i = i + 1
+        }
+        return
+    }
+
+    if (kind == "member") {
+        println(stringConcat(pad, stringConcat(".", toString(mapGet(node, "name")))))
+        dumpAST(mapGet(node, "object"), indent + 2)
+        return
+    }
+
+    if (kind == "assign") {
+        println(stringConcat(pad, "assign"))
+        dumpAST(mapGet(node, "target"), indent + 2)
+        dumpAST(mapGet(node, "value"), indent + 2)
+        return
+    }
+
+    if (kind == "ident") {
+        println(stringConcat(pad, toString(mapGet(node, "name"))))
+        return
+    }
+
+    if (kind == "intLit") {
+        println(stringConcat(pad, toString(mapGet(node, "value"))))
+        return
+    }
+
+    if (kind == "floatLit") {
+        println(stringConcat(pad, toString(mapGet(node, "value"))))
+        return
+    }
+
+    if (kind == "stringLit") {
+        println(stringConcat(pad, stringConcat("\"", stringConcat(toString(mapGet(node, "value")), "\""))))
+        return
+    }
+
+    if (kind == "boolLit") {
+        println(stringConcat(pad, toString(mapGet(node, "value"))))
+        return
+    }
+
+    if (kind == "nullLit") {
+        println(stringConcat(pad, "null"))
+        return
+    }
+
+    if (kind == "classDecl" || kind == "actorDecl") {
+        val name = toString(mapGet(node, "name"))
+        var prefix: String = ""
+        if (kind == "actorDecl") { prefix = "actor " }
+        if (mapGet(node, "isData") == true) { prefix = "data " }
+        if (mapGet(node, "isSealed") == true) { prefix = "sealed " }
+        if (prefix == "") { prefix = "class " }
+        println(stringConcat(pad, stringConcat(prefix, name)))
+        val body = mapGet(node, "body")
+        if (body != null) {
+            dumpAST(body, indent + 2)
+        }
+        return
+    }
+
+    if (kind == "viewDecl") {
+        val name = toString(mapGet(node, "name"))
+        println(stringConcat(pad, stringConcat("view ", name)))
+        val body = mapGet(node, "body")
+        if (body != null) {
+            dumpAST(body, indent + 2)
+        }
+        return
+    }
+
+    if (kind == "navigationDecl" || kind == "themeDecl") {
+        val name = toString(mapGet(node, "name"))
+        println(stringConcat(pad, stringConcat(kind, stringConcat(" ", name))))
+        return
+    }
+
+    if (kind == "classBody") {
+        val members = mapGet(node, "members")
+        var i: Int = 0
+        while (i < listSize(members)) {
+            dumpAST(listGet(members, i), indent)
+            i = i + 1
+        }
+        return
+    }
+
+    if (kind == "tryCatch") {
+        println(stringConcat(pad, "try"))
+        dumpAST(mapGet(node, "tryBody"), indent + 2)
+        val catchVar = mapGet(node, "catchVar")
+        if (catchVar != null) {
+            println(stringConcat(pad, stringConcat("catch (", stringConcat(toString(catchVar), ")"))))
+            dumpAST(mapGet(node, "catchBody"), indent + 2)
+        }
+        return
+    }
+
+    if (kind == "when") {
+        println(stringConcat(pad, "when"))
+        val subject = mapGet(node, "subject")
+        if (subject != null) {
+            dumpAST(subject, indent + 2)
+        }
+        val branches = mapGet(node, "branches")
+        var i: Int = 0
+        while (i < listSize(branches)) {
+            val branch = listGet(branches, i)
+            if (mapGet(branch, "isElse") == true) {
+                println(stringConcat(pad, "  else ->"))
+            } else {
+                println(stringConcat(pad, "  case ->"))
+            }
+            val body = mapGet(branch, "body")
+            if (body != null) {
+                dumpAST(body, indent + 4)
+            }
+            i = i + 1
+        }
+        return
+    }
+
+    if (kind == "error") {
+        println(stringConcat(pad, stringConcat("ERROR: ", toString(mapGet(node, "message")))))
+        return
+    }
+
+    // Fallback
+    println(stringConcat(pad, stringConcat("[", stringConcat(kind, "]"))))
+}
+
+fun formatType(t: Map): String {
+    val kind = toString(mapGet(t, "kind"))
+    if (kind == "type") {
+        var result: String = toString(mapGet(t, "name"))
+        val typeArgs = mapGet(t, "typeArgs")
+        if (typeArgs != null) {
+            result = stringConcat(result, "<")
+            var i: Int = 0
+            while (i < listSize(typeArgs)) {
+                if (i > 0) { result = stringConcat(result, ", ") }
+                result = stringConcat(result, formatType(listGet(typeArgs, i)))
+                i = i + 1
+            }
+            result = stringConcat(result, ">")
+        }
+        if (mapGet(t, "nullable") == true) {
+            result = stringConcat(result, "?")
+        }
+        return result
+    }
+    if (kind == "funcType") {
+        var result: String = "("
+        val paramTypes = mapGet(t, "paramTypes")
+        var i: Int = 0
+        while (i < listSize(paramTypes)) {
+            if (i > 0) { result = stringConcat(result, ", ") }
+            result = stringConcat(result, formatType(listGet(paramTypes, i)))
+            i = i + 1
+        }
+        result = stringConcat(result, ") -> ")
+        result = stringConcat(result, formatType(mapGet(t, "returnType")))
+        return result
+    }
+    return "?"
+}
+
+fun makeIndent(n: Int): String {
+    var result: String = ""
+    var i: Int = 0
+    while (i < n) {
+        result = stringConcat(result, " ")
+        i = i + 1
+    }
+    return result
+}
+
+// ---------------------------------------------------------------------------
+// Main — parse a file and dump AST
+// ---------------------------------------------------------------------------
+
+fun parserTestMain(): Unit {
+    val args = processArgs()
+    var source: String = ""
+    var filename: String = "<demo>"
+
+    if (listSize(args) > 1) {
+        filename = toString(listGet(args, 1))
+        source = toString(fileRead(filename))
+    } else {
+        source = "fun add(a: Int, b: Int): Int {\n    return a + b\n}\n\nfun main(): Unit {\n    val result = add(2, 3)\n    println(toString(result))\n}\n"
+    }
+
+    // Lex
+    val tokens = tokenize(source)
+
+    // Parse
+    val parser = makeParser(tokens)
+    val ast = parseProgram(parser)
+
+    // Print AST
+    dumpAST(ast, 0)
+
+    // Print errors
+    val errors = mapGet(parser, "errors")
+    val errorCount = listSize(errors)
+    if (errorCount > 0) {
+        println(stringConcat("\n", stringConcat(toString(errorCount), " error(s):")))
+        var i: Int = 0
+        while (i < errorCount) {
+            println(stringConcat("  ", toString(listGet(errors, i))))
+            i = i + 1
+        }
+    }
+}

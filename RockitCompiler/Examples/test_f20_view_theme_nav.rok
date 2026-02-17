@@ -1,0 +1,21 @@
+// Test: view, theme, and navigation declarations compile and run
+
+view Greeting(name: String) {
+    val msg = stringConcat("view: Hello, ", name)
+    println(msg)
+}
+
+navigation AppNav {
+    println("navigation: routes registered")
+}
+
+theme AppTheme {
+    println("theme: styles applied")
+}
+
+fun main(): Unit {
+    Greeting("world")
+    AppNav()
+    AppTheme()
+    println("view/theme/nav test complete")
+}
