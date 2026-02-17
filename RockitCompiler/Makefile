@@ -6,7 +6,7 @@ RUNTIME_DIR = Runtime
 PLUGIN_DIR = ../ide/intellij-rockit
 PLUGIN_ZIP = $(PLUGIN_DIR)/build/distributions/intellij-rockit-0.1.0.zip
 
-.PHONY: build release install uninstall test clean docker plugin plugin-install
+.PHONY: build release install uninstall test clean docker plugin plugin-install setup-editors
 
 build:
 	swift build
@@ -24,10 +24,20 @@ install: release
 	@mkdir -p $(PREFIX)/lib/rockit/runtime
 	@cp $(RUNTIME_DIR)/rockit_runtime.c $(PREFIX)/lib/rockit/runtime/
 	@cp $(RUNTIME_DIR)/rockit_runtime.h $(PREFIX)/lib/rockit/runtime/
+	@mkdir -p $(PREFIX)/lib/rockit/editors/vscode
+	@mkdir -p $(PREFIX)/lib/rockit/editors/vim
+	@cp -r ../ide/vscode/* $(PREFIX)/lib/rockit/editors/vscode/ 2>/dev/null || true
+	@cp -r ../ide/vim/* $(PREFIX)/lib/rockit/editors/vim/ 2>/dev/null || true
 	@echo "Installed: $(PREFIX)/bin/rockit"
 	@echo "Runtime:   $(PREFIX)/lib/rockit/runtime/"
+	@echo "Editors:   $(PREFIX)/lib/rockit/editors/"
+	@echo ""
+	@$(PREFIX)/bin/rockit setup-editors 2>/dev/null || true
 	@echo ""
 	@echo "Usage: rockit run myfile.rok"
+
+setup-editors:
+	@.build/debug/rockit setup-editors 2>/dev/null || swift run rockit setup-editors
 
 uninstall:
 	@rm -f $(PREFIX)/bin/rockit

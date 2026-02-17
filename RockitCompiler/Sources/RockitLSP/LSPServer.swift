@@ -1,0 +1,302 @@
+// LSPServer.swift
+// RockitLSP — Rockit Language Server Protocol
+// Copyright © 2026 Dark Matter Tech. All rights reserved.
+
+import Foundation
+import RockitKit
+
+/// The Rockit Language Server — main entry point for `rockit lsp`
+public final class LSPServer {
+    private let documentManager = DocumentManager()
+    private let analysisEngine: AnalysisEngine
+    private let input: FileHandle
+    private let output: FileHandle
+
+    public init() {
+        self.analysisEngine = AnalysisEngine(documentManager: documentManager)
+        self.input = FileHandle.standardInput
+        self.output = FileHandle.standardOutput
+    }
+
+    /// Main run loop — reads JSON-RPC messages from stdin, dispatches, responds on stdout
+    public func run() {
+        log("Rockit LSP server starting (version 0.1.0)")
+
+        while let message = JSONRPCProtocol.readMessage(from: input) {
+            handleMessage(message)
+        }
+
+        log("Rockit LSP server shutting down")
+    }
+
+    // MARK: - Message Dispatch
+
+    private func handleMessage(_ msg: JSONRPCMessage) {
+        switch msg.method {
+
+        // Lifecycle
+        case "initialize":
+            handleInitialize(msg)
+        case "initialized":
+            break // notification, no response
+        case "shutdown":
+            handleShutdown(msg)
+        case "exit":
+            exit(0)
+
+        // Document Sync
+        case "textDocument/didOpen":
+            handleDidOpen(msg)
+        case "textDocument/didChange":
+            handleDidChange(msg)
+        case "textDocument/didClose":
+            handleDidClose(msg)
+        case "textDocument/didSave":
+            // Re-analyze on save
+            if let uri = extractURI(msg.params) {
+                analyzeAndPublishDiagnostics(uri: uri)
+            }
+
+        // Language Features
+        case "textDocument/hover":
+            handleHover(msg)
+        case "textDocument/completion":
+            handleCompletion(msg)
+        case "textDocument/definition":
+            handleDefinition(msg)
+        case "textDocument/documentSymbol":
+            handleDocumentSymbol(msg)
+        case "textDocument/signatureHelp":
+            handleSignatureHelp(msg)
+
+        default:
+            if let id = msg.id {
+                sendError(id: id, code: -32601, message: "Method not found: \(msg.method)")
+            }
+        }
+    }
+
+    // MARK: - Lifecycle
+
+    private func handleInitialize(_ msg: JSONRPCMessage) {
+        guard let id = msg.id else { return }
+
+        let capabilities: [String: Any] = [
+            "textDocumentSync": [
+                "openClose": true,
+                "change": 1  // Full sync
+            ] as [String: Any],
+            "hoverProvider": true,
+            "completionProvider": [
+                "triggerCharacters": [".", ":"],
+                "resolveProvider": false
+            ] as [String: Any],
+            "definitionProvider": true,
+            "documentSymbolProvider": true,
+            "signatureHelpProvider": [
+                "triggerCharacters": ["(", ","]
+            ] as [String: Any]
+        ]
+
+        let result: [String: Any] = [
+            "capabilities": capabilities,
+            "serverInfo": [
+                "name": "rockit-lsp",
+                "version": "0.1.0"
+            ] as [String: Any]
+        ]
+
+        sendResult(id: id, result: result)
+        log("Initialized with capabilities")
+    }
+
+    private func handleShutdown(_ msg: JSONRPCMessage) {
+        guard let id = msg.id else { return }
+        sendResult(id: id, result: NSNull())
+        log("Shutdown requested")
+    }
+
+    // MARK: - Document Sync
+
+    private func handleDidOpen(_ msg: JSONRPCMessage) {
+        guard let params = msg.params,
+              let textDocument = params["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let text = textDocument["text"] as? String else { return }
+
+        let version = textDocument["version"] as? Int ?? 0
+        documentManager.open(uri: uri, text: text, version: version)
+        log("Opened: \(uriToPath(uri))")
+        analyzeAndPublishDiagnostics(uri: uri)
+    }
+
+    private func handleDidChange(_ msg: JSONRPCMessage) {
+        guard let params = msg.params,
+              let textDocument = params["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let changes = params["contentChanges"] as? [[String: Any]],
+              let firstChange = changes.first,
+              let text = firstChange["text"] as? String else { return }
+
+        let version = textDocument["version"] as? Int ?? 0
+        documentManager.update(uri: uri, text: text, version: version)
+        analyzeAndPublishDiagnostics(uri: uri)
+    }
+
+    private func handleDidClose(_ msg: JSONRPCMessage) {
+        guard let uri = extractURI(msg.params) else { return }
+        documentManager.close(uri: uri)
+        publishDiagnostics(uri: uri, diagnostics: [])
+        log("Closed: \(uriToPath(uri))")
+    }
+
+    // MARK: - Language Features
+
+    private func handleHover(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: NSNull()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: NSNull())
+            return
+        }
+
+        if let hover = HoverProvider.hover(at: position, uri: uri, analysisResult: result) {
+            sendResult(id: id, result: hover.toJSON())
+        } else {
+            sendResult(id: id, result: NSNull())
+        }
+    }
+
+    private func handleCompletion(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: NSNull()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri),
+              let text = documentManager.getText(uri) else {
+            sendResult(id: id, result: NSNull())
+            return
+        }
+
+        let items = CompletionProvider.complete(
+            at: position,
+            uri: uri,
+            analysisResult: result,
+            documentText: text
+        )
+
+        sendResult(id: id, result: items.map { $0.toJSON() })
+    }
+
+    private func handleDefinition(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: NSNull()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: NSNull())
+            return
+        }
+
+        if let location = DefinitionProvider.definition(at: position, uri: uri, analysisResult: result) {
+            sendResult(id: id, result: location.toJSON())
+        } else {
+            sendResult(id: id, result: NSNull())
+        }
+    }
+
+    private func handleDocumentSymbol(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let symbols = DocumentSymbolProvider.symbols(for: result.ast)
+        sendResult(id: id, result: symbols.map { $0.toJSON() })
+    }
+
+    private func handleSignatureHelp(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: NSNull()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri),
+              let text = documentManager.getText(uri) else {
+            sendResult(id: id, result: NSNull())
+            return
+        }
+
+        if let sigHelp = SignatureHelpProvider.signatureHelp(
+            at: position,
+            uri: uri,
+            analysisResult: result,
+            documentText: text
+        ) {
+            sendResult(id: id, result: sigHelp.toJSON())
+        } else {
+            sendResult(id: id, result: NSNull())
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func analyzeAndPublishDiagnostics(uri: String) {
+        guard let result = analysisEngine.analyze(uri: uri) else { return }
+        let lspDiags = DiagnosticsProvider.convert(result.diagnostics, uri: uri)
+        publishDiagnostics(uri: uri, diagnostics: lspDiags)
+    }
+
+    private func publishDiagnostics(uri: String, diagnostics: [LSPDiagnostic]) {
+        let params: [String: Any] = [
+            "uri": uri,
+            "diagnostics": diagnostics.map { $0.toJSON() }
+        ]
+        JSONRPCProtocol.writeNotification(method: "textDocument/publishDiagnostics", params: params, to: output)
+    }
+
+    private func extractTextDocumentPosition(_ params: [String: Any]?) -> (String, LSPPosition)? {
+        guard let params = params,
+              let textDocument = params["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let position = params["position"] as? [String: Any],
+              let line = position["line"] as? Int,
+              let character = position["character"] as? Int else { return nil }
+        return (uri, LSPPosition(line: line, character: character))
+    }
+
+    private func extractURI(_ params: [String: Any]?) -> String? {
+        guard let params = params,
+              let textDocument = params["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String else { return nil }
+        return uri
+    }
+
+    private func sendResult(id: JSONRPCId, result: Any) {
+        JSONRPCProtocol.writeResponse(id: id, result: result, error: nil, to: output)
+    }
+
+    private func sendError(id: JSONRPCId, code: Int, message: String) {
+        JSONRPCProtocol.writeResponse(id: id, result: nil, error: JSONRPCError(code: code, message: message), to: output)
+    }
+
+    private func log(_ message: String) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        FileHandle.standardError.write("[\(timestamp)] rockit-lsp: \(message)\n".data(using: .utf8)!)
+    }
+}

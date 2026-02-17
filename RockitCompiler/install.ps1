@@ -46,6 +46,11 @@ function Install-Binary {
         if (Test-Path "$tmpExtract\rockit\runtime") {
             Copy-Item "$tmpExtract\rockit\runtime\*" $LibDir -Force
         }
+        if (Test-Path "$tmpExtract\rockit\editors") {
+            $EditorsDir = "$Prefix\lib\rockit\editors"
+            New-Item -ItemType Directory -Force -Path $EditorsDir | Out-Null
+            Copy-Item "$tmpExtract\rockit\editors\*" $EditorsDir -Recurse -Force
+        }
 
         Remove-Item -Recurse -Force $tmpZip -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force $tmpExtract -ErrorAction SilentlyContinue
@@ -96,6 +101,17 @@ function Install-Source {
     Copy-Item "Runtime\rockit_runtime.c" "$LibDir\rockit_runtime.c"
     Copy-Item "Runtime\rockit_runtime.h" "$LibDir\rockit_runtime.h"
 
+    # Bundle editor files
+    $EditorsDir = "$Prefix\lib\rockit\editors"
+    if (Test-Path "..\ide\vscode") {
+        New-Item -ItemType Directory -Force -Path "$EditorsDir\vscode" | Out-Null
+        Copy-Item "..\ide\vscode\*" "$EditorsDir\vscode\" -Recurse -Force
+    }
+    if (Test-Path "..\ide\vim") {
+        New-Item -ItemType Directory -Force -Path "$EditorsDir\vim" | Out-Null
+        Copy-Item "..\ide\vim\*" "$EditorsDir\vim\" -Recurse -Force
+    }
+
     Pop-Location
     Remove-Item -Recurse -Force $BuildDir -ErrorAction SilentlyContinue
     Ok "Installed rockit (built from source)"
@@ -115,6 +131,10 @@ if ($currentPath -notlike "*$InstallDir*") {
     Ok "Added $InstallDir to user PATH."
     Write-Host "  Restart your terminal for PATH changes to take effect."
 }
+
+# Set up editor plugins
+Info "Setting up editor support..."
+try { & "$InstallDir\rockit.exe" setup-editors 2>$null } catch {}
 
 Ok "Installed successfully!"
 Write-Host ""

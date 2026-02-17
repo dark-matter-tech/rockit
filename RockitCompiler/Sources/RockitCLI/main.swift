@@ -4,6 +4,7 @@
 
 import Foundation
 import RockitKit
+import RockitLSP
 
 let version = "0.1.0-alpha"
 
@@ -25,6 +26,8 @@ func printUsage() {
         init [name]           Create a new Rockit project
         test [file]           Run tests
         update                Update rockit to the latest version
+        lsp                   Start Language Server Protocol server
+        setup-editors         Install editor plugins (VS Code, Vim, Neovim, JetBrains)
         lex <file.rok>        Tokenize and dump tokens
         parse <file.rok>      Parse and dump AST
         check <file.rok>      Type-check and report diagnostics
@@ -1371,6 +1374,13 @@ case "test":
 
 case "update":
     updateCommand()
+
+case "lsp":
+    let server = LSPServer()
+    server.run()
+
+case "setup-editors":
+    setupEditorsCommand()
 
 case "version":
     print("rockit \(version)")

@@ -30,6 +30,9 @@ jobs:
           cp .build/release/rockit dist/rockit/
           cp Runtime/rockit_runtime.c dist/rockit/runtime/
           cp Runtime/rockit_runtime.h dist/rockit/runtime/
+          mkdir -p dist/rockit/editors/vscode dist/rockit/editors/vim
+          cp -r ../ide/vscode/* dist/rockit/editors/vscode/
+          cp -r ../ide/vim/* dist/rockit/editors/vim/
           tar -czf "$ARCHIVE" -C dist rockit
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
@@ -56,6 +59,9 @@ jobs:
           cp .build/release/rockit dist/rockit/
           cp Runtime/rockit_runtime.c dist/rockit/runtime/
           cp Runtime/rockit_runtime.h dist/rockit/runtime/
+          mkdir -p dist/rockit/editors/vscode dist/rockit/editors/vim
+          cp -r ../ide/vscode/* dist/rockit/editors/vscode/
+          cp -r ../ide/vim/* dist/rockit/editors/vim/
           tar -czf "$ARCHIVE" -C dist rockit
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
@@ -93,6 +99,9 @@ jobs:
           cp .build/release/rockit dist/rockit/
           cp Runtime/rockit_runtime.c dist/rockit/runtime/
           cp Runtime/rockit_runtime.h dist/rockit/runtime/
+          mkdir -p dist/rockit/editors/vscode dist/rockit/editors/vim
+          cp -r ../ide/vscode/* dist/rockit/editors/vscode/
+          cp -r ../ide/vim/* dist/rockit/editors/vim/
           tar -czf "$ARCHIVE" -C dist rockit
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
@@ -125,6 +134,10 @@ jobs:
           Copy-Item ".build\release\rockit.exe" "dist\rockit\"
           Copy-Item "Runtime\rockit_runtime.c" "dist\rockit\runtime\"
           Copy-Item "Runtime\rockit_runtime.h" "dist\rockit\runtime\"
+          New-Item -ItemType Directory -Force -Path dist\rockit\editors\vscode | Out-Null
+          New-Item -ItemType Directory -Force -Path dist\rockit\editors\vim | Out-Null
+          Copy-Item "..\ide\vscode\*" "dist\rockit\editors\vscode\" -Recurse
+          Copy-Item "..\ide\vim\*" "dist\rockit\editors\vim\" -Recurse
           Compress-Archive -Path "dist\rockit" -DestinationPath $Archive
           "ARCHIVE=$Archive" | Out-File -FilePath $env:GITHUB_ENV -Append
 

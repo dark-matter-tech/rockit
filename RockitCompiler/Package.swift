@@ -21,10 +21,16 @@ let package = Package(
             name: "RockitKit",
             path: "Sources/RockitKit"
         ),
+        // Language Server Protocol
+        .target(
+            name: "RockitLSP",
+            dependencies: ["RockitKit"],
+            path: "Sources/RockitLSP"
+        ),
         // CLI entry point
         .executableTarget(
             name: "RockitCLI",
-            dependencies: ["RockitKit"],
+            dependencies: ["RockitKit", "RockitLSP"],
             path: "Sources/RockitCLI"
         ),
         // Tests

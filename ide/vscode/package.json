@@ -30,7 +30,11 @@
         "id": "rockit",
         "aliases": ["Rockit", "rockit"],
         "extensions": [".rok"],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/rockit-light.svg",
+          "dark": "./icons/rockit-dark.svg"
+        }
       }
     ],
     "grammars": [

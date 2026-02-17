@@ -89,6 +89,10 @@ install_binary() {
         mkdir -p "${LIB_DIR}/runtime"
         cp "${tmp_extract}/rockit/runtime/"* "${LIB_DIR}/runtime/"
     fi
+    if [ -d "${tmp_extract}/rockit/editors" ]; then
+        mkdir -p "${LIB_DIR}/editors"
+        cp -r "${tmp_extract}/rockit/editors/"* "${LIB_DIR}/editors/"
+    fi
 
     rm -rf "$tmp_archive" "$tmp_extract"
     ok "Installed rockit ${version} (${platform})"
@@ -125,6 +129,16 @@ install_source() {
     cp Runtime/rockit_runtime.c "${LIB_DIR}/runtime/"
     cp Runtime/rockit_runtime.h "${LIB_DIR}/runtime/"
 
+    # Bundle editor files
+    mkdir -p "${LIB_DIR}/editors/vscode"
+    mkdir -p "${LIB_DIR}/editors/vim"
+    if [ -d "../ide/vscode" ]; then
+        cp -r ../ide/vscode/* "${LIB_DIR}/editors/vscode/"
+    fi
+    if [ -d "../ide/vim" ]; then
+        cp -r ../ide/vim/* "${LIB_DIR}/editors/vim/"
+    fi
+
     rm -rf "${BUILD_DIR}"
     ok "Installed rockit (built from source)"
 }
@@ -153,6 +167,10 @@ else
     echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
     echo ""
 fi
+
+# --- Set up editor plugins ---
+info "Setting up editor support..."
+"${INSTALL_DIR}/rockit" setup-editors 2>/dev/null || true
 
 echo ""
 echo "  Rockit is ready. Try:"
