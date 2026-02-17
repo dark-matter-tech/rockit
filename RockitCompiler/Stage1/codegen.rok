@@ -1085,6 +1085,31 @@ fun compileExpr(fs: Map, node: Map): Int {
                 val isObject = mapGet(mapGet(mapGet(fs, "compiler"), "objectNames"), memberObjName)
                 val isClass = mapGet(mapGet(mapGet(fs, "compiler"), "classNames"), memberObjName)
                 if (isObject != null || isClass != null) {
+                    // Check if this is an enum entry constructor: Color.Red()
+                    val enumEntries = mapGet(mapGet(mapGet(fs, "compiler"), "enumNames"), memberObjName)
+                    if (enumEntries != null) {
+                        // Check if methodName is an enum entry
+                        var isEnumEntry: Bool = false
+                        var eei: Int = 0
+                        while (eei < listSize(enumEntries)) {
+                            if (toString(listGet(enumEntries, eei)) == methodName) {
+                                isEnumEntry = true
+                            }
+                            eei = eei + 1
+                        }
+                        if (isEnumEntry) {
+                            val argRegs = listCreate()
+                            var i: Int = 0
+                            while (i < listSize(callArgs)) {
+                                listAppend(argRegs, compileExpr(fs, listGet(callArgs, i)))
+                                i = i + 1
+                            }
+                            val dest = allocReg(fs)
+                            val initName = stringConcat("__init_", stringConcat(memberObjName, stringConcat("_", methodName)))
+                            emitCall(fs, dest, initName, argRegs)
+                            return dest
+                        }
+                    }
                     // Static call to ObjectName.method OR nested class constructor
                     val fullName = stringConcat(memberObjName, stringConcat(".", methodName))
                     val argRegs = listCreate()
@@ -2491,7 +2516,14 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
     // Compile body
     val body = mapGet(decl, "body")
     if (body != null) {
-        compileBlock(fs, body)
+        val bodyKind = toString(mapGet(body, "kind"))
+        if (bodyKind == "block") {
+            compileBlock(fs, body)
+        } else {
+            // Expression-body function: fun f(): T = expr → implicit return
+            val resultReg = compileExpr(fs, body)
+            emitRet(fs, resultReg)
+        }
     }
 
     // Ensure function ends with ret
