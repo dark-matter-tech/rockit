@@ -1,0 +1,214 @@
+{
+  "Function": {
+    "prefix": "fun",
+    "body": [
+      "fun ${1:name}(${2:params}): ${3:Unit} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Function declaration"
+  },
+  "Main Function": {
+    "prefix": "main",
+    "body": [
+      "fun main(): Unit {",
+      "    $0",
+      "}"
+    ],
+    "description": "Main entry point"
+  },
+  "Suspend Function": {
+    "prefix": "sfun",
+    "body": [
+      "suspend fun ${1:name}(${2:params}): ${3:Unit} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Suspend function declaration"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name}(${2:params}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Class declaration"
+  },
+  "Data Class": {
+    "prefix": "data",
+    "body": [
+      "data class ${1:Name}(",
+      "    val ${2:field}: ${3:Type}",
+      ")"
+    ],
+    "description": "Data class declaration"
+  },
+  "Sealed Class": {
+    "prefix": "sealed",
+    "body": [
+      "sealed class ${1:Name} {",
+      "    class ${2:Variant}(${3:params}) : ${1:Name}()",
+      "}"
+    ],
+    "description": "Sealed class declaration"
+  },
+  "Interface": {
+    "prefix": "interface",
+    "body": [
+      "interface ${1:Name} {",
+      "    fun ${2:method}(${3:params}): ${4:Unit}",
+      "}"
+    ],
+    "description": "Interface declaration"
+  },
+  "Enum": {
+    "prefix": "enum",
+    "body": [
+      "enum class ${1:Name} {",
+      "    ${2:ENTRY}",
+      "}"
+    ],
+    "description": "Enum class declaration"
+  },
+  "Actor": {
+    "prefix": "actor",
+    "body": [
+      "actor ${1:Name} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Actor declaration"
+  },
+  "View": {
+    "prefix": "view",
+    "body": [
+      "view ${1:Name}(${2:params}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "View declaration"
+  },
+  "Navigation": {
+    "prefix": "navigation",
+    "body": [
+      "navigation ${1:Name} {",
+      "    route(\"${2:path}\") { ${3:View}() }",
+      "}"
+    ],
+    "description": "Navigation declaration"
+  },
+  "Theme": {
+    "prefix": "theme",
+    "body": [
+      "theme ${1:Name} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Theme declaration"
+  },
+  "Val": {
+    "prefix": "val",
+    "body": "val ${1:name}: ${2:Type} = ${3:value}",
+    "description": "Immutable variable"
+  },
+  "Var": {
+    "prefix": "var",
+    "body": "var ${1:name}: ${2:Type} = ${3:value}",
+    "description": "Mutable variable"
+  },
+  "If": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "If statement"
+  },
+  "If-Else": {
+    "prefix": "ife",
+    "body": [
+      "if (${1:condition}) {",
+      "    $2",
+      "} else {",
+      "    $0",
+      "}"
+    ],
+    "description": "If-else statement"
+  },
+  "When": {
+    "prefix": "when",
+    "body": [
+      "when (${1:value}) {",
+      "    ${2:pattern} -> ${3:result}",
+      "    else -> ${0:default}",
+      "}"
+    ],
+    "description": "When expression"
+  },
+  "For Loop": {
+    "prefix": "for",
+    "body": [
+      "for (${1:item} in ${2:collection}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "For-in loop"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": [
+      "while (${1:condition}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "While loop"
+  },
+  "Try-Catch": {
+    "prefix": "try",
+    "body": [
+      "try {",
+      "    $1",
+      "} catch (${2:e}: ${3:Exception}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Try-catch block"
+  },
+  "Concurrent Block": {
+    "prefix": "concurrent",
+    "body": [
+      "concurrent {",
+      "    val ${1:a} = async { ${2:task1} }",
+      "    val ${3:b} = async { ${4:task2} }",
+      "}"
+    ],
+    "description": "Concurrent block with async tasks"
+  },
+  "Lambda": {
+    "prefix": "lambda",
+    "body": "{ ${1:params} -> ${0:body} }",
+    "description": "Lambda expression"
+  },
+  "Println": {
+    "prefix": "pl",
+    "body": "println(${1:\"$0\"})",
+    "description": "Print line"
+  },
+  "Test Function": {
+    "prefix": "test",
+    "body": [
+      "@Test",
+      "fun ${1:testName}() {",
+      "    $0",
+      "}"
+    ],
+    "description": "Test function with @Test annotation"
+  },
+  "Import": {
+    "prefix": "import",
+    "body": "import ${1:package}",
+    "description": "Import statement"
+  }
+}

@@ -1,0 +1,262 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Rockit",
+  "scopeName": "source.rockit",
+  "fileTypes": [
+    "rok"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#annotations"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#builtins"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#identifiers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.rockit",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.rockit",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            {
+              "include": "#comments"
+            }
+          ]
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.triple.rockit",
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "patterns": [
+            {
+              "include": "#string-interpolation"
+            },
+            {
+              "include": "#string-escapes"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.rockit",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "include": "#string-interpolation"
+            },
+            {
+              "include": "#string-escapes"
+            }
+          ]
+        }
+      ]
+    },
+    "string-escapes": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.rockit",
+          "match": "\\\\([\\\\\"/ntr0'$]|u\\{[0-9a-fA-F]+\\})"
+        }
+      ]
+    },
+    "string-interpolation": {
+      "patterns": [
+        {
+          "name": "meta.interpolation.rockit",
+          "begin": "\\$\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.interpolation.begin.rockit"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.interpolation.end.rockit"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.rockit"
+            }
+          ]
+        },
+        {
+          "name": "variable.other.interpolation.rockit",
+          "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.rockit",
+          "match": "\\b0[xX][0-9a-fA-F]([0-9a-fA-F_]*[0-9a-fA-F])?\\b"
+        },
+        {
+          "name": "constant.numeric.binary.rockit",
+          "match": "\\b0[bB][01]([01_]*[01])?\\b"
+        },
+        {
+          "name": "constant.numeric.float.rockit",
+          "match": "\\b[0-9]([0-9_]*[0-9])?(\\.[0-9]([0-9_]*[0-9])?)?[eE][+-]?[0-9]([0-9_]*[0-9])?\\b"
+        },
+        {
+          "name": "constant.numeric.float.rockit",
+          "match": "\\b[0-9]([0-9_]*[0-9])?\\.[0-9]([0-9_]*[0-9])?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.rockit",
+          "match": "\\b[0-9]([0-9_]*[0-9])?\\b"
+        }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        {
+          "name": "storage.type.annotation.rockit",
+          "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.other.rockit.rockit",
+          "match": "\\b(navigation|concurrent|suspend|unowned|actor|route|theme|style|async|await|view|weak)\\b"
+        },
+        {
+          "name": "constant.language.boolean.rockit",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.rockit",
+          "match": "\\b(null)\\b"
+        },
+        {
+          "name": "keyword.control.rockit",
+          "match": "\\b(continue|finally|return|while|break|throw|catch|else|when|for|try|if|do|in|is|as)\\b"
+        },
+        {
+          "name": "keyword.declaration.rockit",
+          "match": "\\b(constructor|interface|protected|companion|typealias|abstract|override|internal|private|package|object|sealed|public|vararg|import|class|super|where|enum|data|open|this|init|fun|val|var|out)\\b"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.type.builtin.rockit",
+          "match": "\\b(Comparable|Throwable|Exception|Optional|Sequence|Iterable|Nothing|UInt16|UInt32|UInt64|Double|String|Triple|Result|Int16|Int32|Int64|UInt8|Float|Array|Error|Int8|UInt|Bool|Char|Unit|Void|List|Pair|Int|Any|Map|Set)\\b"
+        },
+        {
+          "name": "support.function.builtin.rockit",
+          "match": "\\b(mutableListOf|mutableMapOf|mutableSetOf|readLine|println|arrayOf|require|assert|listOf|repeat|print|mapOf|setOf|maxOf|minOf|check|error|TODO)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.force-unwrap.rockit",
+          "match": "!!"
+        },
+        {
+          "name": "keyword.operator.optional.rockit",
+          "match": "\\?\\.|\\.\\.\\.?<|\\?:|\\?"
+        },
+        {
+          "name": "keyword.operator.range.rockit",
+          "match": "\\.\\.<|\\.\\."
+        },
+        {
+          "name": "keyword.operator.arrow.rockit",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.scope.rockit",
+          "match": "::"
+        },
+        {
+          "name": "keyword.operator.assignment.compound.rockit",
+          "match": "[+\\-*/%]="
+        },
+        {
+          "name": "keyword.operator.comparison.rockit",
+          "match": "==|!=|<=|>="
+        },
+        {
+          "name": "keyword.operator.logical.rockit",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.assignment.rockit",
+          "match": "="
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "match": "\\b(fun)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.rockit"
+            },
+            "2": {
+              "name": "entity.name.function.rockit"
+            }
+          }
+        },
+        {
+          "match": "\\b(class|interface|enum|object|actor|view|data\\s+class|sealed\\s+class)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.rockit"
+            },
+            "2": {
+              "name": "entity.name.type.rockit"
+            }
+          }
+        },
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.call.rockit"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

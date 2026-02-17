@@ -78,12 +78,11 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
             attrs(JBColor(Color(0xC6, 0x28, 0x28), Color(0xFF, 0x6B, 0x68)), Font.BOLD)
         )
 
-        // Boolean-prefixed identifiers: isActive, hasAccess, etc. — bright orange
+        // Boolean-prefixed identifiers: isActive, hasAccess, etc. — same as boolean literal
         @JvmField
-        @Suppress("DEPRECATION")
         val BOOLEAN_IDENTIFIER = createTextAttributesKey(
             "ROCKIT_BOOLEAN_IDENTIFIER",
-            attrs(JBColor(Color(0xE5, 0x7C, 0x00), Color(0xFF, 0xA0, 0x30)))
+            BOOLEAN_LITERAL
         )
 
         // Built-in types: String, Int, Bool, etc. — teal

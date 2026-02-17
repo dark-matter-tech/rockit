@@ -24,6 +24,7 @@ func printUsage() {
         launch                Start interactive REPL
         init [name]           Create a new Rockit project
         test [file]           Run tests
+        update                Update rockit to the latest version
         lex <file.rok>        Tokenize and dump tokens
         parse <file.rok>      Parse and dump AST
         check <file.rok>      Type-check and report diagnostics
@@ -846,6 +847,187 @@ func testCommand(file: String?) {
     if totalFailed > 0 { exit(1) }
 }
 
+// MARK: - Update Command
+
+func updateCommand() {
+    let repo = "Dark-Matter/moon"
+    let apiURL = "https://api.github.com/repos/\(repo)/releases/latest"
+
+    // Detect platform
+    let platform: String
+    #if arch(arm64) && os(macOS)
+    platform = "macos-arm64"
+    #elseif arch(x86_64) && os(macOS)
+    platform = "macos-x86_64"
+    #elseif arch(x86_64) && os(Linux)
+    platform = "linux-x86_64"
+    #elseif arch(arm64) && os(Linux)
+    platform = "linux-arm64"
+    #elseif os(Windows)
+    platform = "windows-x86_64"
+    #else
+    print("error: unsupported platform for self-update")
+    exit(1)
+    #endif
+
+    print("Checking for updates...")
+
+    // Fetch latest release info
+    guard let url = URL(string: apiURL),
+          let data = try? Data(contentsOf: url) else {
+        print("error: could not reach update server")
+        print("  Check your internet connection, or update manually:")
+        print("  https://github.com/\(repo)/releases")
+        exit(1)
+    }
+
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let tagName = json["tag_name"] as? String else {
+        print("error: could not parse release info")
+        exit(1)
+    }
+
+    let latestVersion = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+
+    if latestVersion == version {
+        print("rockit \(version) is already up to date.")
+        return
+    }
+
+    print("New version available: \(version) \u{2192} \(latestVersion)")
+
+    // Determine archive name and download URL
+    let ext: String
+    #if os(Windows)
+    ext = "zip"
+    #else
+    ext = "tar.gz"
+    #endif
+    let archiveName = "rockit-\(latestVersion)-\(platform).\(ext)"
+    let downloadURL = "https://github.com/\(repo)/releases/download/\(tagName)/\(archiveName)"
+
+    print("Downloading \(archiveName)...")
+
+    guard let archiveURL = URL(string: downloadURL),
+          let archiveData = try? Data(contentsOf: archiveURL) else {
+        print("error: could not download \(archiveName)")
+        print("  No prebuilt binary for \(platform). Download manually:")
+        print("  https://github.com/\(repo)/releases/tag/\(tagName)")
+        exit(1)
+    }
+
+    // Write to temp file
+    let tmpDir = Platform.tempDirectory
+    let tmpArchive = Platform.pathJoin(tmpDir, "rockit-update-\(ProcessInfo.processInfo.processIdentifier).\(ext)")
+    let tmpExtract = Platform.pathJoin(tmpDir, "rockit-update-extract-\(ProcessInfo.processInfo.processIdentifier)")
+
+    do {
+        try archiveData.write(to: URL(fileURLWithPath: tmpArchive))
+    } catch {
+        print("error: could not save download: \(error)")
+        exit(1)
+    }
+
+    // Extract
+    let fm = FileManager.default
+    try? fm.createDirectory(atPath: tmpExtract, withIntermediateDirectories: true)
+
+    let extractProcess = Process()
+    #if os(Windows)
+    // Use PowerShell to extract zip on Windows
+    extractProcess.executableURL = URL(fileURLWithPath: "powershell.exe")
+    extractProcess.arguments = ["-Command", "Expand-Archive -Path '\(tmpArchive)' -DestinationPath '\(tmpExtract)' -Force"]
+    #else
+    extractProcess.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+    extractProcess.arguments = ["-xzf", tmpArchive, "-C", tmpExtract]
+    #endif
+
+    do {
+        try extractProcess.run()
+        extractProcess.waitUntilExit()
+        guard extractProcess.terminationStatus == 0 else {
+            print("error: failed to extract update archive")
+            exit(1)
+        }
+    } catch {
+        print("error: could not extract archive: \(error)")
+        exit(1)
+    }
+
+    // Find the current binary location and replace it
+    let currentBinary = CommandLine.arguments[0]
+    let resolvedBinary: String
+    if currentBinary.hasPrefix("/") {
+        resolvedBinary = currentBinary
+    } else {
+        resolvedBinary = Platform.pathJoin(fm.currentDirectoryPath, currentBinary)
+    }
+
+    let newBinary: String
+    #if os(Windows)
+    newBinary = Platform.pathJoin(tmpExtract, "rockit", "rockit.exe")
+    #else
+    newBinary = Platform.pathJoin(tmpExtract, "rockit", "rockit")
+    #endif
+
+    guard fm.fileExists(atPath: newBinary) else {
+        print("error: extracted archive does not contain rockit binary")
+        exit(1)
+    }
+
+    // Replace binary
+    let backupPath = resolvedBinary + ".bak"
+    do {
+        // Backup current binary
+        try? fm.removeItem(atPath: backupPath)
+        try fm.moveItem(atPath: resolvedBinary, toPath: backupPath)
+
+        // Install new binary
+        try fm.moveItem(atPath: newBinary, toPath: resolvedBinary)
+
+        // Make executable
+        #if !os(Windows)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: resolvedBinary)
+        #endif
+
+        // Update runtime files if they exist in the archive
+        let newRuntime = Platform.pathJoin(tmpExtract, "rockit", "runtime")
+        if fm.fileExists(atPath: newRuntime) {
+            // Find installed runtime dir
+            let binaryDir = (resolvedBinary as NSString).deletingLastPathComponent
+            let libRuntime = Platform.pathJoin(binaryDir, "..", "lib", "rockit", "runtime")
+            if fm.fileExists(atPath: libRuntime) {
+                if let files = try? fm.contentsOfDirectory(atPath: newRuntime) {
+                    for file in files {
+                        let src = Platform.pathJoin(newRuntime, file)
+                        let dst = Platform.pathJoin(libRuntime, file)
+                        try? fm.removeItem(atPath: dst)
+                        try fm.copyItem(atPath: src, toPath: dst)
+                    }
+                }
+            }
+        }
+
+        // Remove backup
+        try? fm.removeItem(atPath: backupPath)
+
+        print("Updated to rockit \(latestVersion)")
+    } catch {
+        // Restore backup on failure
+        if fm.fileExists(atPath: backupPath) {
+            try? fm.removeItem(atPath: resolvedBinary)
+            try? fm.moveItem(atPath: backupPath, toPath: resolvedBinary)
+        }
+        print("error: could not replace binary: \(error)")
+        print("  You may need to run with sudo (Unix) or as Administrator (Windows)")
+        exit(1)
+    }
+
+    // Cleanup
+    try? fm.removeItem(atPath: tmpArchive)
+    try? fm.removeItem(atPath: tmpExtract)
+}
+
 /// Parse a simple fuel.toml file into a dictionary of key-value pairs.
 func parseFuelToml(_ path: String) -> [String: String] {
     guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
@@ -1186,6 +1368,9 @@ case "init":
 case "test":
     let file = args.count >= 3 ? args[2] : nil
     testCommand(file: file)
+
+case "update":
+    updateCommand()
 
 case "version":
     print("rockit \(version)")
