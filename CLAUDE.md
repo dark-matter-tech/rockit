@@ -10,11 +10,13 @@ Rockit is NOT a wrapper around another language. It is its own language with its
 
 The compiler follows a standard self-hosting bootstrap:
 
-- **Stage 0 (current):** `command` written in Swift. Temporary. Its only purpose is to compile enough Rockit to reach Stage 1.
+- **Stage 0:** `command` written in Swift. Its purpose is to compile Stage 1.
 - **Stage 1:** `command` rewritten in Rockit. Compiled by the Stage 0 Swift compiler.
-- **Stage 2:** Stage 1 compiles its own source code. The Swift bootstrap is deleted. Rockit compiles Rockit.
+- **Stage 2:** Stage 1 compiles its own source code. Self-hosting verified — Stage 2 == Stage 3 bytecode.
 
-From Stage 2 onward, each new version of `command` is compiled by the previous version. Self-hosted. No external dependencies.
+From Stage 2 onward, each new version of `command` is compiled by the previous version. Self-hosted.
+
+**Current status:** Self-hosting achieved. All compiler phases complete. 539 unit tests passing.
 
 ## Ecosystem
 
@@ -55,45 +57,30 @@ Key language properties:
 .rok source → Lexer → Tokens → Parser → AST → Type Checker → Typed AST → MIR Lowering → MIR → Optimizer → Optimized MIR → Codegen → Bytecode
 ```
 
-### Phase 1: Lexer ✅ COMPLETE
-- Single-pass UTF-8 scanner
-- 130+ token types covering full Rockit grammar
-- Handles: all keywords, identifiers, int/float/hex/binary literals, string literals with interpolation and escape sequences, all operators, nestable block comments, significant newlines
-- Source location tracking for error reporting
-- 25+ unit tests
+All phases complete in both Stage 0 (Swift) and Stage 1 (Rockit):
 
-### Phase 2: Parser ✅ COMPLETE
-- Recursive descent parser
-- Produces AST from token stream
-- Handles: declarations (fun, val, var, class, data class, sealed class, enum, interface, object, actor, view, navigation, theme), expressions (binary, unary, call, member access, lambda, when, if, string interpolation), statements (return, break, continue, for, while, assignment), type annotations (nullable, generics, function types), annotations (@Capability, @State, @NoCycle)
-- Error recovery — don't stop at first error, synchronize and keep parsing
+### Phase 1: Lexer ✅
+130+ token types, string interpolation, nestable comments, significant newlines.
 
-### Phase 3: Type Checker ✅ COMPLETE
-- Full type inference
-- Null safety enforcement
-- Exhaustive `when` checking for sealed classes and enums
-- Generic type resolution with variance
-- Capability validation
+### Phase 2: Parser ✅
+Recursive descent. All declarations (fun, class, data class, sealed class, enum, interface, object, actor, view, navigation, theme, package), expressions (binary, unary, call, member access, lambda, when, if, string interpolation, await), statements, type annotations, annotations.
 
-### Phase 4: MIR Lowering ✅ COMPLETE
-- AST → Rockit Intermediate Representation
-- MIR is the stable contract layer
-- Platform-agnostic
+### Phase 3: Type Checker ✅
+Type inference, null safety, exhaustive `when`, generics with variance, suspend/await validation, actor isolation.
 
-### Phase 5: Optimizer ✅ COMPLETE
-- Dead code elimination
-- Inlining
-- Constant folding
-- Tree shaking
+### Phase 4: MIR Lowering ✅
+AST → MIR intermediate representation.
 
-### Phase 6: Codegen ✅ COMPLETE
-- MIR → bytecode for Rockit runtime
+### Phase 5: Structured Concurrency ✅
+- **Native codegen**: CPS coroutine transform (suspend functions → state machines), concurrent blocks with event loop + join counter
+- **Bytecode VM**: Cooperative scheduler, coroutine suspend/resume, concurrent block interleaving, actor message dispatch via mailbox, error propagation, cancellation
+- **Runtime**: Frame alloc/free, task scheduling, event loop (C runtime for native; Scheduler/Coroutine/ActorRuntime Swift classes for VM)
 
-### Phase 7: Runtime ✅ COMPLETE
-- ARC with cycle detector
-- Coroutine scheduler for structured concurrency
-- Actor message dispatch
-- Platform capability bridge
+### Phase 6: Codegen ✅
+MIR → bytecode (Stage 0 CodeGen.swift) and direct AST → bytecode (Stage 1 codegen.rok). Native codegen via LLVM IR (Stage 0 LLVMCodeGen.swift, Stage 1 llvmgen.rok).
+
+### Phase 7: Runtime ✅
+ARC with cycle detector, coroutine scheduler, actor message dispatch, platform capability bridge.
 
 ## Project Structure
 
@@ -115,22 +102,25 @@ RockitCompiler/
 │   │   ├── CodeGen.swift            # MIR → bytecode
 │   │   ├── VM.swift                 # Bytecode interpreter
 │   │   ├── Heap.swift               # Object heap (RockitObject)
-│   │   └── ...                      # 34 files total
+│   │   └── ...                      # 37+ files total
 │   └── RockitCLI/                   # CLI entry point
 │       └── main.swift               # command tool
 ├── Tests/
-│   └── RockitKitTests/              # 14 test files, 479+ tests
+│   └── RockitKitTests/              # 14+ test files, 539 tests
 ├── Stage1/                          # Self-hosting compiler in Rockit
 │   ├── lexer.rok                    # Stage 1 lexer
 │   ├── parser.rok                   # Stage 1 parser
 │   ├── typechecker.rok              # Stage 1 type checker
 │   ├── optimizer.rok                # Stage 1 optimizer
-│   ├── codegen.rok                  # Stage 1 codegen + main()
-│   ├── command.rok                  # Concatenated compiler (auto-gen)
-│   ├── command.rokb                 # Compiled bytecode
+│   ├── llvmgen.rok                  # Stage 1 LLVM native codegen (CPS coroutine transform)
+│   ├── codegen.rok                  # Stage 1 bytecode codegen + main()
+│   ├── command.rok                  # Concatenated compiler (auto-gen via build.sh)
+│   ├── command                      # Stage 1 native binary
 │   └── stdlib/rockit/               # Standard library modules
+├── Runtime/
+│   └── rockit_runtime.c             # C runtime (ARC, task scheduler, event loop, actor wrappers)
 └── Examples/
-    └── hello.rok                    # Test source file
+    └── test_f*.rok                  # 35+ feature test files
 ```
 
 RockitKit is a standalone library so it can be imported by other tools (editor plugins, LSP server, Fuel) without the CLI.
