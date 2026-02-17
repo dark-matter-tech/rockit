@@ -620,7 +620,7 @@ public final class CodeGen {
         }
         let methods = typeDecl.methods.map { pool.intern($0, kind: .methodName) }
         let parentIdx: UInt16? = typeDecl.parentType.map { pool.intern($0, kind: .typeName) }
-        return BytecodeTypeDecl(nameIndex: nameIdx, fields: fields, methods: methods, parentTypeIndex: parentIdx)
+        return BytecodeTypeDecl(nameIndex: nameIdx, fields: fields, methods: methods, parentTypeIndex: parentIdx, isActor: typeDecl.isActor)
     }
 
     // MARK: - Binary Serialization
@@ -658,6 +658,7 @@ public final class CodeGen {
             emitter.emitUInt16(UInt16(typeDecl.fields.count))
             emitter.emitUInt16(UInt16(typeDecl.methods.count))
             emitter.emitUInt16(typeDecl.parentTypeIndex ?? 0xFFFF)
+            emitter.emitByte(typeDecl.isActor ? 1 : 0)
             for (nameIdx, tag) in typeDecl.fields {
                 emitter.emitUInt16(nameIdx)
                 emitter.emitByte(tag.rawValue)

@@ -79,6 +79,7 @@ public final class BytecodeLoader {
             let methodCount = reader.readUInt16()
             let parentIdx = reader.readUInt16()
             let parentTypeIndex: UInt16? = parentIdx == 0xFFFF ? nil : parentIdx
+            let isActor = reader.readByte() != 0
             var fields: [(nameIndex: UInt16, typeTag: BytecodeTypeTag)] = []
             for _ in 0..<fieldCount {
                 let fNameIdx = reader.readUInt16()
@@ -90,7 +91,7 @@ public final class BytecodeLoader {
             for _ in 0..<methodCount {
                 methods.append(reader.readUInt16())
             }
-            types.append(BytecodeTypeDecl(nameIndex: nameIndex, fields: fields, methods: methods, parentTypeIndex: parentTypeIndex))
+            types.append(BytecodeTypeDecl(nameIndex: nameIndex, fields: fields, methods: methods, parentTypeIndex: parentTypeIndex, isActor: isActor))
         }
 
         // Functions

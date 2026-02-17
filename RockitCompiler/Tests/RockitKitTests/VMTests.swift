@@ -44,6 +44,24 @@ final class VMTests: XCTestCase {
         return output
     }
 
+    /// Compile and run using the scheduler-driven concurrent execution mode.
+    private func runConcurrentCapturing(_ source: String) throws -> [String] {
+        let module = compile(source)
+        var output: [String] = []
+        let builtins = BuiltinRegistry()
+        builtins.register(name: "println") { args in
+            output.append(args.map { $0.description }.joined(separator: " "))
+            return .unit
+        }
+        builtins.register(name: "print") { args in
+            output.append(args.map { $0.description }.joined(separator: " "))
+            return .unit
+        }
+        let vmWithCapture = VM(module: module, builtins: builtins)
+        try vmWithCapture.runConcurrent()
+        return output
+    }
+
     /// Compile and run, expecting no errors.
     private func runSuccessfully(_ source: String) throws {
         let module = compile(source)
@@ -836,5 +854,169 @@ final class VMTests: XCTestCase {
         }
         """)
         XCTAssertEqual(output, ["42"])
+    }
+
+    // MARK: - Scheduled Concurrency Tests (runConcurrent)
+
+    func testScheduledAwaitCall() throws {
+        let output = try runConcurrentCapturing("""
+        suspend fun compute(): Int {
+            return 42
+        }
+        suspend fun main(): Unit {
+            val result = await compute()
+            println(result)
+        }
+        """)
+        XCTAssertEqual(output, ["42"])
+    }
+
+    func testScheduledAwaitChain() throws {
+        let output = try runConcurrentCapturing("""
+        suspend fun inner(): Int {
+            return 10
+        }
+        suspend fun middle(): Int {
+            val x = await inner()
+            return x * 2
+        }
+        suspend fun main(): Unit {
+            val result = await middle()
+            println(result)
+        }
+        """)
+        XCTAssertEqual(output, ["20"])
+    }
+
+    func testScheduledAwaitMultiple() throws {
+        let output = try runConcurrentCapturing("""
+        suspend fun fetchA(): String {
+            return "hello"
+        }
+        suspend fun fetchB(): String {
+            return "world"
+        }
+        suspend fun main(): Unit {
+            val a = await fetchA()
+            val b = await fetchB()
+            println(a)
+            println(b)
+        }
+        """)
+        XCTAssertEqual(output, ["hello", "world"])
+    }
+
+    // MARK: - Concurrent Block Tests (runConcurrent)
+
+    func testConcurrentBlockInterleaving() throws {
+        let output = try runConcurrentCapturing("""
+        suspend fun taskA(): Int {
+            return 10
+        }
+        suspend fun taskB(): Int {
+            return 20
+        }
+        suspend fun main(): Unit {
+            concurrent {
+                val a = await taskA()
+                println(a)
+                val b = await taskB()
+                println(b)
+            }
+            println("done")
+        }
+        """)
+        XCTAssertTrue(output.contains("10"), "taskA result should appear")
+        XCTAssertTrue(output.contains("20"), "taskB result should appear")
+        XCTAssertEqual(output.last, "done", "done should be printed after concurrent block")
+    }
+
+    func testConcurrentBlockJoin() throws {
+        let output = try runConcurrentCapturing("""
+        suspend fun slow(): String {
+            return "finished"
+        }
+        suspend fun main(): Unit {
+            concurrent {
+                val r = await slow()
+                println(r)
+            }
+            println("after")
+        }
+        """)
+        XCTAssertEqual(output, ["finished", "after"])
+    }
+
+    // MARK: - Actor Message Passing Tests (runConcurrent)
+
+    func testActorMethodCall() throws {
+        let output = try runConcurrentCapturing("""
+        actor Counter {
+            var count: Int = 0
+            fun increment(): Unit {
+                count = count + 1
+            }
+            fun getCount(): Int {
+                return count
+            }
+        }
+        suspend fun main(): Unit {
+            val c = Counter()
+            c.increment()
+            c.increment()
+            c.increment()
+            println(c.getCount())
+        }
+        """)
+        XCTAssertEqual(output, ["3"])
+    }
+
+    func testActorSerialExecution() throws {
+        let output = try runConcurrentCapturing("""
+        actor Greeter {
+            var greeting: String = "hi"
+            fun setGreeting(g: String): Unit {
+                greeting = g
+            }
+            fun greet(): String {
+                return greeting
+            }
+        }
+        suspend fun main(): Unit {
+            val g = Greeter()
+            g.setGreeting("hello")
+            println(g.greet())
+        }
+        """)
+        XCTAssertEqual(output, ["hello"])
+    }
+
+    // MARK: - Error Propagation Tests (runConcurrent)
+
+    func testChildFailurePropagation() throws {
+        // A child that throws should propagate the error to the parent
+        let module = compile("""
+        suspend fun failing(): Int {
+            throw "child error"
+        }
+        suspend fun main(): Unit {
+            val r = await failing()
+            println(r)
+        }
+        """)
+        let builtins = BuiltinRegistry()
+        builtins.register(name: "println") { _ in .unit }
+        let vm = VM(module: module, builtins: builtins)
+        XCTAssertThrowsError(try vm.runConcurrent())
+    }
+
+    func testConcurrentModeNonAsyncStillWorks() throws {
+        // Programs without async should still work in runConcurrent mode
+        let output = try runConcurrentCapturing("""
+        fun main(): Unit {
+            println("sync")
+        }
+        """)
+        XCTAssertEqual(output, ["sync"])
     }
 }

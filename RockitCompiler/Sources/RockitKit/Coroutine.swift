@@ -127,6 +127,9 @@ public final class Coroutine {
     /// Whether cancellation has been requested.
     public private(set) var isCancellationRequested: Bool = false
 
+    /// Register to inject the resume value into when resumed from an await.
+    public var awaitDestRegister: UInt16?
+
     public init(
         id: CoroutineID,
         functionIndex: Int,

@@ -40,6 +40,18 @@ public final class VM {
     /// Parent type map: typeName → parentTypeName (for polymorphic dispatch).
     private var parentTypeMap: [String: String] = [:]
 
+    /// Actor type names for concurrency routing.
+    private var actorTypeNames: Set<String> = []
+
+    /// The currently executing coroutine (nil in synchronous mode).
+    private var currentCoroutine: Coroutine?
+
+    /// Actor runtime for message-passing concurrency.
+    private lazy var actorRuntime = ActorRuntime(scheduler: scheduler)
+
+    /// Maps heap object indices to actor IDs for actor detection at call sites.
+    private var actorObjectMap: [Int: ActorID] = [:]
+
     /// Exception handler stack for try/catch.
     private var exceptionHandlers: [(catchPC: Int, exceptionReg: UInt16, frameIndex: Int)] = []
 
@@ -98,6 +110,9 @@ public final class VM {
             if let parentIdx = t.parentTypeIndex {
                 parentTypeMap[typeName] = constantString(parentIdx)
             }
+            if t.isActor {
+                actorTypeNames.insert(typeName)
+            }
         }
     }
 
@@ -130,6 +145,81 @@ public final class VM {
 
         // Execute
         try executeLoop()
+    }
+
+    /// Run the module using the cooperative scheduler for structured concurrency.
+    /// Await calls actually suspend and resume via the Scheduler.
+    public func runConcurrent() throws {
+        guard let mainIdx = functionTable["main"] else {
+            throw VMError.unknownFunction(name: "main")
+        }
+
+        try initializeGlobals()
+
+        // Spawn root coroutine for main
+        scheduler.spawn(
+            functionIndex: mainIdx,
+            functionName: "main"
+        )
+
+        // Run scheduler loop
+        try scheduler.runToCompletion { [self] coroutine in
+            try self.executeCoroutine(coroutine)
+        }
+    }
+
+    /// Execute a single coroutine until it completes or suspends.
+    private func executeCoroutine(_ coroutine: Coroutine) throws {
+        currentCoroutine = coroutine
+
+        if let saved = coroutine.savedState {
+            // Resume: restore saved call stack
+            callStack.append(contentsOf: saved.callStack)
+            // Inject resume value into the destination register
+            if let resumeVal = saved.resumeValue,
+               let destReg = coroutine.awaitDestRegister,
+               !callStack.isEmpty {
+                callStack[callStack.count - 1].registers[Int(destReg)] = resumeVal
+                arc.retain(resumeVal)
+            }
+            coroutine.savedState = nil
+            coroutine.awaitDestRegister = nil
+        } else {
+            // Fresh start
+            let f = module.functions[coroutine.functionIndex]
+            var frame = CallFrame(
+                functionIndex: coroutine.functionIndex,
+                registerCount: Int(f.registerCount),
+                returnRegister: nil,
+                functionName: coroutine.functionName
+            )
+            for (i, arg) in coroutine.arguments.prefix(Int(f.parameterCount)).enumerated() {
+                frame.registers[i] = arg
+                arc.retain(arg)
+            }
+            callStack.append(frame)
+            coroutine.start()
+        }
+
+        do {
+            try executeLoop()
+        } catch {
+            // Propagate error: fail the coroutine and its parent
+            if let vmError = error as? VMError {
+                scheduler.fail(coroutine, with: vmError)
+            } else {
+                scheduler.fail(coroutine, with: .userException(message: error.localizedDescription))
+            }
+            currentCoroutine = nil
+            throw error
+        }
+
+        // If we get here and the coroutine is still running (not suspended or terminal), it completed
+        if case .running = coroutine.state {
+            scheduler.complete(coroutine, with: lastReturnValue)
+        }
+
+        currentCoroutine = nil
     }
 
     /// Run a specific function by name with arguments.
@@ -198,6 +288,13 @@ public final class VM {
 
     private func executeLoop() throws {
         while !callStack.isEmpty {
+            // Check for cancellation in coroutine mode
+            if let coro = currentCoroutine, coro.isCancellationRequested {
+                scheduler.cancel(coro)
+                callStack.removeAll()
+                return
+            }
+
             let frameIdx = callStack.count - 1
             let f = module.functions[callStack[frameIdx].functionIndex]
             let bytecode = f.bytecode
@@ -773,8 +870,7 @@ public final class VM {
 
     // MARK: - Await Call
 
-    /// Execute an await call — creates a child coroutine via the Scheduler,
-    /// runs it synchronously (Stage 0), and stores the result.
+    /// Execute an await call — either synchronously (run mode) or via scheduler (runConcurrent mode).
     private func executeAwaitCall(_ bytecode: [UInt8], frame frameIdx: Int) throws {
         let destReg = readUInt16(bytecode, frame: frameIdx)
         let funcIdx = readUInt16(bytecode, frame: frameIdx)
@@ -807,7 +903,34 @@ public final class VM {
             throw VMError.stackOverflow(depth: callStack.count)
         }
 
-        // Create a coroutine via the Scheduler for structured concurrency tracking
+        // --- Coroutine mode: spawn child, suspend parent ---
+        if let parentCoro = currentCoroutine {
+            let childCoro = scheduler.spawn(
+                functionIndex: targetIdx,
+                functionName: funcName,
+                arguments: args,
+                parent: parentCoro
+            )
+
+            // Track child in concurrent scope if active
+            if !concurrentScopes.isEmpty {
+                concurrentScopes[concurrentScopes.count - 1].spawnedCoroutines.append(childCoro)
+            }
+
+            // When child completes, resume parent with the result
+            childCoro.completionContinuation = { [weak self] result in
+                guard let self = self else { return }
+                self.scheduler.resume(parentCoro, with: result)
+            }
+
+            // Save parent state and suspend
+            parentCoro.awaitDestRegister = destReg != 0xFFFF ? destReg : nil
+            scheduler.suspend(parentCoro, callStack: callStack)
+            callStack.removeAll()
+            return
+        }
+
+        // --- Synchronous mode (unchanged) ---
         let coroutine = scheduler.spawn(
             functionIndex: targetIdx,
             functionName: funcName,
@@ -815,7 +938,6 @@ public final class VM {
         )
         coroutine.start()
 
-        // Execute synchronously (Stage 0 — cooperative, single-threaded)
         let targetFunc = module.functions[targetIdx]
         let returnReg: UInt16? = destReg != 0xFFFF ? destReg : nil
 
@@ -832,11 +954,8 @@ public final class VM {
         }
 
         callStack.append(newFrame)
-
-        // Execute the awaited function
         try executeLoop()
 
-        // Mark coroutine as completed in the scheduler
         let resultVal = lastReturnValue
         scheduler.complete(coroutine, with: resultVal)
     }
@@ -851,13 +970,16 @@ public final class VM {
         guard let scope = concurrentScopes.last, scope.scopeIdx == scopeIdx else {
             throw VMError.invalidBytecode(detail: "concurrent scope mismatch")
         }
-        // Execute all spawned coroutines sequentially (Stage 0 — single-threaded)
-        for coroutine in scope.spawnedCoroutines {
-            coroutine.start()
-            // The coroutine's function was already pushed onto the call stack
-            // by executeAwaitCall; here we just track them
-        }
         concurrentScopes.removeLast()
+
+        // Coroutine mode: wait for all children in this scope to complete
+        if let parentCoro = currentCoroutine, !parentCoro.allChildrenComplete {
+            scheduler.awaitChildren(parentCoro, callStack: callStack)
+            callStack.removeAll()
+            return
+        }
+
+        // Synchronous mode: coroutines already executed inline
     }
 
     // MARK: - Indirect Call
@@ -949,6 +1071,23 @@ public final class VM {
         let obj = callStack[frameIdx].registers[Int(objReg)]
         let methodName = constantString(methodIdx)
 
+        // Actor message routing: in coroutine mode, route actor calls through mailbox
+        if let parentCoro = currentCoroutine,
+           case .objectRef(let objId) = obj,
+           let actorId = actorObjectMap[objId.index] {
+            try executeActorCall(
+                actorId: actorId,
+                objectId: objId,
+                obj: obj,
+                methodName: methodName,
+                args: args,
+                destReg: destReg,
+                frameIdx: frameIdx,
+                parentCoro: parentCoro
+            )
+            return
+        }
+
         // Resolve the method: try runtime type first, walk parent chain, then bare name
         let resolvedName: String
         if case .objectRef(let objId) = obj,
@@ -1008,6 +1147,70 @@ public final class VM {
         }
     }
 
+    // MARK: - Actor Call
+
+    /// Route a method call on an actor through the mailbox.
+    /// Spawns a coroutine to process the message and suspends the caller.
+    private func executeActorCall(
+        actorId: ActorID,
+        objectId: ObjectID,
+        obj: Value,
+        methodName: String,
+        args: [Value],
+        destReg: UInt16,
+        frameIdx: Int,
+        parentCoro: Coroutine
+    ) throws {
+        let runtimeTypeName = arcHeap.typeName(of: objectId) ?? "Unknown"
+
+        // Walk type hierarchy to find the method
+        var currentType: String? = runtimeTypeName
+        var resolvedName: String? = nil
+        while let typeName = currentType {
+            let qualified = "\(typeName).\(methodName)"
+            if functionTable[qualified] != nil {
+                resolvedName = qualified
+                break
+            }
+            currentType = parentTypeMap[typeName]
+        }
+
+        guard let funcName = resolvedName, let funcIndex = functionTable[funcName] else {
+            throw VMError.unknownFunction(name: "\(runtimeTypeName).\(methodName)")
+        }
+
+        // Spawn a coroutine to execute the actor method
+        let childCoro = scheduler.spawn(
+            functionIndex: funcIndex,
+            functionName: funcName,
+            arguments: [obj] + args,
+            parent: parentCoro
+        )
+
+        // When child completes, resume parent with the result and finish mailbox processing
+        childCoro.completionContinuation = { [weak self] result in
+            guard let self = self else { return }
+            self.actorRuntime.finishProcessing(for: actorId)
+            self.scheduler.resume(parentCoro, with: result)
+        }
+
+        // Enqueue the message in the actor's mailbox
+        try actorRuntime.send(
+            to: actorId,
+            method: funcName,
+            arguments: [obj] + args,
+            senderCoroutine: parentCoro.id
+        )
+
+        // Dequeue immediately (actor processes one message at a time)
+        _ = actorRuntime.processNext(for: actorId)
+
+        // Suspend the caller
+        parentCoro.awaitDestRegister = destReg != 0xFFFF ? destReg : nil
+        scheduler.suspend(parentCoro, callStack: callStack)
+        callStack.removeAll()
+    }
+
     // MARK: - Object Management (ARC-backed)
 
     private func createObject(typeName: String, args: [Value]) -> ObjectID {
@@ -1037,6 +1240,12 @@ public final class VM {
         // Retain any object references stored as fields
         for fieldValue in fields.values {
             arc.retain(fieldValue)
+        }
+
+        // Register actor instances for message-passing dispatch
+        if actorTypeNames.contains(typeName) {
+            let actorInstance = actorRuntime.createActor(typeName: typeName, objectID: id)
+            actorObjectMap[id.index] = actorInstance.id
         }
 
         return id

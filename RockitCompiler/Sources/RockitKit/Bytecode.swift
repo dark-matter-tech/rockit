@@ -251,13 +251,15 @@ public struct BytecodeTypeDecl {
     public let fields: [(nameIndex: UInt16, typeTag: BytecodeTypeTag)]
     public let methods: [UInt16]
     public let parentTypeIndex: UInt16?
+    public let isActor: Bool
 
     public init(nameIndex: UInt16, fields: [(nameIndex: UInt16, typeTag: BytecodeTypeTag)], methods: [UInt16],
-                parentTypeIndex: UInt16? = nil) {
+                parentTypeIndex: UInt16? = nil, isActor: Bool = false) {
         self.nameIndex = nameIndex
         self.fields = fields
         self.methods = methods
         self.parentTypeIndex = parentTypeIndex
+        self.isActor = isActor
     }
 }
 
