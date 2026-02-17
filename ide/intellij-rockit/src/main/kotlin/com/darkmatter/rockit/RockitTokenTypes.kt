@@ -130,6 +130,7 @@ object RockitTokenTypes {
     // --- Identifier ---
     @JvmField val IDENTIFIER = RockitTokenType("IDENTIFIER")
     @JvmField val BOOLEAN_IDENTIFIER = RockitTokenType("BOOLEAN_IDENTIFIER")
+    @JvmField val OPTIONAL_IDENTIFIER = RockitTokenType("OPTIONAL_IDENTIFIER")
     @JvmField val FUNCTION_CALL = RockitTokenType("FUNCTION_CALL")
     @JvmField val BUILTIN_TYPE = RockitTokenType("BUILTIN_TYPE")
     @JvmField val BUILTIN_FUNCTION = RockitTokenType("BUILTIN_FUNCTION")

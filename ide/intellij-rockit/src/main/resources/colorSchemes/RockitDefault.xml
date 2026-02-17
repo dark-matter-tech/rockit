@@ -64,6 +64,13 @@
         </value>
     </option>
 
+    <!-- Optional identifiers: val name: String? — dark cyan -->
+    <option name="ROCKIT_OPTIONAL_IDENTIFIER">
+        <value>
+            <option name="FOREGROUND" value="006b75"/>
+        </value>
+    </option>
+
     <!-- Function calls — dark gold -->
     <option name="ROCKIT_FUNCTION_CALL">
         <value>

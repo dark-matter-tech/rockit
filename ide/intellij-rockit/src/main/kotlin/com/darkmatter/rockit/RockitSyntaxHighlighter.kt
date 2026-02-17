@@ -85,6 +85,14 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
             BOOLEAN_LITERAL
         )
 
+        // Optional identifiers: val name: String? — softer cyan to associate with ? operator
+        @JvmField
+        @Suppress("DEPRECATION")
+        val OPTIONAL_IDENTIFIER = createTextAttributesKey(
+            "ROCKIT_OPTIONAL_IDENTIFIER",
+            attrs(JBColor(Color(0x00, 0x6B, 0x75), Color(0x6B, 0xC9, 0xD4)))
+        )
+
         // Function calls: identifier followed by ( — yellow
         @JvmField
         @Suppress("DEPRECATION")
@@ -234,6 +242,7 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
         private val OPTIONAL_OPERATOR_KEYS = arrayOf(OPTIONAL_OPERATOR)
         private val FORCE_UNWRAP_KEYS = arrayOf(FORCE_UNWRAP)
         private val BOOLEAN_IDENTIFIER_KEYS = arrayOf(BOOLEAN_IDENTIFIER)
+        private val OPTIONAL_IDENTIFIER_KEYS = arrayOf(OPTIONAL_IDENTIFIER)
         private val FUNCTION_CALL_KEYS = arrayOf(FUNCTION_CALL)
         private val BUILTIN_TYPE_KEYS = arrayOf(BUILTIN_TYPE)
         private val BUILTIN_FUNCTION_KEYS = arrayOf(BUILTIN_FUNCTION)
@@ -301,6 +310,9 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
 
             // Boolean-prefixed identifiers
             RockitTokenTypes.BOOLEAN_IDENTIFIER -> BOOLEAN_IDENTIFIER_KEYS
+
+            // Optional identifiers (val name: String?)
+            RockitTokenTypes.OPTIONAL_IDENTIFIER -> OPTIONAL_IDENTIFIER_KEYS
 
             // Function calls
             RockitTokenTypes.FUNCTION_CALL -> FUNCTION_CALL_KEYS
