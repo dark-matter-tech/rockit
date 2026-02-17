@@ -2,7 +2,28 @@
 
 The Rockit language compiler. Self-hosting — Rockit compiles itself.
 
-> **Status:** All phases complete. 521+ tests passing. Self-hosting bootstrap verified (Stage 2 == Stage 3).
+> **Status:** All phases complete. 539+ tests passing. Self-hosting bootstrap verified (Stage 2 == Stage 3).
+
+---
+
+## Install
+
+**macOS / Linux (one-liner):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.ps1 | iex
+```
+
+The installer downloads a prebuilt binary if available, or builds from source as a fallback.
+
+**Update:**
+```bash
+rockit update
+```
 
 ---
 
@@ -29,6 +50,9 @@ rockit run Examples/hello.rok
 # Compile to native binary
 rockit build-native Examples/hello.rok
 
+# Compile to native and run
+rockit run-native Examples/hello.rok
+
 # Parse and dump AST
 rockit parse Examples/hello.rok --dump-ast
 
@@ -38,8 +62,11 @@ rockit check Examples/hello.rok
 # Compile to bytecode
 rockit build Examples/hello.rok
 
+# Emit LLVM IR
+rockit emit-llvm Examples/hello.rok
+
 # Start REPL
-rockit repl
+rockit launch
 
 # Create a new project
 rockit init myproject
@@ -47,8 +74,11 @@ rockit init myproject
 # Run tests
 rockit test
 
+# Update to latest version
+rockit update
+
 # Version
-rockit --version
+rockit version
 ```
 
 ## Test
@@ -57,7 +87,7 @@ rockit --version
 swift test
 ```
 
-521+ test cases covering the full compiler pipeline: lexer, parser, type checker, MIR, optimizer, codegen, VM, collections, strings, ARC, coroutines, actors, file I/O, and bytecode serialization.
+539+ test cases covering the full compiler pipeline: lexer, parser, type checker, MIR, optimizer, codegen, VM, collections, strings, ARC, coroutines, actors, structured concurrency, file I/O, and bytecode serialization.
 
 ---
 
@@ -76,9 +106,11 @@ RockitCompiler/
 │   │   ├── CodeGen.swift   # MIR → bytecode
 │   │   ├── LLVMCodeGen.swift  # MIR → LLVM IR → native
 │   │   ├── VM.swift        # Bytecode interpreter
-│   │   └── ...             # 34 files total
+│   │   ├── Scheduler.swift # Coroutine scheduler
+│   │   ├── Coroutine.swift # Coroutine state machine
+│   │   └── ...             # 37+ files total
 │   └── RockitCLI/          # CLI entry point
-├── Tests/                  # 521+ tests
+├── Tests/                  # 539+ tests
 ├── Runtime/                # C runtime (ARC, actors, coroutines)
 ├── Stage1/                 # Self-hosting compiler in Rockit
 │   ├── command.rok         # Concatenated compiler source

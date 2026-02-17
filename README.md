@@ -8,7 +8,7 @@ Built by [Dark Matter Tech](https://github.com/Dark-Matter).
 
 ## Status
 
-The compiler is **self-hosting** — Rockit compiles itself. All compiler phases are complete and 521+ tests pass across the full pipeline.
+The compiler is **self-hosting** — Rockit compiles itself. All compiler phases are complete and 539+ tests pass across the full pipeline.
 
 | Component | Status |
 |-----------|--------|
@@ -19,8 +19,9 @@ The compiler is **self-hosting** — Rockit compiles itself. All compiler phases
 | Optimizer | Complete |
 | Codegen (bytecode + native) | Complete |
 | Runtime (ARC, actors, coroutines) | Complete |
+| Structured concurrency (VM) | Complete |
 | Self-hosting bootstrap | Complete |
-| IDE plugin (JetBrains) | Available |
+| Editor support | VS Code, JetBrains, Vim/Neovim |
 
 ---
 
@@ -28,22 +29,30 @@ The compiler is **self-hosting** — Rockit compiles itself. All compiler phases
 
 ### Install
 
-**macOS / Linux:**
+**macOS / Linux (one-liner):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.ps1 | iex
+```
+
+The installer downloads a prebuilt binary if available, or builds from source as a fallback.
+
+**Or build manually:**
 ```bash
 git clone https://github.com/Dark-Matter/moon.git
 cd moon/RockitCompiler
 make release && sudo make install
 ```
 
-**Windows:**
-```powershell
-git clone https://github.com/Dark-Matter/moon.git
-cd moon\RockitCompiler
-swift build -c release
-copy .build\release\rockit.exe %LOCALAPPDATA%\Rockit\bin\
-```
+### Update
 
-See [INSTALL.md](INSTALL.md) for full installation instructions, Docker, and IDE setup.
+```bash
+rockit update
+```
 
 ### Hello World
 
@@ -116,6 +125,7 @@ navigation AppRouter {
 - **String interpolation** (`"Hello, ${name}"`)
 - **ARC memory model** with compile-time cycle analysis — no garbage collector
 - **Actors** for thread-safe concurrent objects
+- **Structured concurrency** with `suspend`, `async`, `await`, `concurrent`
 - **Views** for declarative UI components
 - **Themes** and **styles** for type-safe styling
 
@@ -134,26 +144,55 @@ navigation AppRouter {
 
 ---
 
-## IDE Support
+## Editor Support
+
+All editors share a single canonical syntax definition (`ide/shared/rockit-language.json`). Add a keyword once, regenerate, and every editor updates.
+
+### VS Code
+
+Full extension with syntax highlighting, 25+ snippets, bracket matching, and auto-close pairs.
+
+**Install from source:**
+```bash
+cd ide/vscode
+# Install with: code --install-extension .
+# Or copy to ~/.vscode/extensions/rockit-lang-0.1.0/
+```
 
 ### JetBrains (IntelliJ IDEA, WebStorm, CLion, etc.)
 
-The **Rockit Language Support** plugin provides:
-
-- Syntax highlighting with distinct colors for keywords, types, strings, annotations
-- Rockit-specific keyword highlighting (`view`, `actor`, `suspend`, `async`)
-- Code folding for functions, classes, comments, and import groups
-- Brace matching, comment toggling, auto-close quotes
-- Xcode/Swift-inspired color palette (dark and light themes)
-- Configurable via Settings > Editor > Color Scheme > Rockit
+Full plugin with JFlex lexer, syntax highlighting, code folding, brace matching, and configurable Xcode/Swift-inspired color themes.
 
 **Install:** Settings > Plugins > gear icon > Install Plugin from Disk > select `intellij-rockit-0.1.0.zip`
 
-Build from source:
 ```bash
 cd ide/intellij-rockit
 ./gradlew buildPlugin
 # Output: build/distributions/intellij-rockit-0.1.0.zip
+```
+
+### Vim / Neovim
+
+Syntax highlighting and filetype detection.
+
+**Install manually:**
+```bash
+cp ide/vim/syntax/rockit.vim ~/.vim/syntax/
+cp ide/vim/ftdetect/rockit.vim ~/.vim/ftdetect/
+```
+
+**Or with a plugin manager (e.g. vim-plug):**
+```vim
+Plug 'Dark-Matter/moon', { 'rtp': 'ide/vim' }
+```
+
+### Regenerating Editor Files
+
+When you modify `rockit-language.json`, regenerate all editor syntax files:
+
+```bash
+cd ide/shared
+python3 generate.py
 ```
 
 ---
@@ -163,15 +202,18 @@ cd ide/intellij-rockit
 ```
 moon/
 ├── RockitCompiler/
-│   ├── Sources/RockitKit/       # Core compiler library (34 files)
+│   ├── Sources/RockitKit/       # Core compiler library (37+ files)
 │   ├── Sources/RockitCLI/       # CLI entry point
-│   ├── Tests/                   # 521+ tests
+│   ├── Tests/                   # 539+ tests
 │   ├── Runtime/                 # C runtime (ARC, actors, coroutines)
 │   ├── Stage1/                  # Self-hosting compiler in Rockit
 │   └── Examples/                # Example .rok files
 ├── ide/
+│   ├── shared/                  # Canonical syntax definition + generator
+│   ├── vscode/                  # VS Code extension
+│   ├── vim/                     # Vim/Neovim plugin
 │   └── intellij-rockit/         # JetBrains IDE plugin
-├── INSTALL.md                   # Installation guide
+├── .github/workflows/           # CI + release automation
 └── CLAUDE.md                    # Compiler specification
 ```
 
@@ -212,8 +254,25 @@ sudo make install
 make install PREFIX=$HOME/.local
 
 # Verify
-rockit --version
+rockit version
 rockit run Examples/hello.rok
+```
+
+---
+
+## CLI Commands
+
+```
+rockit run <file>            Execute a .rok or .rokb file
+rockit build <file.rok>      Compile to bytecode (.rokb)
+rockit build-native <file>   Compile to native executable via LLVM
+rockit run-native <file>     Compile to native and execute
+rockit emit-llvm <file>      Emit LLVM IR (.ll) for inspection
+rockit launch                Start interactive REPL
+rockit init [name]           Create a new Rockit project
+rockit test [file]           Run tests
+rockit update                Update rockit to the latest version
+rockit version               Print version
 ```
 
 ---
