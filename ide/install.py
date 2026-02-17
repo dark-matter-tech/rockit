@@ -510,27 +510,6 @@ BLOCK_DIGITS = {
     '1': ['   \u2588\u2588 ', '  \u2588\u2588\u2588 ', '   \u2588\u2588 ', '   \u2588\u2588 ', ' \u2588\u2588\u2588\u2588\u2588'],
 }
 
-# Top-down rocket (seen from above, bigger and more detailed)
-ROCKET_ABOVE = {
-    'lines': [
-        '  /\\',
-        ' /  \\',
-        '| [] |',
-        '| .. |',
-        '| :: |',
-        ' \\  /',
-        '  \\/',
-    ],
-    'colors': [
-        [(2, 4, BRED)],
-        [(1, 5, BRED)],
-        [(0, 6, WHITE), (2, 4, CYAN)],
-        [(0, 6, WHITE), (2, 4, BBLUE)],
-        [(0, 6, WHITE), (2, 4, BRED)],
-        [(1, 5, BYELLOW)],
-        [(2, 4, BYELLOW)],
-    ],
-}
 
 
 def _generate_earth_surface(w=80, h=200):
@@ -864,7 +843,7 @@ def scene_orbit_install(screen, targets, install_fn):
 
 
 def scene_tli(screen, installed):
-    """TLI burn. Capsule flying right with burn exhaust, speed streaks."""
+    """TLI burn. Rocket flying upward with exhaust below, vertical star streaks."""
     screen.invalidate()
 
     for f in range(50):
@@ -872,30 +851,33 @@ def scene_tli(screen, installed):
         screen.clear()
         draw_stars(screen, STAR_MAP, 250 + f)
 
-        # Star streaks (horizontal dashes for speed feel)
+        # Vertical star streaks (falling downward = rocket flying up fast)
         rng = random.Random(f + 500)
-        streak_count = min(f // 3, 8)
+        streak_count = min(f // 3, 10)
         for _ in range(streak_count):
-            sy = rng.randint(0, 39)
-            sx = rng.randint(5, 75)
-            length = rng.randint(2, 4 + f // 8)
-            for dx in range(length):
-                if 0 <= sx + dx < 80:
-                    screen.put(sx + dx, sy, '\u2500', DIM)
+            sx = rng.randint(0, 79)
+            sy = rng.randint(0, 35)
+            length = rng.randint(2, 3 + f // 6)
+            for dy in range(length):
+                if 0 <= sy + dy < 40:
+                    screen.put(sx, sy + dy, '\u2502', DIM)
 
-        # Earth behind (left side, shrinking)
+        # Earth below (shrinking as we leave)
         t = f / 50.0
         if t < 0.2:
-            screen.draw_sprite_solid(3, 32, EARTH_SMALL)
+            screen.draw_sprite_solid(30, 34, EARTH_SMALL)
         elif t < 0.45:
-            screen.put(5, 36, 'o', BCYAN)
+            screen.put(35, 38, 'o', BCYAN)
         elif t < 0.65:
-            screen.put(4, 38, '.', BCYAN)
+            screen.put(35, 39, '.', BCYAN)
 
-        # Rocket with exhaust
-        screen.draw_sprite_solid(34, 5, ROCKET_FULL)
-        ei = 2 + (f % 2)
-        screen.draw_sprite(34, 25, EXHAUST_FRAMES[ei])
+        # Rocket flying upward (nose up) — centered on screen
+        rx, ry = 34, 2
+        screen.draw_sprite_solid(rx, ry, ROCKET_FULL)
+
+        # Exhaust below rocket (engine bell at row 19 of sprite)
+        ei = min(2 + (f % 2), 3)
+        screen.draw_sprite(rx, ry + 20, EXHAUST_FRAMES[ei])
 
         screen.text(66, 0, 'TLI BURN', DIM)
         screen.render()
@@ -1067,6 +1049,82 @@ def scene_on_the_moon(screen, installed):
         screen.render()
         frame_sleep(t0)
 
+    time.sleep(3.0)
+
+
+def scene_explosion(screen):
+    """RUD — Rapid Unscheduled Disassembly. All installs failed."""
+    screen.invalidate()
+    rocket_x, rocket_y = 34, 10
+
+    # Brief normal flight before the anomaly
+    for f in range(15):
+        t0 = time.time()
+        screen.clear()
+        draw_stars(screen, STAR_MAP, 200 + f)
+        screen.draw_sprite_solid(rocket_x, rocket_y, ROCKET_FULL)
+        ei = min(2 + (f % 2), 3)
+        screen.draw_sprite(rocket_x, rocket_y + 20, EXHAUST_FRAMES[ei])
+        screen.text(68, 0, 'ANOMALY', DIM)
+        screen.render()
+        frame_sleep(t0)
+
+    # Shake + warning
+    for f in range(10):
+        t0 = time.time()
+        screen.clear()
+        draw_stars(screen, STAR_MAP, 215 + f)
+        rx = rocket_x + random.choice([-2, -1, 0, 1, 2])
+        ry = rocket_y + random.choice([-1, 0, 1])
+        screen.draw_sprite_solid(rx, ry, ROCKET_FULL)
+        screen.text(30, 2, '! ANOMALY DETECTED !', BRED)
+        screen.text(68, 0, 'ANOMALY', BRED)
+        screen.render()
+        frame_sleep(t0)
+
+    # Explosion — expanding debris
+    cx, cy = 40, 19  # center of explosion
+    debris_chars = ['*', '#', '@', '%', '&', '+', '!', '/', '\\', '|', '-']
+    for f in range(30):
+        t0 = time.time()
+        screen.clear()
+        draw_stars(screen, STAR_MAP, 225 + f)
+
+        # Flash in first frames
+        if f < 3:
+            flash_ch = '\u2588' if f < 2 else '\u2592'
+            flash_col = BYELLOW if f == 0 else BRED if f == 1 else YELLOW
+            radius = 3 + f * 4
+            for dy in range(-radius, radius + 1):
+                for dx in range(-radius * 2, radius * 2 + 1):
+                    if dx * dx // 4 + dy * dy <= radius * radius:
+                        screen.put(cx + dx, cy + dy, flash_ch, flash_col)
+
+        # Debris particles fly outward
+        rng = random.Random(f * 13 + 42)
+        spread = 2 + f * 1.5
+        for _ in range(20 + f * 3):
+            angle = rng.uniform(0, 6.28)
+            dist = rng.uniform(0, spread)
+            px = int(cx + math.cos(angle) * dist * 2)
+            py = int(cy + math.sin(angle) * dist)
+            if 0 <= px < 80 and 0 <= py < 40:
+                ch = rng.choice(debris_chars)
+                col = rng.choice([BRED, BYELLOW, YELLOW, WHITE, GRAY])
+                if dist > spread * 0.7:
+                    col = rng.choice([GRAY, DIM])
+                screen.put(px, py, ch, col)
+
+        if f > 10:
+            screen.text(25, 2, 'MISSION FAILURE', BRED)
+        if f > 18:
+            screen.text(22, 4, 'Installation unsuccessful.', DIM)
+
+        screen.text(68, 0, 'FAILURE', BRED)
+        screen.render()
+        frame_sleep(t0)
+
+    # Hold on failure screen
     time.sleep(3.0)
 
 
@@ -1290,6 +1348,17 @@ def main():
     scene_countdown(screen)
     scene_launch(screen)
     installed = scene_orbit_install(screen, targets, install_target)
+
+    if not installed:
+        # All installs failed — RUD
+        scene_explosion(screen)
+        _write(SHOW_CURSOR + ALT_SCREEN_OFF)
+        print()
+        print(f"  {BRED}Installation failed.{RESET}")
+        print(f"  No editors were successfully configured.")
+        print()
+        return
+
     scene_tli(screen, installed)
     scene_lunar_approach(screen, installed)
     scene_descent(screen, installed)
