@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#6E6E6E" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
   <!-- Rocket body -->
-  <path d="M8 1.5 C8 1.5 5 4.5 5 9 L5 11 L8 13 L11 11 L11 9 C11 4.5 8 1.5 8 1.5Z"/>
+  <path d="M8 1C8 1 4.5 4.5 4.5 9.5L4.5 11L8 13.5L11.5 11L11.5 9.5C11.5 4.5 8 1 8 1Z" fill="#6E6E6E"/>
   <!-- Porthole -->
-  <circle cx="8" cy="7" r="1.2"/>
+  <circle cx="8" cy="7" r="1.3" fill="#FFFFFF"/>
   <!-- Left fin -->
-  <path d="M5 9.5 L3 11.5 L4 12.5 L5 11"/>
+  <path d="M4.5 9.5L2.5 11.5L3.5 12.5L4.5 11Z" fill="#8E8E8E"/>
   <!-- Right fin -->
-  <path d="M11 9.5 L13 11.5 L12 12.5 L11 11"/>
+  <path d="M11.5 9.5L13.5 11.5L12.5 12.5L11.5 11Z" fill="#8E8E8E"/>
   <!-- Exhaust -->
-  <path d="M6.5 13 L8 15 L9.5 13"/>
+  <path d="M6.5 13L8 15.5L9.5 13Z" fill="#E07030"/>
 </svg>
