@@ -1906,6 +1906,22 @@ fun compileStmt(fs: Map, node: Map): Unit {
                 emitBinaryOp(fs, actualOp, resultReg, currentReg, valueReg)
                 emitStore(fs, slotInt, resultReg)
             }
+        } else if (targetKind == "member") {
+            val objReg = compileExpr(fs, mapGet(target, "object"))
+            val fieldName = toString(mapGet(target, "name"))
+            val currentReg = allocReg(fs)
+            emitGetField(fs, currentReg, objReg, fieldName)
+            val valueReg = compileExpr(fs, mapGet(node, "value"))
+            val op = toString(mapGet(node, "op"))
+            var actualOp: String = "+"
+            if (op == "+=") { actualOp = "+" }
+            if (op == "-=") { actualOp = "-" }
+            if (op == "*=") { actualOp = "*" }
+            if (op == "/=") { actualOp = "/" }
+            if (op == "%=") { actualOp = "%" }
+            val resultReg = allocReg(fs)
+            emitBinaryOp(fs, actualOp, resultReg, currentReg, valueReg)
+            emitSetField(fs, objReg, fieldName, resultReg)
         }
         return
     }
