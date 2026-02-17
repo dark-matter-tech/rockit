@@ -1586,6 +1586,8 @@ fun parseProgram(p: Map): Map {
             listAppend(decls, parseStatement(p))
         } else if (tt == "KW_IMPORT") {
             listAppend(decls, parseImport(p))
+        } else if (tt == "KW_PACKAGE") {
+            listAppend(decls, parsePackage(p))
         } else if (tt == "KW_TYPEALIAS") {
             listAppend(decls, parseTypeAlias(p))
         } else {
@@ -1618,6 +1620,19 @@ fun parseImport(p: Map): Map {
     return node
 }
 
+fun parsePackage(p: Map): Map {
+    val line = peekLine(p)
+    val col = peekCol(p)
+    expect(p, "KW_PACKAGE")
+    var path: String = toString(mapGet(expect(p, "IDENT"), "value"))
+    while (matchToken(p, "DOT")) {
+        path = stringConcat(path, stringConcat(".", toString(mapGet(expect(p, "IDENT"), "value"))))
+    }
+    val node = makeNodeAt("package", line, col)
+    mapPut(node, "path", path)
+    return node
+}
+
 // ---------------------------------------------------------------------------
 // AST printing
 // ---------------------------------------------------------------------------
@@ -1634,6 +1649,11 @@ fun dumpAST(node: Map, indent: Int): Unit {
             dumpAST(listGet(decls, i), indent + 2)
             i = i + 1
         }
+        return
+    }
+
+    if (kind == "package") {
+        println(stringConcat(pad, stringConcat("Package: ", toString(mapGet(node, "path")))))
         return
     }
 

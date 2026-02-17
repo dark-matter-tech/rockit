@@ -1,0 +1,8 @@
+// Test: package declaration parsing
+
+package com.darkmatter.test
+
+fun main(): Unit {
+    println("package decl parsed")
+    println("com.darkmatter.test")
+}
