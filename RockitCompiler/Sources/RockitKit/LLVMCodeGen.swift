@@ -266,6 +266,16 @@ public final class LLVMCodeGen {
         // Append function bodies
         lines.append(contentsOf: functionBodies)
 
+        // TBAA metadata for alias analysis — lets LLVM hoist list struct
+        // field loads (size, data pointer) out of loops that store to elements
+        lines.append("")
+        lines.append("; TBAA metadata")
+        lines.append("!0 = !{!\"Rockit TBAA\"}")
+        lines.append("!1 = !{!\"list_struct_field\", !0}")
+        lines.append("!2 = !{!\"list_element\", !0}")
+        lines.append("!3 = !{!1, !1, i64 0}")
+        lines.append("!4 = !{!2, !2, i64 0}")
+
         return lines.joined(separator: "\n")
     }
 
@@ -2026,6 +2036,21 @@ public final class LLVMCodeGen {
             return emitMapOf(dest: dest, args: args)
         }
 
+        // Inline toInt() for known integer arguments — avoids runtime call
+        if function == "toInt", let dest = dest, args.count == 1 {
+            let arg = args[0]
+            if knownIntTemps.contains(arg) || registerTypes[arg] == "i64" {
+                let tmp = nextSSA()
+                let argType = typeOf(arg)
+                var lines: [String] = []
+                lines.append("\(tmp) = load \(argType), ptr \(addrOf(arg))")
+                lines.append(storeToTemp(dest, value: tmp, type: "i64"))
+                registerTypes[dest] = "i64"
+                knownIntTemps.insert(dest)
+                return lines
+            }
+        }
+
         var lines: [String] = []
 
         // ARC: for heap-allocating calls, save old value BEFORE loading args
@@ -2347,7 +2372,7 @@ public final class LLVMCodeGen {
         let sizeAddr = nextSSA()
         lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
         let size = nextSSA()
-        lines.append("\(size) = load i64, ptr \(sizeAddr)")
+        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
         let ok = nextSSA()
         lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
         let okLabel = "list.ok.\(labelCounter)"
@@ -2364,11 +2389,11 @@ public final class LLVMCodeGen {
         let dataAddr = nextSSA()
         lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
         let dataPtr = nextSSA()
-        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr)")
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
         let elemAddr = nextSSA()
         lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
         let result = nextSSA()
-        lines.append("\(result) = load i64, ptr \(elemAddr)")
+        lines.append("\(result) = load i64, ptr \(elemAddr), !tbaa !4")
 
         lines.append(storeToTemp(dest, value: result, type: "i64"))
         registerTypes[dest] = "i64"
@@ -2388,7 +2413,7 @@ public final class LLVMCodeGen {
         let sizeAddr = nextSSA()
         lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
         let size = nextSSA()
-        lines.append("\(size) = load i64, ptr \(sizeAddr)")
+        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
         let ok = nextSSA()
         lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
         let okLabel = "list.ok.\(labelCounter)"
@@ -2405,10 +2430,10 @@ public final class LLVMCodeGen {
         let dataAddr = nextSSA()
         lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
         let dataPtr = nextSSA()
-        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr)")
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
         let elemAddr = nextSSA()
         lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
-        lines.append("store i64 \(val), ptr \(elemAddr)")
+        lines.append("store i64 \(val), ptr \(elemAddr), !tbaa !4")
 
         return lines
     }
@@ -2422,7 +2447,7 @@ public final class LLVMCodeGen {
         let sizeAddr = nextSSA()
         lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
         let result = nextSSA()
-        lines.append("\(result) = load i64, ptr \(sizeAddr)")
+        lines.append("\(result) = load i64, ptr \(sizeAddr), !tbaa !3")
 
         lines.append(storeToTemp(dest, value: result, type: "i64"))
         registerTypes[dest] = "i64"
