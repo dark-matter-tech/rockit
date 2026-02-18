@@ -123,10 +123,10 @@ The native compiler includes several optimizations that make Rockit competitive 
 | Benchmark | Rockit | Node.js | Go |
 |-----------|--------|---------|-----|
 | **Prime sieve** (primes to 1M) | **0.011s** | 0.07s | 0.011s |
-| **Matrix multiply** (200x200) | **0.027s** | 0.08s | 0.017s |
+| **Matrix multiply** (200x200) | **0.012s** | 0.08s | 0.017s |
 | **Quicksort** (500K integers) | **0.038s** | 0.18s | 0.041s |
 
-Rockit outperforms Node.js across all benchmarks (4-7x faster). Rockit matches or beats Go on 4 out of 5 benchmarks — fibonacci, object allocation, quicksort, and prime sieve. The remaining gap on matrix multiply is due to Go's single-indirection slice headers vs Rockit's heap-allocated list structs in an O(n³) inner loop.
+Rockit outperforms Node.js across all benchmarks (4-7x faster). Rockit matches or beats Go on all 5 practical/technical benchmarks — fibonacci, object allocation, prime sieve, matrix multiply, and quicksort.
 
 Run the full suite: `bash Benchmarks/run_benchmarks.sh`
 

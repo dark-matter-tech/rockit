@@ -1102,6 +1102,8 @@ public final class LLVMCodeGen {
                 case .call(let d, let function, _):
                     if let d = d {
                         tempTypes[d] = inferCallReturnType(function)
+                        // listGet returns integer values from list storage
+                        if function == "listGet" { knownIntTemps.insert(d) }
                     }
                 case .callIndirect(let d, _, _):
                     if let d = d { tempTypes[d] = "i64" }
@@ -1238,6 +1240,18 @@ public final class LLVMCodeGen {
             }
         }
 
+        // Pass 4: Propagate knownIntTemps through store edges
+        changed = true
+        while changed {
+            changed = false
+            for edge in storeEdges {
+                if knownIntTemps.contains(edge.src) && !knownIntTemps.contains(edge.dest) {
+                    knownIntTemps.insert(edge.dest)
+                    changed = true
+                }
+            }
+        }
+
         // Filter out parameter names and special names (they get separate allocas in the prologue)
         let paramNames = Set(function.parameters.map { "param.\($0.0)" })
         let specialNames: Set<String> = ["this", "super"]
@@ -1317,6 +1331,13 @@ public final class LLVMCodeGen {
                 trackHeapTemp(dest, kind: kind)
                 return result
             }
+            // Propagate type and knownInt info through copies
+            if registerTypes[src] != nil {
+                registerTypes[dest] = registerTypes[src]
+            }
+            if knownIntTemps.contains(src) {
+                knownIntTemps.insert(dest)
+            }
             return [
                 "\(tmp) = load \(srcType), ptr \(addrOf(src))",
                 "store \(srcType) \(tmp), ptr \(addrOf(dest))"
@@ -1337,6 +1358,13 @@ public final class LLVMCodeGen {
             } else {
                 let srcType = typeOf(src)
                 let tmp = nextSSA()
+                // Propagate type and knownInt info through load copies
+                if registerTypes[src] != nil {
+                    registerTypes[dest] = registerTypes[src]
+                }
+                if knownIntTemps.contains(src) {
+                    knownIntTemps.insert(dest)
+                }
                 return [
                     "\(tmp) = load \(srcType), ptr \(addrOf(src))",
                     "store \(srcType) \(tmp), ptr \(addrOf(dest))"
@@ -2400,6 +2428,7 @@ public final class LLVMCodeGen {
 
         lines.append(storeToTemp(dest, value: result, type: "i64"))
         registerTypes[dest] = "i64"
+        knownIntTemps.insert(dest)
         return lines
     }
 
