@@ -278,6 +278,41 @@ public final class MIRLowering {
 
     // MARK: - Class Lowering
 
+    /// Convert an AST TypeNode to a MIRType without requiring a symbol table lookup.
+    private func mirTypeFromTypeNode(_ node: TypeNode) -> MIRType {
+        switch node {
+        case .simple(let name, _, _):
+            switch name {
+            case "Int":     return .int
+            case "Int32":   return .int32
+            case "Int64":   return .int64
+            case "Float":   return .float
+            case "Float64": return .float64
+            case "Double":  return .double
+            case "Bool":    return .bool
+            case "String":  return .string
+            case "Unit":    return .unit
+            case "Nothing": return .nothing
+            default:        return .reference(name)
+            }
+        case .nullable(let inner, _):
+            return .nullable(mirTypeFromTypeNode(inner))
+        case .function(let paramTypes, let retType, _):
+            return .function(paramTypes.map { mirTypeFromTypeNode($0) }, mirTypeFromTypeNode(retType))
+        case .tuple, .qualified:
+            return .unit
+        }
+    }
+
+    private func isPrimitiveFieldType(_ type: MIRType) -> Bool {
+        switch type {
+        case .int, .int32, .int64, .float, .float64, .double, .bool:
+            return true
+        default:
+            return false
+        }
+    }
+
     private func lowerClass(_ c: ClassDecl) {
         // Build MIRTypeDecl
         var fields: [(String, MIRType)] = []
@@ -291,6 +326,9 @@ public final class MIRLowering {
                 if let sym = result.symbolTable.lookupType(c.name),
                    let memberSym = sym.members.first(where: { $0.name == param.name }) {
                     paramType = MIRType.from(memberSym.type)
+                } else if let typeNode = param.type {
+                    // Fallback: resolve from the parameter's type annotation
+                    paramType = mirTypeFromTypeNode(typeNode)
                 } else {
                     paramType = .unit
                 }
@@ -353,8 +391,13 @@ public final class MIRLowering {
         let parentType = typeInfo?.superTypes.first
         let sealedSubs = typeInfo?.sealedSubclasses ?? []
 
+        // Value type eligibility: data class with only primitive fields, no inheritance
+        let isValueType = isDataClass && parentType == nil && sealedSubs.isEmpty
+            && !fields.isEmpty && fields.allSatisfy { isPrimitiveFieldType($0.1) }
+
         typeDecls.append(MIRTypeDecl(name: c.name, fields: fields, methods: methodNames,
-                                     parentType: parentType, sealedSubclasses: sealedSubs))
+                                     parentType: parentType, sealedSubclasses: sealedSubs,
+                                     isValueType: isValueType))
 
         // Lower nested classes (e.g., sealed subclasses)
         for member in c.members {

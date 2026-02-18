@@ -565,11 +565,35 @@ public final class LLVMCodeGen {
         currentParams = function.parameters
         paramMap = [:]
 
-        // Reset per-function ARC tracking
+        // Reset per-function ARC and value type tracking
         ownedHeapTemps = []
         arcFlags = [:]
         knownIntTemps = []
         tempHeapKinds = [:]
+        tempObjectTypes = [:]
+
+        // Pre-pass: build temp → type name mapping for value type objects
+        // 1. Track function parameters with known reference types
+        for (name, type) in function.parameters {
+            if case .reference(let typeName) = type, isValueType(typeName) {
+                tempObjectTypes[name] = typeName
+                tempObjectTypes["param.\(name)"] = typeName
+            }
+        }
+        // 2. Track .newObject destinations and propagate through loads/stores
+        for block in function.blocks {
+            for inst in block.instructions {
+                if case .newObject(let dest, let typeName, _) = inst {
+                    tempObjectTypes[dest] = typeName
+                }
+                if case .load(let dest, let src) = inst, let tn = tempObjectTypes[src] {
+                    tempObjectTypes[dest] = tn
+                }
+                if case .store(let dest, let src) = inst, let tn = tempObjectTypes[src] {
+                    tempObjectTypes[dest] = tn
+                }
+            }
+        }
 
         // Pre-pass: identify temps used as callIndirect function refs.
         // Trace backward through load/store chains so constString temps that
@@ -1552,6 +1576,25 @@ public final class LLVMCodeGen {
 
     /// Actual LLVM return type for the current function (may differ from MIR's declared type).
     private var currentReturnType: String = "void"
+
+    // MARK: - Value Type Tracking
+
+    /// Maps temp name → type name for temps that hold value type objects.
+    /// Built per-function by scanning .newObject instructions.
+    private var tempObjectTypes: [String: String] = [:]
+
+    /// Checks if a type name is a value type (primitive-only data class).
+    private func isValueType(_ typeName: String) -> Bool {
+        return typeDecls[typeName]?.isValueType ?? false
+    }
+
+    /// Resolve the value type name for an object temp, if known.
+    /// Checks tempObjectTypes (for locally-created objects) and currentClassName (for `this`).
+    private func valueTypeForTemp(_ temp: String) -> String? {
+        if let tn = tempObjectTypes[temp], isValueType(tn) { return tn }
+        if temp == "this", let cn = currentClassName, isValueType(cn) { return cn }
+        return nil
+    }
 
     // MARK: - ARC Tracking
 
@@ -2958,30 +3001,20 @@ public final class LLVMCodeGen {
         var lines: [String] = []
         let typeNameGlobal = typeNamePool[typeName] ?? internTypeName(typeName)
         let fieldCount = typeDecls[typeName]?.fields.count ?? args.count
+        let valueType = isValueType(typeName)
+
         // Allocate the object
-        // Note: Actors are allocated as regular objects in Stage 0 (no concurrency).
-        // The isActor flag on MIRTypeDecl is preserved for future use.
         let objTmp = nextSSA()
         lines.append("\(objTmp) = call ptr @rockit_object_alloc(ptr \(typeNameGlobal), i32 \(fieldCount))")
 
-        // Compute ptrFieldBits: bitmask of which fields contain pointers.
-        // Used by rockit_release to avoid cascade-releasing integer fields
-        // that happen to fall in the heap pointer range.
-        var ptrFieldBits: UInt32 = 0
-
-        // Set each field from the constructor args (with ARC retain for each stored value)
-        if typeDecls[typeName] != nil {
+        if valueType {
+            // Value type: inline GEP field stores, no ARC retain (all fields are primitives)
             for (i, arg) in args.enumerated() {
                 let argType = typeOf(arg)
                 let valTmp = nextSSA()
                 lines.append("\(valTmp) = load \(argType), ptr \(addrOf(arg))")
                 let valI64: String
-                if argType == "ptr" {
-                    let castTmp = nextSSA()
-                    lines.append("\(castTmp) = ptrtoint ptr \(valTmp) to i64")
-                    valI64 = castTmp
-                    if i < 32 { ptrFieldBits |= UInt32(1 << i) }
-                } else if argType == "i1" {
+                if argType == "i1" {
                     let extTmp = nextSSA()
                     lines.append("\(extTmp) = zext i1 \(valTmp) to i64")
                     valI64 = extTmp
@@ -2992,38 +3025,74 @@ public final class LLVMCodeGen {
                 } else {
                     valI64 = valTmp
                 }
-                // ARC: retain pointer-typed or unknown values. Skip known integers —
-                // large ints in heap pointer range would crash rockit_retain_value.
-                if argType == "ptr" || !knownIntTemps.contains(arg) {
-                    lines.append("call void @rockit_retain_value(i64 \(valI64))")
-                }
-                lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(valI64))")
+                // Inline GEP: offset 24 (header) + i * 8
+                let fieldOffset = 24 + i * 8
+                let fieldGep = nextSSA()
+                lines.append("\(fieldGep) = getelementptr i8, ptr \(objTmp), i64 \(fieldOffset)")
+                lines.append("store i64 \(valI64), ptr \(fieldGep)")
             }
-        } else {
-            // No type decl — store args by index, conservatively retain all
-            ptrFieldBits = 0  // 0 = unknown → rockit_release cascades all fields
-            for (i, arg) in args.enumerated() {
-                let valTmp = nextSSA()
-                lines.append("\(valTmp) = load i64, ptr \(addrOf(arg))")
-                // ARC: retain the value being stored into the field
-                lines.append("call void @rockit_retain_value(i64 \(valTmp))")
-                lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(valTmp))")
-            }
-        }
 
-        // Set ptrFieldBits on the object (offset 20: after typeName[8] + refCount[8] + fieldCount[4])
-        // Always write when we have type info — 0 means "no pointer fields" (skip all releases).
-        // rockit_object_alloc initializes to 0xFFFFFFFF (unknown/release all) as fallback.
-        if typeDecls[typeName] != nil {
+            // ptrFieldBits = 0 (no pointer fields)
             let bitsGep = nextSSA()
             lines.append("\(bitsGep) = getelementptr i8, ptr \(objTmp), i64 20")
-            lines.append("store i32 \(ptrFieldBits), ptr \(bitsGep)")
-        }
+            lines.append("store i32 0, ptr \(bitsGep)")
 
-        lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .object))
-        lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
-        trackHeapTemp(dest, kind: .object)
-        if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
+            lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .object))
+            lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
+            trackHeapTemp(dest, kind: .object)
+            if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
+        } else {
+            // Regular object: runtime calls + ARC
+            var ptrFieldBits: UInt32 = 0
+
+            if typeDecls[typeName] != nil {
+                for (i, arg) in args.enumerated() {
+                    let argType = typeOf(arg)
+                    let valTmp = nextSSA()
+                    lines.append("\(valTmp) = load \(argType), ptr \(addrOf(arg))")
+                    let valI64: String
+                    if argType == "ptr" {
+                        let castTmp = nextSSA()
+                        lines.append("\(castTmp) = ptrtoint ptr \(valTmp) to i64")
+                        valI64 = castTmp
+                        if i < 32 { ptrFieldBits |= UInt32(1 << i) }
+                    } else if argType == "i1" {
+                        let extTmp = nextSSA()
+                        lines.append("\(extTmp) = zext i1 \(valTmp) to i64")
+                        valI64 = extTmp
+                    } else if argType == "double" {
+                        let castTmp = nextSSA()
+                        lines.append("\(castTmp) = bitcast double \(valTmp) to i64")
+                        valI64 = castTmp
+                    } else {
+                        valI64 = valTmp
+                    }
+                    if argType == "ptr" || !knownIntTemps.contains(arg) {
+                        lines.append("call void @rockit_retain_value(i64 \(valI64))")
+                    }
+                    lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(valI64))")
+                }
+            } else {
+                ptrFieldBits = 0
+                for (i, arg) in args.enumerated() {
+                    let valTmp = nextSSA()
+                    lines.append("\(valTmp) = load i64, ptr \(addrOf(arg))")
+                    lines.append("call void @rockit_retain_value(i64 \(valTmp))")
+                    lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(valTmp))")
+                }
+            }
+
+            if typeDecls[typeName] != nil {
+                let bitsGep = nextSSA()
+                lines.append("\(bitsGep) = getelementptr i8, ptr \(objTmp), i64 20")
+                lines.append("store i32 \(ptrFieldBits), ptr \(bitsGep)")
+            }
+
+            lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .object))
+            lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
+            trackHeapTemp(dest, kind: .object)
+            if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
+        }
         return lines
     }
 
@@ -3051,15 +3120,36 @@ public final class LLVMCodeGen {
             idx = found ?? 0
         }
 
-        // Call get_field — returns i64
+        // Value type fast path: inline GEP, no function call, no ARC
+        let vtName = valueTypeForTemp(object)
+        if vtName != nil {
+            let fieldOffset = 24 + idx * 8
+            let fieldGep = nextSSA()
+            lines.append("\(fieldGep) = getelementptr i8, ptr \(objTmp), i64 \(fieldOffset)")
+            let rawTmp = nextSSA()
+            lines.append("\(rawTmp) = load i64, ptr \(fieldGep)")
+
+            let destType = typeOf(dest)
+            if destType == "i1" {
+                let castTmp = nextSSA()
+                lines.append("\(castTmp) = trunc i64 \(rawTmp) to i1")
+                lines.append(storeToTemp(dest, value: castTmp, type: "i1"))
+            } else if destType == "double" {
+                let castTmp = nextSSA()
+                lines.append("\(castTmp) = bitcast i64 \(rawTmp) to double")
+                lines.append(storeToTemp(dest, value: castTmp, type: "double"))
+            } else {
+                lines.append(storeToTemp(dest, value: rawTmp, type: "i64"))
+            }
+            return lines
+        }
+
+        // Regular object: runtime call + ARC
         let rawTmp = nextSSA()
         lines.append("\(rawTmp) = call i64 @rockit_object_get_field(ptr \(objTmp), i32 \(idx))")
 
-        // Convert to the dest's expected type
         let destType = typeOf(dest)
         if destType == "ptr" {
-            // ARC: retain the loaded field value (we're borrowing from the object)
-            // Uses temp write barrier to safely release previous value in loops
             lines.append(contentsOf: emitTempRetainBarrier(dest: dest, newValI64: rawTmp, kind: .unknown))
             let castTmp = nextSSA()
             lines.append("\(castTmp) = inttoptr i64 \(rawTmp) to ptr")
@@ -3073,7 +3163,6 @@ public final class LLVMCodeGen {
             lines.append("\(castTmp) = bitcast i64 \(rawTmp) to double")
             lines.append(storeToTemp(dest, value: castTmp, type: "double"))
         } else {
-            // i64 — use directly
             lines.append(storeToTemp(dest, value: rawTmp, type: "i64"))
         }
 
@@ -3102,16 +3191,39 @@ public final class LLVMCodeGen {
             idx = found ?? 0
         }
 
-        // ARC write barrier: load old value before overwriting
+        // Value type fast path: inline GEP store, no ARC
+        let vtName = valueTypeForTemp(object)
+        if vtName != nil {
+            let valType = typeOf(value)
+            let valTmp = nextSSA()
+            lines.append("\(valTmp) = load \(valType), ptr \(addrOf(value))")
+            let valI64: String
+            if valType == "i1" {
+                let extTmp = nextSSA()
+                lines.append("\(extTmp) = zext i1 \(valTmp) to i64")
+                valI64 = extTmp
+            } else if valType == "double" {
+                let castTmp = nextSSA()
+                lines.append("\(castTmp) = bitcast double \(valTmp) to i64")
+                valI64 = castTmp
+            } else {
+                valI64 = valTmp
+            }
+            let fieldOffset = 24 + idx * 8
+            let fieldGep = nextSSA()
+            lines.append("\(fieldGep) = getelementptr i8, ptr \(objTmp), i64 \(fieldOffset)")
+            lines.append("store i64 \(valI64), ptr \(fieldGep)")
+            return lines
+        }
+
+        // Regular object: ARC write barrier + runtime calls
         let oldVal = nextSSA()
         lines.append("\(oldVal) = call i64 @rockit_object_get_field(ptr \(objTmp), i32 \(idx))")
 
-        // Load new value and convert to i64
         let valType = typeOf(value)
         let valTmp = nextSSA()
         lines.append("\(valTmp) = load \(valType), ptr \(addrOf(value))")
 
-        // Convert new value to i64 for storage
         let newValI64: String
         if valType == "ptr" {
             let castTmp = nextSSA()
@@ -3129,7 +3241,6 @@ public final class LLVMCodeGen {
             newValI64 = valTmp
         }
 
-        // ARC: retain new value, store, release old value
         lines.append("call void @rockit_retain_value(i64 \(newValI64))")
         lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(idx), i64 \(newValI64))")
         lines.append("call void @rockit_release_value(i64 \(oldVal))")

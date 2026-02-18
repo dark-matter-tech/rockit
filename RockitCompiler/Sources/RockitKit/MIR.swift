@@ -394,16 +394,18 @@ public struct MIRTypeDecl {
     public let parentType: String?
     public let sealedSubclasses: [String]
     public let isActor: Bool
+    public let isValueType: Bool
 
     public init(name: String, fields: [(String, MIRType)] = [], methods: [String] = [],
                 parentType: String? = nil, sealedSubclasses: [String] = [],
-                isActor: Bool = false) {
+                isActor: Bool = false, isValueType: Bool = false) {
         self.name = name
         self.fields = fields
         self.methods = methods
         self.parentType = parentType
         self.sealedSubclasses = sealedSubclasses
         self.isActor = isActor
+        self.isValueType = isValueType
     }
 }
 

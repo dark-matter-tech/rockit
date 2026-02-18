@@ -1,7 +1,7 @@
 // bench_objects.rok — Object allocation benchmark
 // Measures: heap allocation, ARC retain/release, field access
 
-class Point(val x: Int, val y: Int)
+data class Point(x: Int, y: Int)
 
 fun addPoints(a: Point, b: Point): Point {
     return Point(a.x + b.x, a.y + b.y)
