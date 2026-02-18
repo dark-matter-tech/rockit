@@ -91,6 +91,27 @@ swift test
 
 ---
 
+## Performance
+
+The native compiler includes several optimizations that make Rockit competitive with established languages:
+
+**Immortal String Literals** — String constants are never heap-allocated or reference-counted. They live in the binary's read-only data segment and bypass ARC entirely.
+
+**ARC Write Barriers** — The compiler tracks `ptrFieldBits` per object so `rockit_release` only scans fields that actually contain heap pointers, eliminating unnecessary reference counting on primitive fields.
+
+**Value Types** — `data class` declarations with only primitive fields (Int, Float, Bool, etc.) use inline GEP field access instead of runtime function calls, and skip ARC retain/release for field values.
+
+### Object Benchmark (1M iterations)
+
+| Language | Time |
+|----------|------|
+| **Rockit (data class)** | **0.04s** |
+| Node.js | 0.10s |
+| Go (struct) | 0.15s |
+| Rockit (class) | 0.37s |
+
+---
+
 ## Architecture
 
 ```
