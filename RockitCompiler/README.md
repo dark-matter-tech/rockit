@@ -101,7 +101,9 @@ The native compiler includes several optimizations that make Rockit competitive 
 
 **Value Types** — `data class` declarations with only primitive fields (Int, Float, Bool, etc.) use inline GEP field access instead of runtime function calls, and skip ARC retain/release for field values.
 
-**Inline List Access** — `listGet`, `listSet`, and `listSize` are compiled to direct GEP memory operations instead of runtime function calls, eliminating call overhead and unnecessary ARC in tight loops.
+**Inline List Access** — `listGet`, `listSet`, and `listSize` are compiled to direct GEP memory operations with inline bounds checks instead of runtime function calls, eliminating call overhead while maintaining memory safety. Bounds checks add only 1-5% overhead — LLVM hot/cold splitting moves panic paths out of loop bodies.
+
+**Inline Integer Comparison** — `==` and `!=` on known integer operands compile to a single `icmp` instruction instead of calling the polymorphic `rockit_string_eq` runtime function.
 
 ### Technical Benchmarks
 
@@ -114,11 +116,11 @@ The native compiler includes several optimizations that make Rockit competitive 
 
 | Benchmark | Rockit | Node.js | Go |
 |-----------|--------|---------|-----|
-| **Prime sieve** (primes to 1M) | **0.01s** | 0.07s | 0.005s |
-| **Matrix multiply** (200x200) | **0.02s** | 0.08s | 0.01s |
-| **Quicksort** (500K integers) | **0.04s** | 0.18s | 0.035s |
+| **Prime sieve** (primes to 1M) | **0.015s** | 0.07s | 0.011s |
+| **Matrix multiply** (200x200) | **0.027s** | 0.08s | 0.017s |
+| **Quicksort** (500K integers) | **0.052s** | 0.18s | 0.040s |
 
-Rockit outperforms Node.js across all benchmarks (4-7x faster). On compute-bound tasks like fibonacci and object allocation, Rockit beats Go. On list-heavy benchmarks, Rockit is within 2x of Go's contiguous native arrays.
+Rockit outperforms Node.js across all benchmarks (3-5x faster). On compute-bound tasks like fibonacci and object allocation, Rockit beats Go. On list-heavy benchmarks, Rockit is within 1.3-1.6x of Go — the remaining gap is due to Go's contiguous native slices (single pointer indirection vs two) and smaller element types (1-byte `bool` vs 8-byte `int64` for sieve).
 
 Run the full suite: `bash Benchmarks/run_benchmarks.sh`
 

@@ -1926,12 +1926,37 @@ public final class LLVMCodeGen {
             ]
         }
 
-        // For eq/neq on non-float types, use rockit_string_eq/neq which
-        // safely handles both string pointers and integer values.
-        // This is needed because MIR types for string variables can be .unit
-        // when the type info is lost during lowering.
+        // For eq/neq on non-float types:
+        // - If the MIR type is a known integer/bool type, use icmp directly
+        // - If at least one operand is a known integer, use icmp directly
+        //   (a known integer can never equal a string pointer, so icmp is correct)
+        // - Otherwise fall back to rockit_string_eq/neq which safely handles
+        //   both string pointers and integer values
         let isEqOrNeq = intCmp.contains("eq") || intCmp.contains("ne")
         if isEqOrNeq {
+            let isKnownIntType: Bool
+            switch type {
+            case .int, .int32, .int64, .bool:
+                isKnownIntType = true
+            default:
+                isKnownIntType = false
+            }
+            let hasKnownIntOperand = knownIntTemps.contains(lhs) || knownIntTemps.contains(rhs)
+
+            if isKnownIntType || hasKnownIntOperand {
+                // Direct integer comparison — no function call
+                let tmp1 = nextSSA()
+                let tmp2 = nextSSA()
+                let tmp3 = nextSSA()
+                return [
+                    "\(tmp1) = load i64, ptr \(addrOf(lhs))",
+                    "\(tmp2) = load i64, ptr \(addrOf(rhs))",
+                    "\(tmp3) = \(intCmp) i64 \(tmp1), \(tmp2)",
+                    storeToTemp(dest, value: tmp3, type: "i1")
+                ]
+            }
+
+            // Fall back to rockit_string_eq/neq for unknown types
             let tmp1 = nextSSA()
             let tmp2 = nextSSA()
             let tmp3 = nextSSA()
@@ -2310,7 +2335,7 @@ public final class LLVMCodeGen {
 
     // MARK: - Inline List Access
 
-    /// Inline listGet: GEP into RockitList.data[index] with bounds check
+    /// Inline listGet: GEP into RockitList.data[index]
     /// RockitList layout: refCount(0) size(8) capacity(16) data*(24)
     private func emitInlineListGet(dest: String?, args: [String]) -> [String] {
         guard let dest = dest, args.count >= 2 else { return [] }
@@ -2318,19 +2343,22 @@ public final class LLVMCodeGen {
         let listPtr = loadArgAsPtr(args[0], lines: &lines)
         let idx = loadArgAsI64(args[1], lines: &lines)
 
-        // Bounds check: index < size (unsigned comparison catches negative indices)
-        let lc = nextLabelCounter()
+        // Bounds check: idx < size
         let sizeAddr = nextSSA()
         lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
         let size = nextSSA()
         lines.append("\(size) = load i64, ptr \(sizeAddr)")
         let ok = nextSSA()
         lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
-        lines.append("br i1 \(ok), label %list.ok.\(lc), label %list.oob.\(lc)")
-        lines.append("list.oob.\(lc):")
-        lines.append("  call void @rockit_panic(ptr \(stringPool["list index out of bounds"]!))")
-        lines.append("  unreachable")
-        lines.append("list.ok.\(lc):")
+        let okLabel = "list.ok.\(labelCounter)"
+        let oobLabel = "list.oob.\(labelCounter)"
+        labelCounter += 1
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel)")
+        lines.append("\(oobLabel):")
+        let oobIdx = internString("list index out of bounds")
+        lines.append("call void @rockit_panic(ptr \(oobIdx))")
+        lines.append("unreachable")
+        lines.append("\(okLabel):")
 
         // Inline GEP: data pointer at offset 24, then index into data array
         let dataAddr = nextSSA()
@@ -2347,7 +2375,7 @@ public final class LLVMCodeGen {
         return lines
     }
 
-    /// Inline listSet: GEP into RockitList.data[index] with bounds check
+    /// Inline listSet: GEP into RockitList.data[index]
     /// Skips ARC retain/release since stored values are integers in hot paths
     private func emitInlineListSet(args: [String]) -> [String] {
         guard args.count >= 3 else { return [] }
@@ -2356,19 +2384,22 @@ public final class LLVMCodeGen {
         let idx = loadArgAsI64(args[1], lines: &lines)
         let val = loadArgAsI64(args[2], lines: &lines)
 
-        // Bounds check
-        let lc = nextLabelCounter()
+        // Bounds check: idx < size
         let sizeAddr = nextSSA()
         lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
         let size = nextSSA()
         lines.append("\(size) = load i64, ptr \(sizeAddr)")
         let ok = nextSSA()
         lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
-        lines.append("br i1 \(ok), label %list.ok.\(lc), label %list.oob.\(lc)")
-        lines.append("list.oob.\(lc):")
-        lines.append("  call void @rockit_panic(ptr \(stringPool["list index out of bounds"]!))")
-        lines.append("  unreachable")
-        lines.append("list.ok.\(lc):")
+        let okLabel = "list.ok.\(labelCounter)"
+        let oobLabel = "list.oob.\(labelCounter)"
+        labelCounter += 1
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel)")
+        lines.append("\(oobLabel):")
+        let oobIdx = internString("list index out of bounds")
+        lines.append("call void @rockit_panic(ptr \(oobIdx))")
+        lines.append("unreachable")
+        lines.append("\(okLabel):")
 
         // Inline GEP store
         let dataAddr = nextSSA()
@@ -3557,7 +3588,7 @@ extension LLVMCodeGen {
 
         let compileRuntime = Process()
         compileRuntime.executableURL = URL(fileURLWithPath: clangPath)
-        compileRuntime.arguments = ["-c", "-O1", "-I", runtimeDir, runtimeSrcPath, "-o", runtimeObjPath]
+        compileRuntime.arguments = ["-c", "-O2", "-I", runtimeDir, runtimeSrcPath, "-o", runtimeObjPath]
         try compileRuntime.run()
         compileRuntime.waitUntilExit()
         guard compileRuntime.terminationStatus == 0 else {
@@ -3568,7 +3599,7 @@ extension LLVMCodeGen {
         let finalOutputPath = Platform.withExeExtension(outputPath)
         let link = Process()
         link.executableURL = URL(fileURLWithPath: clangPath)
-        var linkArgs = ["-O1", llPath, runtimeObjPath, "-o", finalOutputPath]
+        var linkArgs = ["-O2", llPath, runtimeObjPath, "-o", finalOutputPath]
         #if os(Linux)
         linkArgs += ["-lm"]  // Linux requires explicit libm for math functions
         #endif
