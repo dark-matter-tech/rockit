@@ -280,6 +280,7 @@ public final class LLVMCodeGen {
     private func collectStrings(module: MIRModule) {
         // Pre-intern runtime panic messages
         internString("NullPointerException")
+        internString("list index out of bounds")
 
         for function in module.functions {
             for block in function.blocks {
@@ -2220,11 +2221,11 @@ public final class LLVMCodeGen {
         case "listAppend":
             return emitNativeListAppend(args: args)
         case "listGet":
-            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_list_get", args: args, retType: "i64")
+            return emitInlineListGet(dest: dest, args: args)
         case "listSet":
-            return emitNativeListSet(args: args)
+            return emitInlineListSet(args: args)
         case "listSize":
-            return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_list_size", args: args, retType: "i64")
+            return emitInlineListSize(dest: dest, args: args)
         case "listContains":
             return emitNativeCollectionCallBool(dest: dest, nativeFn: "rockit_list_contains", args: args)
         case "listRemoveAt":
@@ -2304,6 +2305,96 @@ public final class LLVMCodeGen {
         let idx = loadArgAsI64(args[1], lines: &lines)
         let val = loadArgAsI64(args[2], lines: &lines)
         lines.append("call void @rockit_list_set(ptr \(listPtr), i64 \(idx), i64 \(val))")
+        return lines
+    }
+
+    // MARK: - Inline List Access
+
+    /// Inline listGet: GEP into RockitList.data[index] with bounds check
+    /// RockitList layout: refCount(0) size(8) capacity(16) data*(24)
+    private func emitInlineListGet(dest: String?, args: [String]) -> [String] {
+        guard let dest = dest, args.count >= 2 else { return [] }
+        var lines: [String] = []
+        let listPtr = loadArgAsPtr(args[0], lines: &lines)
+        let idx = loadArgAsI64(args[1], lines: &lines)
+
+        // Bounds check: index < size (unsigned comparison catches negative indices)
+        let lc = nextLabelCounter()
+        let sizeAddr = nextSSA()
+        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+        let size = nextSSA()
+        lines.append("\(size) = load i64, ptr \(sizeAddr)")
+        let ok = nextSSA()
+        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+        lines.append("br i1 \(ok), label %list.ok.\(lc), label %list.oob.\(lc)")
+        lines.append("list.oob.\(lc):")
+        lines.append("  call void @rockit_panic(ptr \(stringPool["list index out of bounds"]!))")
+        lines.append("  unreachable")
+        lines.append("list.ok.\(lc):")
+
+        // Inline GEP: data pointer at offset 24, then index into data array
+        let dataAddr = nextSSA()
+        lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
+        let dataPtr = nextSSA()
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr)")
+        let elemAddr = nextSSA()
+        lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
+        let result = nextSSA()
+        lines.append("\(result) = load i64, ptr \(elemAddr)")
+
+        lines.append(storeToTemp(dest, value: result, type: "i64"))
+        registerTypes[dest] = "i64"
+        return lines
+    }
+
+    /// Inline listSet: GEP into RockitList.data[index] with bounds check
+    /// Skips ARC retain/release since stored values are integers in hot paths
+    private func emitInlineListSet(args: [String]) -> [String] {
+        guard args.count >= 3 else { return [] }
+        var lines: [String] = []
+        let listPtr = loadArgAsPtr(args[0], lines: &lines)
+        let idx = loadArgAsI64(args[1], lines: &lines)
+        let val = loadArgAsI64(args[2], lines: &lines)
+
+        // Bounds check
+        let lc = nextLabelCounter()
+        let sizeAddr = nextSSA()
+        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+        let size = nextSSA()
+        lines.append("\(size) = load i64, ptr \(sizeAddr)")
+        let ok = nextSSA()
+        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+        lines.append("br i1 \(ok), label %list.ok.\(lc), label %list.oob.\(lc)")
+        lines.append("list.oob.\(lc):")
+        lines.append("  call void @rockit_panic(ptr \(stringPool["list index out of bounds"]!))")
+        lines.append("  unreachable")
+        lines.append("list.ok.\(lc):")
+
+        // Inline GEP store
+        let dataAddr = nextSSA()
+        lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
+        let dataPtr = nextSSA()
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr)")
+        let elemAddr = nextSSA()
+        lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
+        lines.append("store i64 \(val), ptr \(elemAddr)")
+
+        return lines
+    }
+
+    /// Inline listSize: load RockitList.size at offset 8
+    private func emitInlineListSize(dest: String?, args: [String]) -> [String] {
+        guard let dest = dest, args.count >= 1 else { return [] }
+        var lines: [String] = []
+        let listPtr = loadArgAsPtr(args[0], lines: &lines)
+
+        let sizeAddr = nextSSA()
+        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+        let result = nextSSA()
+        lines.append("\(result) = load i64, ptr \(sizeAddr)")
+
+        lines.append(storeToTemp(dest, value: result, type: "i64"))
+        registerTypes[dest] = "i64"
         return lines
     }
 
