@@ -1,0 +1,53 @@
+// bench_sort.rok — Quicksort benchmark
+// Measures: recursion, list operations, partitioning
+// Practical: sort 500,000 integers
+
+fun swap(arr: List, i: Int, j: Int): Unit {
+    val tmp = listGet(arr, i)
+    listSet(arr, i, listGet(arr, j))
+    listSet(arr, j, tmp)
+}
+
+fun partition(arr: List, lo: Int, hi: Int): Int {
+    val pivot: Int = toInt(listGet(arr, hi))
+    var i: Int = lo
+    var j: Int = lo
+    while (j < hi) {
+        if (toInt(listGet(arr, j)) < pivot) {
+            swap(arr, i, j)
+            i = i + 1
+        }
+        j = j + 1
+    }
+    swap(arr, i, hi)
+    return i
+}
+
+fun quicksort(arr: List, lo: Int, hi: Int): Unit {
+    if (lo < hi) {
+        val p: Int = partition(arr, lo, hi)
+        quicksort(arr, lo, p - 1)
+        quicksort(arr, p + 1, hi)
+    }
+}
+
+fun main(): Unit {
+    val n: Int = 500000
+    val arr = listCreate()
+
+    // Generate pseudo-random data using LCG
+    var seed: Int = 42
+    var i: Int = 0
+    while (i < n) {
+        seed = (seed * 1103515245 + 12345) % 2147483648
+        listAppend(arr, seed % 1000000)
+        i = i + 1
+    }
+
+    quicksort(arr, 0, n - 1)
+
+    // Verify: print first, middle, last
+    println(listGet(arr, 0))
+    println(listGet(arr, n / 2))
+    println(listGet(arr, n - 1))
+}

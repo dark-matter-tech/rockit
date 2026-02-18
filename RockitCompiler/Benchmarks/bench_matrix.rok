@@ -1,0 +1,49 @@
+// bench_matrix.rok — Matrix multiplication
+// Measures: nested loops, list indexing, arithmetic
+// Practical: 200x200 matrix multiply (scientific computing)
+
+fun main(): Unit {
+    val n: Int = 200
+
+    // Create matrices as flat lists (row-major)
+    val a = listCreate()
+    val b = listCreate()
+    val c = listCreate()
+
+    // Initialize A and B with deterministic values, C with zeros
+    var i: Int = 0
+    while (i < n * n) {
+        listAppend(a, i % 100)
+        listAppend(b, (i * 3 + 7) % 100)
+        listAppend(c, 0)
+        i = i + 1
+    }
+
+    // Matrix multiply: C = A * B
+    i = 0
+    while (i < n) {
+        var j: Int = 0
+        while (j < n) {
+            var sum: Int = 0
+            var k: Int = 0
+            while (k < n) {
+                val av = listGet(a, i * n + k)
+                val bv = listGet(b, k * n + j)
+                sum = sum + toInt(av) * toInt(bv)
+                k = k + 1
+            }
+            listSet(c, i * n + j, sum)
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    // Print checksum (sum of diagonal)
+    var checksum: Int = 0
+    i = 0
+    while (i < n) {
+        checksum = checksum + listGet(c, i * n + i)
+        i = i + 1
+    }
+    println(checksum)
+}

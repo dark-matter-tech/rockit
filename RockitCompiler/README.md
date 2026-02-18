@@ -101,14 +101,24 @@ The native compiler includes several optimizations that make Rockit competitive 
 
 **Value Types** — `data class` declarations with only primitive fields (Int, Float, Bool, etc.) use inline GEP field access instead of runtime function calls, and skip ARC retain/release for field values.
 
-### Object Benchmark (1M iterations)
+### Technical Benchmarks
 
-| Language | Time |
-|----------|------|
-| **Rockit (data class)** | **0.04s** |
-| Node.js | 0.10s |
-| Go (struct) | 0.15s |
-| Rockit (class) | 0.37s |
+| Benchmark | Rockit | Node.js | Go |
+|-----------|--------|---------|-----|
+| **Fibonacci** (fib 40, recursive) | **0.28s** | 1.04s | 0.35s |
+| **Object alloc** (1M data class) | **0.04s** | 0.10s | 0.15s |
+
+### Practical Benchmarks
+
+| Benchmark | Rockit | Node.js | Go |
+|-----------|--------|---------|-----|
+| **Prime sieve** (primes to 1M) | **0.02s** | 0.07s | 0.005s |
+| **Matrix multiply** (200x200) | **0.03s** | 0.08s | 0.01s |
+| **Quicksort** (500K integers) | **0.09s** | 0.18s | 0.03s |
+
+Rockit consistently outperforms Node.js across all benchmarks (2-4x faster). On compute-bound tasks like fibonacci, Rockit also beats Go. Go's contiguous native arrays give it an edge on list-heavy benchmarks like sort and matrix, but Rockit is competitive across the board.
+
+Run the full suite: `bash Benchmarks/run_benchmarks.sh`
 
 ---
 

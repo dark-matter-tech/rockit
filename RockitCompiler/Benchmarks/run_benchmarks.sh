@@ -35,7 +35,7 @@ fi
 
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║         ROCKIT BENCHMARK SUITE v1.0          ║${NC}"
+echo -e "${BOLD}║         ROCKIT BENCHMARK SUITE v2.0          ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  Runtimes detected:"
@@ -138,10 +138,18 @@ run_benchmark() {
 }
 
 # Run all benchmarks
+echo -e "${BOLD}  Technical${NC}"
+echo ""
 run_benchmark "fib"
 run_benchmark "loop"
 run_benchmark "objects"
 run_benchmark "strings"
+
+echo -e "${BOLD}  Practical${NC}"
+echo ""
+run_benchmark "sieve"
+run_benchmark "matrix"
+run_benchmark "sort"
 
 echo -e "${BOLD}Done.${NC} Results above."
 echo ""
