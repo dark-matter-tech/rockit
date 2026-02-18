@@ -98,6 +98,7 @@ typedef struct RockitList {
 } RockitList;
 
 RockitList* rockit_list_create(void);
+RockitList* rockit_list_create_filled(int64_t size, int64_t value);
 void     rockit_list_append(RockitList* list, int64_t value);
 int64_t  rockit_list_get(RockitList* list, int64_t index);
 void     rockit_list_set(RockitList* list, int64_t index, int64_t value);

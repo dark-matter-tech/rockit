@@ -242,6 +242,22 @@ RockitList* rockit_list_create(void) {
     return list;
 }
 
+RockitList* rockit_list_create_filled(int64_t size, int64_t value) {
+    RockitList* list = (RockitList*)malloc(sizeof(RockitList));
+    list->refCount = 1;
+    list->size = size;
+    list->capacity = size > 0 ? size : 8;
+    list->data = (int64_t*)malloc(list->capacity * sizeof(int64_t));
+    if (value == 0) {
+        memset(list->data, 0, size * sizeof(int64_t));
+    } else {
+        for (int64_t i = 0; i < size; i++) {
+            list->data[i] = value;
+        }
+    }
+    return list;
+}
+
 void rockit_list_append(RockitList* list, int64_t value) {
     rockit_retain_value(value);
     if (list->size >= list->capacity) {
@@ -774,6 +790,10 @@ int8_t isMap(int64_t val) {
 
 int64_t listCreate(void) {
     return (int64_t)(intptr_t)rockit_list_create();
+}
+
+int64_t listCreateFilled(int64_t size, int64_t value) {
+    return (int64_t)(intptr_t)rockit_list_create_filled(size, value);
 }
 
 void listAppend(int64_t list, int64_t value) {

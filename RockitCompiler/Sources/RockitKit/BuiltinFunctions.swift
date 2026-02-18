@@ -697,6 +697,19 @@ public final class BuiltinRegistry {
             return .objectRef(id)
         }
 
+        register(name: "listCreateFilled") { args in
+            guard args.count >= 2 else {
+                throw VMError.typeMismatch(expected: "2 arguments", actual: "\(args.count)", operation: "listCreateFilled")
+            }
+            guard case .int(let size) = args[0] else {
+                throw VMError.typeMismatch(expected: "Int", actual: "\(args[0])", operation: "listCreateFilled")
+            }
+            let id = heap.allocate(typeName: "List")
+            let obj = try heap.get(id)
+            obj.listStorage = Array(repeating: args[1], count: Int(size))
+            return .objectRef(id)
+        }
+
         register(name: "listAppend") { args in
             let obj = try extractList(args, operation: "listAppend")
             guard args.count >= 2 else {

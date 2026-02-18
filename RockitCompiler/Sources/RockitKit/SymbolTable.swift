@@ -278,6 +278,8 @@ public final class SymbolTable {
             // List operations
             ("listCreate",   .function(parameterTypes: [],
                                        returnType: .classType(name: "List", typeArguments: []))),
+            ("listCreateFilled", .function(parameterTypes: [.int, .typeParameter(name: "T", bound: nil)],
+                                       returnType: .classType(name: "List", typeArguments: []))),
             ("listAppend",   .function(parameterTypes: [.classType(name: "List", typeArguments: []), .typeParameter(name: "T", bound: nil)],
                                        returnType: .unit)),
             ("listGet",      .function(parameterTypes: [.classType(name: "List", typeArguments: []), .int],

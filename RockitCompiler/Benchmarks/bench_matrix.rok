@@ -6,16 +6,16 @@ fun main(): Unit {
     val n: Int = 200
 
     // Create matrices as flat lists (row-major)
-    val a = listCreate()
-    val b = listCreate()
-    val c = listCreate()
+    val total: Int = n * n
+    val a = listCreateFilled(total, 0)
+    val b = listCreateFilled(total, 0)
+    val c = listCreateFilled(total, 0)
 
-    // Initialize A and B with deterministic values, C with zeros
+    // Initialize A and B with deterministic values
     var i: Int = 0
-    while (i < n * n) {
-        listAppend(a, i % 100)
-        listAppend(b, (i * 3 + 7) % 100)
-        listAppend(c, 0)
+    while (i < total) {
+        listSet(a, i, i % 100)
+        listSet(b, i, (i * 3 + 7) % 100)
         i = i + 1
     }
 

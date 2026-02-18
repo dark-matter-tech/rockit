@@ -33,14 +33,14 @@ fun quicksort(arr: List, lo: Int, hi: Int): Unit {
 
 fun main(): Unit {
     val n: Int = 500000
-    val arr = listCreate()
+    val arr = listCreateFilled(n, 0)
 
     // Generate pseudo-random data using LCG
     var seed: Int = 42
     var i: Int = 0
     while (i < n) {
         seed = (seed * 1103515245 + 12345) % 2147483648
-        listAppend(arr, seed % 1000000)
+        listSet(arr, i, seed % 1000000)
         i = i + 1
     }
 

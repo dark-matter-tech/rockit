@@ -450,6 +450,7 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare void @rockit_set_type_hierarchy(ptr, i32)")
         // List runtime
         externalDecls.insert("declare ptr @rockit_list_create()")
+        externalDecls.insert("declare ptr @rockit_list_create_filled(i64, i64)")
         externalDecls.insert("declare void @rockit_list_append(ptr, i64)")
         externalDecls.insert("declare i64 @rockit_list_get(ptr, i64)")
         externalDecls.insert("declare void @rockit_list_set(ptr, i64, i64)")
@@ -2179,7 +2180,7 @@ public final class LLVMCodeGen {
              "readLine", "substring", "charAt", "stringTrim", "fileRead",
              "rockit_int_to_string", "rockit_float_to_string", "rockit_bool_to_string":
             return .string
-        case "rockit_list_create", "listCreate":
+        case "rockit_list_create", "listCreate", "listCreateFilled":
             return .list
         case "rockit_map_create", "mapCreate":
             return .map
@@ -2266,6 +2267,8 @@ public final class LLVMCodeGen {
         switch function {
         case "listCreate":
             return emitNativeCollectionCreate(dest: dest, nativeFn: "rockit_list_create", kind: .list)
+        case "listCreateFilled":
+            return emitListCreateFilled(dest: dest, args: args)
         case "mapCreate":
             return emitStringMapCreate(dest: dest)
         case "listAppend":
@@ -2451,6 +2454,23 @@ public final class LLVMCodeGen {
 
         lines.append(storeToTemp(dest, value: result, type: "i64"))
         registerTypes[dest] = "i64"
+        return lines
+    }
+
+    /// Emit listCreateFilled(size, value) — bulk list allocation
+    private func emitListCreateFilled(dest: String?, args: [String]) -> [String] {
+        guard let dest = dest, args.count >= 2 else { return [] }
+        var lines: [String] = []
+        let size = loadArgAsI64(args[0], lines: &lines)
+        let value = loadArgAsI64(args[1], lines: &lines)
+        let result = nextSSA()
+        lines.append("\(result) = call ptr @rockit_list_create_filled(i64 \(size), i64 \(value))")
+        lines.append(storeToTemp(dest, value: result, type: "ptr"))
+        registerTypes[dest] = "ptr"
+        // Track as heap-allocated for ARC
+        if let flag = arcFlags[dest] {
+            lines.append("store i1 true, ptr \(flag)")
+        }
         return lines
     }
 
@@ -3446,7 +3466,7 @@ public final class LLVMCodeGen {
              "charToInt", "abs", "min", "max", "listSize", "mapSize":
             return "i64"
         case "listOf", "mutableListOf", "mapOf", "mutableMapOf",
-             "listCreate", "mapCreate":
+             "listCreate", "listCreateFilled", "mapCreate":
             return "ptr"
         case "startsWith", "endsWith", "stringContains", "isDigit",
              "isLetter", "isWhitespace", "isLetterOrDigit",

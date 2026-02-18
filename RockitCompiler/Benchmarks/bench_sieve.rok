@@ -4,21 +4,14 @@
 
 fun main(): Unit {
     val n: Int = 1000000
-    val sieve = listCreate()
-
-    // Initialize all entries to 1 (prime candidate)
-    var i: Int = 0
-    while (i <= n) {
-        listAppend(sieve, 1)
-        i = i + 1
-    }
+    val sieve = listCreateFilled(n + 1, 1)
 
     // 0 and 1 are not prime
     listSet(sieve, 0, 0)
     listSet(sieve, 1, 0)
 
     // Sieve
-    i = 2
+    var i: Int = 2
     while (i * i <= n) {
         if (listGet(sieve, i) == 1) {
             var j: Int = i * i
