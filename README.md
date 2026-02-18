@@ -148,6 +148,20 @@ navigation AppRouter {
 
 All editors share a single canonical syntax definition (`ide/shared/rockit-language.json`). Add a keyword once, regenerate, and every editor updates.
 
+### Quick Install (all editors)
+
+Auto-detects and installs Rockit support for every editor on your system:
+
+**macOS / Linux / Windows (WSL, Git Bash):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.ps1 | iex
+```
+
 ### VS Code
 
 Full extension with syntax highlighting, 25+ snippets, bracket matching, and auto-close pairs.

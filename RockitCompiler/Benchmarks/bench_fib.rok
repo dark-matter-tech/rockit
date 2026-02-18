@@ -1,0 +1,12 @@
+// bench_fib.rok — Fibonacci benchmark (recursive)
+// Measures: function call overhead, recursion, integer arithmetic
+
+fun fib(n: Int): Int {
+    if (n <= 1) { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fun main(): Unit {
+    val result: Int = fib(40)
+    println(result)
+}

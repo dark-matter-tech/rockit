@@ -17,10 +17,14 @@ public final class LLVMCodeGen {
     private var registerMap: [String: String] = [:]
     /// Map from MIR register names to their LLVM type string.
     private var registerTypes: [String: String] = [:]
-    /// String literal pool: value → global name.
+    /// String literal pool: value → C string global name (used for function references).
     private var stringPool: [String: String] = [:]
     /// Counter for string literal globals.
     private var stringCounter: Int = 0
+    /// Immortal RockitString globals: value → global name (pre-built structs, no malloc).
+    private var rockitStringGlobals: [String: String] = [:]
+    /// Counter for RockitString globals.
+    private var rockitStringCounter: Int = 0
     /// Collected function declarations (externals).
     private var externalDecls: Set<String> = []
     /// Current function's parameter names for `param.X` resolution.
@@ -65,6 +69,8 @@ public final class LLVMCodeGen {
         registerTypes = [:]
         stringPool = [:]
         stringCounter = 0
+        rockitStringGlobals = [:]
+        rockitStringCounter = 0
         externalDecls = []
         typeDecls = [:]
         functionSignatures = [:]
@@ -168,7 +174,7 @@ public final class LLVMCodeGen {
         // Prepare hierarchy table (this may intern additional type names)
         let hierarchyLines = emitTypeHierarchyTable(module: module)
 
-        // Emit string literal globals
+        // Emit C string literal globals (used for function pointer references)
         for (value, name) in stringPool.sorted(by: { $0.value < $1.value }) {
             let escaped = llvmEscapeString(value)
             let len = value.utf8.count + 1  // +1 for null terminator
@@ -180,7 +186,16 @@ public final class LLVMCodeGen {
             let len = value.utf8.count + 1
             lines.append("\(name) = private unnamed_addr constant [\(len) x i8] c\"\(escaped)\\00\"")
         }
-        if !stringPool.isEmpty || !typeNamePool.isEmpty {
+        // Emit immortal RockitString globals (pre-built structs, no malloc needed)
+        // Layout matches C struct: { i64 refCount, i64 length, [N x i8] data }
+        for (value, name) in rockitStringGlobals.sorted(by: { $0.value < $1.value }) {
+            let escaped = llvmEscapeString(value)
+            let dataLen = value.utf8.count + 1  // +1 for null terminator
+            let strLen = value.utf8.count
+            // refCount = INT64_MAX (immortal), length = strLen
+            lines.append("\(name) = private global <{ i64, i64, [\(dataLen) x i8] }> <{ i64 9223372036854775807, i64 \(strLen), [\(dataLen) x i8] c\"\(escaped)\\00\" }>")
+        }
+        if !stringPool.isEmpty || !typeNamePool.isEmpty || !rockitStringGlobals.isEmpty {
             lines.append("")
         }
 
@@ -273,6 +288,8 @@ public final class LLVMCodeGen {
                         // Always intern — even if the string matches a function name,
                         // it may be used as a regular string (not a lambda reference).
                         internString(value)
+                        // Also intern as an immortal RockitString global struct.
+                        internRockitString(value)
                     }
                 }
             }
@@ -317,6 +334,19 @@ public final class LLVMCodeGen {
         let name = "@.str.\(stringCounter)"
         stringCounter += 1
         stringPool[value] = name
+        return name
+    }
+
+    /// Intern a string as an immortal RockitString global struct.
+    /// Layout: { i64 refCount, i64 length, i64 capacity, [N x i8] data }
+    @discardableResult
+    private func internRockitString(_ value: String) -> String {
+        if let existing = rockitStringGlobals[value] {
+            return existing
+        }
+        let name = "@.rstr.\(rockitStringCounter)"
+        rockitStringCounter += 1
+        rockitStringGlobals[value] = name
         return name
     }
 
@@ -538,6 +568,8 @@ public final class LLVMCodeGen {
         // Reset per-function ARC tracking
         ownedHeapTemps = []
         arcFlags = [:]
+        knownIntTemps = []
+        tempHeapKinds = [:]
 
         // Pre-pass: identify temps used as callIndirect function refs.
         // Trace backward through load/store chains so constString temps that
@@ -685,6 +717,10 @@ public final class LLVMCodeGen {
                 registerMap[temp] = allocaName
                 registerTypes[temp] = lt
                 lines.append("  \(allocaName) = alloca \(lt)")
+                // Null-init ptr allocas so ARC write barriers can safely read old values.
+                if lt == "ptr" {
+                    lines.append("  store ptr null, ptr \(allocaName)")
+                }
             }
             // ARC flag allocas: i1 flags for heap temp tracking.
             // Each flag is initialized to 0 (not allocated) and set to 1 at creation sites.
@@ -961,6 +997,7 @@ public final class LLVMCodeGen {
                 switch inst {
                 case .constInt(let d, _):
                     tempTypes[d] = "i64"
+                    knownIntTemps.insert(d)
                 case .constFloat(let d, _):
                     tempTypes[d] = "double"
                 case .constBool(let d, _):
@@ -1015,9 +1052,11 @@ public final class LLVMCodeGen {
                         tempTypes[d] = "ptr"  // String add → string concat
                     } else {
                         tempTypes[d] = llvmArithType(t)
+                        if case .int = t { knownIntTemps.insert(d) }
                     }
                 case .neg(let d, _, let t):
                     tempTypes[d] = llvmArithType(t)
+                    if case .int = t { knownIntTemps.insert(d) }
                 case .eq(let d, _, _, _), .neq(let d, _, _, _),
                      .lt(let d, _, _, _), .lte(let d, _, _, _),
                      .gt(let d, _, _, _), .gte(let d, _, _, _):
@@ -1043,6 +1082,7 @@ public final class LLVMCodeGen {
                 case .getField(let d, let obj, let fieldName):
                     // Try to infer field type from the object's type declaration
                     var resolved = false
+                    var fieldMIRType: MIRType? = nil
                     // First, try to determine the object's type from its temp type
                     if let objType = tempTypes[obj], objType == "ptr" {
                         // If the object is a method (Name.method), use the class name
@@ -1058,6 +1098,7 @@ public final class LLVMCodeGen {
                            let field = decl.fields.first(where: { $0.0 == fieldName }) {
                             let lt = llvmType(field.1)
                             tempTypes[d] = lt != "void" ? lt : "i64"
+                            fieldMIRType = field.1
                             resolved = true
                         }
                     }
@@ -1067,12 +1108,15 @@ public final class LLVMCodeGen {
                             if let field = decl.fields.first(where: { $0.0 == fieldName }) {
                                 let lt = llvmType(field.1)
                                 tempTypes[d] = lt != "void" ? lt : "i64"
+                                fieldMIRType = field.1
                                 resolved = true
                                 break
                             }
                         }
                     }
                     if !resolved { tempTypes[d] = "i64" }
+                    // Track int fields so println can use _int instead of _any
+                    if let ft = fieldMIRType, case .int = ft { knownIntTemps.insert(d) }
                 case .setField:
                     break
                 case .newObject(let d, _, _):
@@ -1190,12 +1234,12 @@ public final class LLVMCodeGen {
                 let funcName = llvmFunctionName(value)
                 return [storeToTemp(dest, value: "@\(funcName)", type: "ptr")]
             }
-            let globalName = stringPool[value]!
-            let tmp = nextSSA()
-            ownedHeapTemps.append((allocaName: dest, kind: .string))
+            // Use immortal RockitString global — no malloc, no free needed.
+            // The global has refCount = INT64_MAX, so retain/release are no-ops.
+            let rstrName = rockitStringGlobals[value]!
+            trackHeapTemp(dest, kind: .string)
             var result = emitOldTempRelease(dest: dest, kind: .string)
-            result.append("\(tmp) = call ptr @rockit_string_new(ptr \(globalName))")
-            result.append(storeToTemp(dest, value: tmp, type: "ptr"))
+            result.append(storeToTemp(dest, value: rstrName, type: "ptr"))
             if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
             return result
 
@@ -1220,6 +1264,23 @@ public final class LLVMCodeGen {
         case .store(let dest, let src):
             let srcType = typeOf(src)
             let tmp = nextSSA()
+            if srcType == "ptr", let flagName = arcFlags[dest], arcFlags[src] != nil {
+                // ARC write barrier: release old value, retain new, store.
+                // Prevents leaks when ptr-typed locals are reassigned in loops.
+                // Only when source is also ARC-tracked (heap allocation).
+                // Use source's HeapKind for type-specific release (avoids rockit_release_value
+                // which can crash on short strings due to OOB offset-24 read).
+                let kind = tempHeapKinds[src] ?? .unknown
+                var result = emitOldTempRelease(dest: dest, kind: kind)
+                result.append("\(tmp) = load ptr, ptr \(addrOf(src))")
+                let tmpI64 = nextSSA()
+                result.append("\(tmpI64) = ptrtoint ptr \(tmp) to i64")
+                result.append("call void @rockit_retain_value(i64 \(tmpI64))")
+                result.append("store ptr \(tmp), ptr \(addrOf(dest))")
+                result.append("store i1 1, ptr \(flagName)")
+                trackHeapTemp(dest, kind: kind)
+                return result
+            }
             return [
                 "\(tmp) = load \(srcType), ptr \(addrOf(src))",
                 "store \(srcType) \(tmp), ptr \(addrOf(dest))"
@@ -1507,6 +1568,17 @@ public final class LLVMCodeGen {
     /// Populated during instruction emission; consumed when emitting ret terminators.
     private var ownedHeapTemps: [(allocaName: String, kind: HeapKind)] = []
 
+    /// Track a temp as owning a heap value. Updates both ownedHeapTemps and tempHeapKinds.
+    private func trackHeapTemp(_ dest: String, kind: HeapKind) {
+        ownedHeapTemps.append((allocaName: dest, kind: kind))
+        tempHeapKinds[dest] = kind
+    }
+    /// Temps known to contain integer values (not pointers stored as i64).
+    /// Used by emitPrintCall to dispatch to rockit_println_int instead of _any.
+    private var knownIntTemps: Set<String> = []
+    /// Maps temp name → last assigned HeapKind, so .store barriers use type-specific release.
+    private var tempHeapKinds: [String: HeapKind] = [:]
+
     /// Maps heap temp name → flag alloca name (e.g., "t5" → "%t5.arc").
     /// Flag allocas are i1 values initialized to 0 in the prologue, set to 1 at creation sites.
     /// Used by emitARCCleanup to conditionally release only initialized temps.
@@ -1559,7 +1631,7 @@ public final class LLVMCodeGen {
         lines.append("store i1 1, ptr \(flagName)")
 
         // Track in ownedHeapTemps (only first occurrence matters for cleanup dedup)
-        ownedHeapTemps.append((dest, kind))
+        trackHeapTemp(dest, kind: kind)
 
         return lines
     }
@@ -1959,7 +2031,7 @@ public final class LLVMCodeGen {
 
             // ARC: track heap-allocating calls
             if let kind = heapKindForFunction(function) {
-                ownedHeapTemps.append((allocaName: dest, kind: kind))
+                trackHeapTemp(dest, kind: kind)
                 if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
             }
 
@@ -2042,6 +2114,9 @@ public final class LLVMCodeGen {
                     dests.insert(dest)
                 case .stringConcat(let dest, _):
                     dests.insert(dest)
+                case .add(let dest, _, _, let t):
+                    // String addition compiles to rockit_string_concat → heap allocation
+                    if case .string = t { dests.insert(dest) }
                 case .getField(let dest, _, _):
                     // getField may return a heap value (string, object, list, map)
                     dests.insert(dest)
@@ -2071,6 +2146,13 @@ public final class LLVMCodeGen {
                     // toString → may or may not track depending on arg type at emission time
                     // Over-include: flag stays 0 if emission doesn't track
                     if callee == "toString" {
+                        dests.insert(dest)
+                    }
+                case .store(let dest, let src):
+                    // If the source is ptr-typed, the dest needs ARC tracking
+                    // to prevent leaks when ptr-typed locals are reassigned in loops.
+                    let srcType = registerTypes[src] ?? "i64"
+                    if srcType == "ptr" {
                         dests.insert(dest)
                     }
                 default:
@@ -2126,7 +2208,7 @@ public final class LLVMCodeGen {
         lines.append("\(tmp) = call ptr @\(nativeFn)()")
         lines.append(storeToTemp(dest, value: tmp, type: "ptr"))
         registerTypes[dest] = "ptr"
-        ownedHeapTemps.append((allocaName: dest, kind: kind))
+        trackHeapTemp(dest, kind: kind)
         if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines
     }
@@ -2338,7 +2420,7 @@ public final class LLVMCodeGen {
         }
         lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .list))
         lines.append(storeToTemp(dest, value: listTmp, type: "ptr"))
-        ownedHeapTemps.append((allocaName: dest, kind: .list))
+        trackHeapTemp(dest, kind: .list)
         if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines
     }
@@ -2363,7 +2445,7 @@ public final class LLVMCodeGen {
         }
         lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .map))
         lines.append(storeToTemp(dest, value: mapTmp, type: "i64"))
-        ownedHeapTemps.append((allocaName: dest, kind: .map))
+        trackHeapTemp(dest, kind: .map)
         if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines
     }
@@ -2381,7 +2463,14 @@ public final class LLVMCodeGen {
 
         switch argType {
         case "i64":
-            // Use _any variant which auto-detects string pointers vs integers
+            if knownIntTemps.contains(arg) {
+                // Known integer — safe to use typed _int (avoids false positive in _any)
+                return [
+                    "\(tmp) = load i64, ptr \(addrOf(arg))",
+                    "call void @\(prefix)_int(i64 \(tmp))"
+                ]
+            }
+            // Unknown i64 — may be a string pointer; use _any for auto-detection
             return [
                 "\(tmp) = load i64, ptr \(addrOf(arg))",
                 "call void @\(prefix)_any(i64 \(tmp))"
@@ -2431,7 +2520,7 @@ public final class LLVMCodeGen {
                 storeToTemp(dest, value: resultTmp, type: "ptr")
             ]
         case "double":
-            ownedHeapTemps.append((allocaName: dest, kind: .string))
+            trackHeapTemp(dest, kind: .string)
             var result = emitOldTempRelease(dest: dest, kind: .string)
             result.append("\(tmp) = load double, ptr \(addrOf(arg))")
             result.append("\(resultTmp) = call ptr @rockit_float_to_string(double \(tmp))")
@@ -2439,7 +2528,7 @@ public final class LLVMCodeGen {
             if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
             return result
         case "i1":
-            ownedHeapTemps.append((allocaName: dest, kind: .string))
+            trackHeapTemp(dest, kind: .string)
             var result = emitOldTempRelease(dest: dest, kind: .string)
             result.append("\(tmp) = load i1, ptr \(addrOf(arg))")
             result.append("\(resultTmp) = call ptr @rockit_bool_to_string(i1 \(tmp))")
@@ -2453,7 +2542,7 @@ public final class LLVMCodeGen {
                 storeToTemp(dest, value: tmp, type: "ptr")
             ]
         default:
-            ownedHeapTemps.append((allocaName: dest, kind: .string))
+            trackHeapTemp(dest, kind: .string)
             var result = emitOldTempRelease(dest: dest, kind: .string)
             result.append("\(tmp) = load i64, ptr \(addrOf(arg))")
             result.append("\(resultTmp) = call ptr @rockit_int_to_string(i64 \(tmp))")
@@ -2832,7 +2921,7 @@ public final class LLVMCodeGen {
 
         lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .string))
         lines.append(storeToTemp(dest, value: accumulator, type: "ptr"))
-        ownedHeapTemps.append((allocaName: dest, kind: .string))
+        trackHeapTemp(dest, kind: .string)
         if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines
     }
@@ -2875,6 +2964,11 @@ public final class LLVMCodeGen {
         let objTmp = nextSSA()
         lines.append("\(objTmp) = call ptr @rockit_object_alloc(ptr \(typeNameGlobal), i32 \(fieldCount))")
 
+        // Compute ptrFieldBits: bitmask of which fields contain pointers.
+        // Used by rockit_release to avoid cascade-releasing integer fields
+        // that happen to fall in the heap pointer range.
+        var ptrFieldBits: UInt32 = 0
+
         // Set each field from the constructor args (with ARC retain for each stored value)
         if typeDecls[typeName] != nil {
             for (i, arg) in args.enumerated() {
@@ -2886,6 +2980,7 @@ public final class LLVMCodeGen {
                     let castTmp = nextSSA()
                     lines.append("\(castTmp) = ptrtoint ptr \(valTmp) to i64")
                     valI64 = castTmp
+                    if i < 32 { ptrFieldBits |= UInt32(1 << i) }
                 } else if argType == "i1" {
                     let extTmp = nextSSA()
                     lines.append("\(extTmp) = zext i1 \(valTmp) to i64")
@@ -2897,12 +2992,16 @@ public final class LLVMCodeGen {
                 } else {
                     valI64 = valTmp
                 }
-                // ARC: retain the value being stored into the field
-                lines.append("call void @rockit_retain_value(i64 \(valI64))")
+                // ARC: retain pointer-typed or unknown values. Skip known integers —
+                // large ints in heap pointer range would crash rockit_retain_value.
+                if argType == "ptr" || !knownIntTemps.contains(arg) {
+                    lines.append("call void @rockit_retain_value(i64 \(valI64))")
+                }
                 lines.append("call void @rockit_object_set_field(ptr \(objTmp), i32 \(i), i64 \(valI64))")
             }
         } else {
-            // No type decl — store args by index
+            // No type decl — store args by index, conservatively retain all
+            ptrFieldBits = 0  // 0 = unknown → rockit_release cascades all fields
             for (i, arg) in args.enumerated() {
                 let valTmp = nextSSA()
                 lines.append("\(valTmp) = load i64, ptr \(addrOf(arg))")
@@ -2912,9 +3011,18 @@ public final class LLVMCodeGen {
             }
         }
 
+        // Set ptrFieldBits on the object (offset 20: after typeName[8] + refCount[8] + fieldCount[4])
+        // Always write when we have type info — 0 means "no pointer fields" (skip all releases).
+        // rockit_object_alloc initializes to 0xFFFFFFFF (unknown/release all) as fallback.
+        if typeDecls[typeName] != nil {
+            let bitsGep = nextSSA()
+            lines.append("\(bitsGep) = getelementptr i8, ptr \(objTmp), i64 20")
+            lines.append("store i32 \(ptrFieldBits), ptr \(bitsGep)")
+        }
+
         lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .object))
         lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
-        ownedHeapTemps.append((allocaName: dest, kind: .object))
+        trackHeapTemp(dest, kind: .object)
         if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines
     }

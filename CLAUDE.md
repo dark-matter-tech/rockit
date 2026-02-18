@@ -29,6 +29,49 @@ From Stage 2 onward, each new version of `command` is compiled by the previous v
 | Registry | Silo |
 | REPL | Launch |
 | Browser | Nova |
+| Rendering Engine | Supernova |
+
+## Nova Browser Architecture
+
+Nova is a dual-engine browser. It runs Rockit web apps natively and supports legacy JavaScript websites for compatibility.
+
+### Dual Engine Design
+
+```
+User visits a site → Nova detects content type
+       ↓
+  Rockit (.rok/.rokb)          HTML/JS (legacy web)
+       ↓                            ↓
+  Rockit Engine                JS Compatibility Engine
+  - Baseline compiler          - JavaScriptCore (macOS/iOS)
+    (.rokb → native ARM64/x86) - V8 or Hermes (Windows/Linux)
+  - Supernova (GPU rendering)
+  - ARC memory management
+  - @Capability platform bridge
+```
+
+### Rockit Engine (fast path)
+
+- **Execution:** Baseline compiler translates `.rokb` bytecode to native machine code on first load (<100ms), caches result. No interpreter, no VM in the loop.
+- **Rendering:** Supernova — GPU-accelerated compositor for `view` trees, GPU compute for `parallel` blocks, full rendering pipeline for 3D apps. Backends: Metal (macOS/iOS), Vulkan (Android/Linux), Direct3D 12 (Windows).
+- **Memory:** ARC with configurable budgets per app (heap bytes, object count, coroutine count, instruction budget). No GC overhead.
+- **Concurrency:** CPS coroutine model with cooperative scheduling. Actor isolation for thread safety.
+- **Optional LLVM tier:** Background recompilation of frequently-used apps with full LLVM optimization. Replaces cached baseline binary.
+
+### JS Compatibility Engine (legacy path)
+
+- **macOS/iOS:** JavaScriptCore (ships with OS, zero additional size)
+- **Windows/Linux:** V8 or Hermes (embedded)
+- **Detection:** HTML content type → JS engine. Rockit content type → Rockit engine.
+- **Purpose:** Every existing website works from day one. Users can switch to Nova immediately.
+
+### Migration Strategy
+
+1. Launch Nova with both engines — full web compatibility from day one
+2. Rockit apps get the fast path — native compiled, Supernova rendering, low memory
+3. JS sites get the compat path — functional, but no faster than Chrome/Safari
+4. Developers migrate to Rockit over time — better performance, simpler stack
+5. JS engine becomes vestigial as ecosystem matures
 
 ## Language Summary
 

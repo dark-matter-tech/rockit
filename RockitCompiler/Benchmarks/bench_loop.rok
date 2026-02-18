@@ -1,0 +1,12 @@
+// bench_loop.rok — Loop + arithmetic benchmark
+// Measures: loop overhead, integer arithmetic, variable mutation
+
+fun main(): Unit {
+    var sum: Int = 0
+    var i: Int = 0
+    while (i < 100000000) {
+        sum = sum + i
+        i = i + 1
+    }
+    println(sum)
+}

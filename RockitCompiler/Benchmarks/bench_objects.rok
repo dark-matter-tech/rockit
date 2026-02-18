@@ -1,0 +1,20 @@
+// bench_objects.rok — Object allocation benchmark
+// Measures: heap allocation, ARC retain/release, field access
+
+class Point(val x: Int, val y: Int)
+
+fun addPoints(a: Point, b: Point): Point {
+    return Point(a.x + b.x, a.y + b.y)
+}
+
+fun main(): Unit {
+    var p: Point = Point(0, 0)
+    var i: Int = 0
+    while (i < 1000000) {
+        val q: Point = Point(i, i)
+        p = addPoints(p, q)
+        i = i + 1
+    }
+    println(p.x)
+    println(p.y)
+}

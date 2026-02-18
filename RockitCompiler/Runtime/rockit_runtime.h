@@ -14,6 +14,11 @@
 // Value chosen to be: non-zero, below heap pointer range, too large for any index.
 #define ROCKIT_NULL ((int64_t)0xCAFEBABE)
 
+// ── Immortal String Refcount ────────────────────────────────────────────────
+// String literals emitted by the compiler use this refcount value.
+// retain/release become no-ops for immortal strings — zero malloc/free.
+#define ROCKIT_IMMORTAL_REFCOUNT INT64_MAX
+
 // ── Value Tags ──────────────────────────────────────────────────────────────
 
 #define ROCKIT_TAG_INT     0
@@ -49,7 +54,7 @@ struct RockitObject {
     const char* typeName;
     int64_t     refCount;
     int32_t     fieldCount;
-    int32_t     _padding;
+    uint32_t    ptrFieldBits;  // bitmask: bit i set = field i is a pointer (needs cascade release)
     int64_t     fields[];   // flexible array member — stores all field values as i64
 };
 

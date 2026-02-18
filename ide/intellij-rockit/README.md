@@ -22,7 +22,21 @@ Language support for the **Rockit** programming language (`.rok` files) in JetBr
 
 ## Install
 
-### From disk (recommended)
+### One-liner (recommended)
+
+Installs Rockit support to all detected editors (VS Code, Vim, Neovim, JetBrains, Visual Studio):
+
+**macOS / Linux / Windows (WSL, Git Bash):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.ps1 | iex
+```
+
+### From disk
 
 1. Build the plugin (or download the zip from releases):
    ```bash

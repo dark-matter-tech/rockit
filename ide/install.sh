@@ -446,6 +446,25 @@ do_install_visualstudio() {
 
 # ─── Main ─────────────────────────────────────────────────────────────
 
+# If Python 3 is available and install.py exists alongside this script,
+# hand off to the cinematic Python installer for the full experience.
+_try_python_installer() {
+    command -v python3 >/dev/null 2>&1 || return 1
+    local script_dir=""
+    if [ -n "${BASH_SOURCE[0]:-}" ]; then
+        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    fi
+    [ -n "$script_dir" ] && [ -f "$script_dir/install.py" ] && {
+        exec python3 "$script_dir/install.py"
+    }
+    # Also check cwd
+    [ -f "ide/install.py" ] && { exec python3 "ide/install.py"; }
+    return 1
+}
+_try_python_installer || true
+
+# ─── Bash fallback (no Python 3 or install.py not found) ─────────────
+
 show_banner
 sleep 0.5
 

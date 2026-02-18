@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#ifdef __APPLE__
+#include <malloc/malloc.h>
+#endif
 
 // ── RockitString ────────────────────────────────────────────────────────────
 
@@ -32,11 +35,11 @@ RockitString* rockit_string_concat(RockitString* a, RockitString* b) {
 }
 
 void rockit_string_retain(RockitString* s) {
-    if (s) s->refCount++;
+    if (s && s->refCount != ROCKIT_IMMORTAL_REFCOUNT) s->refCount++;
 }
 
 void rockit_string_release(RockitString* s) {
-    if (s && --s->refCount <= 0) {
+    if (s && s->refCount != ROCKIT_IMMORTAL_REFCOUNT && --s->refCount <= 0) {
         free(s);
     }
 }
@@ -52,7 +55,7 @@ RockitObject* rockit_object_alloc(const char* typeName, int32_t fieldCount) {
     obj->typeName = typeName;
     obj->refCount = 1;
     obj->fieldCount = fieldCount;
-    obj->_padding = 0;
+    obj->ptrFieldBits = 0xFFFFFFFF;  // unknown: release all fields (conservative default)
     // Zero-initialize fields
     for (int32_t i = 0; i < fieldCount; i++) {
         obj->fields[i] = 0;
@@ -86,9 +89,22 @@ void rockit_retain(RockitObject* obj) {
 
 void rockit_release(RockitObject* obj) {
     if (obj && --obj->refCount <= 0) {
-        // Cascade: release all field values before freeing
-        for (int32_t i = 0; i < obj->fieldCount; i++) {
-            rockit_release_value(obj->fields[i]);
+        // Cascade: release pointer-typed field values before freeing.
+        // If ptrFieldBits is set, only release fields marked as pointers.
+        // If ptrFieldBits is 0 (legacy/unknown), release all fields (conservative).
+        uint32_t bits = obj->ptrFieldBits;
+        if (bits == 0xFFFFFFFF) {
+            // Unknown (legacy): conservatively release all fields
+            for (int32_t i = 0; i < obj->fieldCount; i++) {
+                rockit_release_value(obj->fields[i]);
+            }
+        } else {
+            // Known: only release fields marked as pointers
+            for (int32_t i = 0; i < obj->fieldCount && i < 32; i++) {
+                if (bits & (1u << i)) {
+                    rockit_release_value(obj->fields[i]);
+                }
+            }
         }
         free(obj);
     }
@@ -110,6 +126,7 @@ void rockit_retain_value(int64_t val) {
     // RockitObject has typeName (a pointer) as its first field.
     // String/List/Map have refCount (a small integer) as their first field.
     int64_t first_field = *(int64_t*)ptr;
+    if (first_field == ROCKIT_IMMORTAL_REFCOUNT) return;  // immortal string literal
     if (is_likely_heap_ptr(first_field)) {
         // First field is a pointer → RockitObject (typeName is first, refCount is second)
         ((RockitObject*)ptr)->refCount++;
@@ -123,6 +140,7 @@ void rockit_release_value(int64_t val) {
     if (!is_likely_heap_ptr(val)) return;
     void* ptr = (void*)(intptr_t)val;
     int64_t first_field = *(int64_t*)ptr;
+    if (first_field == ROCKIT_IMMORTAL_REFCOUNT) return;  // immortal string literal
     if (is_likely_heap_ptr(first_field)) {
         // RockitObject: refCount is at offset 8
         RockitObject* obj = (RockitObject*)ptr;
@@ -139,8 +157,15 @@ void rockit_release_value(int64_t val) {
         if (--(*refCount) <= 0) {
             // Check if it has an internal allocation at offset 24 (List data / Map entries).
             // Strings use a flexible array member (inline data), so offset 24 is just string bytes.
-            // Lists/Maps have: [refCount:8][size:8][capacity:8][data/entries ptr:8]
-            int64_t potential_ptr = *((int64_t*)((char*)ptr + 24));
+            // Lists/Maps have: [refCount:8][size:8][capacity:8][data/entries ptr:8] = 32 bytes fixed.
+            // Short strings (length < 16) have allocations < 32 bytes, so offset 24 is OOB.
+            // Guard with allocation size check to prevent heap-buffer-overflow.
+#ifdef __APPLE__
+            size_t alloc_size = malloc_size(ptr);
+#else
+            size_t alloc_size = 32;  // assume safe on non-Apple (most allocators round up)
+#endif
+            int64_t potential_ptr = (alloc_size >= 32) ? *((int64_t*)((char*)ptr + 24)) : 0;
             if (is_likely_heap_ptr(potential_ptr)) {
                 // Likely a List or Map — cascade release through elements.
                 // Read size and capacity from offsets 8 and 16.
@@ -494,7 +519,7 @@ static int is_likely_string_ptr(int64_t value) {
     uint64_t uval = (uint64_t)value;
     if (uval > 0x100000000ULL && uval < 0x800000000000ULL) {
         RockitString* s = (RockitString*)(intptr_t)value;
-        if (s->refCount > 0 && s->refCount < 100000 &&
+        if (((s->refCount > 0 && s->refCount < 100000) || s->refCount == ROCKIT_IMMORTAL_REFCOUNT) &&
             s->length >= 0 && s->length < 10000000) {
             return 1;
         }

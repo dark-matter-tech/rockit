@@ -1,0 +1,12 @@
+// bench_strings.rok — String operations benchmark
+// Measures: string concatenation, string interpolation, memory handling
+
+fun main(): Unit {
+    var s: String = ""
+    var i: Int = 0
+    while (i < 100000) {
+        s = s + "x"
+        i = i + 1
+    }
+    println(i)
+}
