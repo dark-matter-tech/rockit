@@ -204,7 +204,7 @@ jobs:
           for f in Examples/test_*.rok; do
             name=$(basename "$f" .rok)
             # Skip Stage 1-only tests (compiled with Stage 1 binary after bootstrap)
-            case "$name" in test_unsafe*|test_crepr*) echo "  ┌──────────────────────────────────────────────"; printf "  │ ⏭️  %-42s" "$name"; echo "⏭️  SKIP (Stage 1 only)"; echo "  └──────────────────────────────────────────────"; continue;; esac
+            case "$name" in test_unsafe*|test_crepr*|test_funptr*) echo "  ┌──────────────────────────────────────────────"; printf "  │ ⏭️  %-42s" "$name"; echo "⏭️  SKIP (Stage 1 only)"; echo "  └──────────────────────────────────────────────"; continue;; esac
             TOTAL=$((TOTAL + 1))
             echo "  ┌──────────────────────────────────────────────"
             printf "  │ 🚀 %-42s" "$name"
@@ -429,7 +429,7 @@ jobs:
           STAGE1_CMD=Stage1/command
           S1_PASS=0; S1_FAIL=0; S1_TOTAL=0
           S1_FAILED=""
-          for f in Examples/test_unsafe*.rok Examples/test_crepr*.rok; do
+          for f in Examples/test_unsafe*.rok Examples/test_crepr*.rok Examples/test_funptr*.rok; do
             [ -f "$f" ] || continue
             S1_TOTAL=$((S1_TOTAL + 1))
             name=$(basename "$f" .rok)

@@ -939,6 +939,18 @@ fun compileExpr(fs: Map, node: Map): Int {
                 return dest
             }
 
+            // addressOf(funcName) → get function pointer as i64
+            if (funcName == "addressOf" && listSize(callArgs) == 1) {
+                val fpArgNode = listGet(callArgs, 0)
+                val fpArgKind = toString(mapGet(fpArgNode, "kind"))
+                if (fpArgKind == "ident") {
+                    val refName = toString(mapGet(fpArgNode, "name"))
+                    val dest = allocReg(fs)
+                    emitCall(fs, dest, stringConcat("__funptr_", refName), listCreate())
+                    return dest
+                }
+            }
+
             // Check if this is a local variable (could hold a lambda reference)
             val localSlot = mapGet(mapGet(fs, "locals"), funcName)
             if (localSlot != null) {

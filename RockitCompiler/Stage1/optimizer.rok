@@ -407,6 +407,16 @@ fun eliminateDeadFunctions(compiler: Map): Unit {
                                     listAppend(worklist, cval)
                                 }
                             }
+                            // addressOf: __funptr_X → mark X as reachable
+                            if (startsWith(cval, "__funptr_")) {
+                                val targetName = substring(cval, 9, stringLength(cval))
+                                if (mapGet(allFuncNames, targetName) != null) {
+                                    if (mapGet(reachable, targetName) == null) {
+                                        mapPut(reachable, targetName, true)
+                                        listAppend(worklist, targetName)
+                                    }
+                                }
+                            }
                         }
                     }
                 } else if (byte == 192) {

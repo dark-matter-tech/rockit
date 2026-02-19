@@ -2307,6 +2307,17 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
     }
     // ── End @CRepr intrinsics ──────────────────────────────────────────
 
+    // ── Function pointer intrinsics ────────────────────────────────────
+    // __funptr_funcName: get function address as i64
+    if (startsWith(callName, "__funptr_")) {
+        val targetName = substring(callName, 9, stringLength(callName))
+        val tres = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = ptrtoint ptr @", stringConcat(targetName, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+    // ── End function pointer intrinsics ────────────────────────────────
+
     // Check if println/print/toString arg is a double register
     if ((callName == "println" || callName == "print" || callName == "toString") && argc == 1) {
         val argReg = llvmReadU16(bc, argStart)
