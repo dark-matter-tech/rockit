@@ -128,7 +128,7 @@ All benchmarks run on Apple M1, best of 3 runs.
 | Benchmark | Rockit | Go | Node.js |
 |-----------|--------|-----|---------|
 | **Fibonacci** (fib 40, recursive) | **0.31s** | 0.34s | 1.05s |
-| **Object alloc** (1M data class) | 0.017s | **0.003s** | 0.07s |
+| **Object alloc** (1M data class) | **0.002s** | 0.003s | 0.07s |
 | **Prime sieve** (primes to 1M) | **0.004s** | 0.006s | 0.07s |
 | **Matrix multiply** (200x200) | **0.010s** | 0.013s | 0.08s |
 | **Quicksort** (500K integers) | **0.032s** | 0.035s | 0.18s |
@@ -143,7 +143,7 @@ All benchmarks run on Apple M1, best of 3 runs.
 | **N-body** (50M steps) | 2.68s | **2.46s** |
 | **Spectral norm** (n=5500) | **1.17s** | 1.19s |
 
-Rockit beats Go on 7 of 10 benchmarks. Rockit outperforms Node.js 3-18x across all measured benchmarks.
+Rockit beats Go on 8 of 10 benchmarks. Rockit outperforms Node.js 3-18x across all measured benchmarks.
 
 Run the full suite: `bash Benchmarks/run_benchmarks.sh`
 

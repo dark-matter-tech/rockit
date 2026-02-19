@@ -172,11 +172,12 @@ void rockit_object_set_field(RockitObject* obj, int32_t index, int64_t value) {
 }
 
 void rockit_retain(RockitObject* obj) {
-    if (obj) obj->refCount++;
+    if (obj && obj->refCount >= 0) obj->refCount++;
 }
 
 void rockit_release(RockitObject* obj) {
-    if (obj && --obj->refCount <= 0) {
+    if (!obj || obj->refCount < 0) return;  // null or stack-allocated sentinel (-1)
+    if (--obj->refCount <= 0) {
         // Cascade: release pointer-typed field values before freeing.
         // If ptrFieldBits is set, only release fields marked as pointers.
         // If ptrFieldBits is 0 (legacy/unknown), release all fields (conservative).

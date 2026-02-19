@@ -594,6 +594,7 @@ public final class LLVMCodeGen {
         tempHeapKinds = [:]
         tempObjectTypes = [:]
         stackPromotedTemps = []
+        stackOnlyTemps = []
         stackAllocaNames = [:]
 
         // Pre-pass: build temp → type name mapping for value type objects
@@ -669,6 +670,8 @@ public final class LLVMCodeGen {
 
         // Pre-pass: escape analysis for stack promotion of value-type objects
         stackPromotedTemps = computeStackPromotedTemps(function)
+        // Compute temps that only ever hold stack-promoted pointers (exclude from ARC)
+        stackOnlyTemps = computeStackOnlyTemps(function)
 
         var lines: [String] = []
 
@@ -1743,6 +1746,10 @@ public final class LLVMCodeGen {
     /// These use LLVM alloca (stack) instead of rockit_object_alloc (heap).
     private var stackPromotedTemps: Set<String> = []
 
+    /// Temps that only ever receive stack-promoted object pointers (via store chains).
+    /// These are excluded from ARC tracking to prevent releasing stack memory.
+    private var stackOnlyTemps: Set<String> = []
+
     /// Maps stack-promoted temp names → their pre-allocated stack alloca LLVM names.
     private var stackAllocaNames: [String: String] = [:]
 
@@ -1951,6 +1958,40 @@ public final class LLVMCodeGen {
         }
 
         return candidates.subtracting(escaped)
+    }
+
+    /// Compute temps that only ever receive stack-promoted object pointers.
+    /// These temps are excluded from ARC tracking (no retain/release needed).
+    /// A temp is "stack-only" if every value stored into it comes from a stack-promoted newObject.
+    private func computeStackOnlyTemps(_ function: MIRFunction) -> Set<String> {
+        guard !stackPromotedTemps.isEmpty else { return [] }
+        // Track which temps are known to only hold stack-promoted values
+        var stackOnly = stackPromotedTemps
+        // Propagate through store chains: if store(dest, src) and src is stack-only,
+        // AND dest never receives a non-stack-only value, then dest is stack-only.
+        // We do this conservatively: first find all store targets, then check.
+        var storeTargets: [String: [String]] = [:]  // dest → [src values stored]
+        for block in function.blocks {
+            for inst in block.instructions {
+                if case .store(let dest, let src) = inst {
+                    storeTargets[dest, default: []].append(src)
+                }
+            }
+        }
+        // Iteratively propagate stack-only status
+        var changed = true
+        while changed {
+            changed = false
+            for (dest, srcs) in storeTargets {
+                if stackOnly.contains(dest) { continue }
+                // dest is stack-only if ALL sources stored to it are stack-only
+                if srcs.allSatisfy({ stackOnly.contains($0) }) {
+                    stackOnly.insert(dest)
+                    changed = true
+                }
+            }
+        }
+        return stackOnly
     }
 
     // MARK: - ARC Tracking
@@ -2784,8 +2825,10 @@ public final class LLVMCodeGen {
                 case .add(let dest, _, _, let t):
                     // String addition compiles to rockit_string_concat → heap allocation
                     if case .string = t { dests.insert(dest) }
-                case .getField(let dest, _, _):
+                case .getField(let dest, let object, _):
                     // getField may return a heap value (string, object, list, map)
+                    // Skip if the object is a stack-only value type (fields are primitives)
+                    if let tn = tempObjectTypes[object], isValueType(tn) { continue }
                     dests.insert(dest)
                 case .virtualCall(let dest, _, let method, _):
                     guard let dest = dest else { continue }
@@ -2818,6 +2861,8 @@ public final class LLVMCodeGen {
                 case .store(let dest, let src):
                     // If the source is ptr-typed, the dest needs ARC tracking
                     // to prevent leaks when ptr-typed locals are reassigned in loops.
+                    // Skip if both src and dest are stack-only (no heap ptrs to release).
+                    if stackOnlyTemps.contains(dest) { continue }
                     let srcType = registerTypes[src] ?? "i64"
                     if srcType == "ptr" {
                         dests.insert(dest)
