@@ -56,6 +56,8 @@ public final class LLVMCodeGen {
     private var globalInitializers: [String: String] = [:]
     /// Set of all function names defined in the module (for lambda pointer resolution).
     private var moduleFunctionNames: Set<String> = []
+    /// Index of MIR functions by name (for interprocedural escape analysis).
+    private var mirFunctionsByName: [String: MIRFunction] = [:]
 
     public init() {}
 
@@ -82,6 +84,8 @@ public final class LLVMCodeGen {
         moduleGlobals = [:]
         globalInitializers = [:]
         moduleFunctionNames = Set(module.functions.map { $0.name })
+        mirFunctionsByName = Dictionary(uniqueKeysWithValues: module.functions.map { ($0.name, $0) })
+        nonEscapingParams = [:]
 
         // Index type declarations
         for t in module.types {
@@ -589,6 +593,8 @@ public final class LLVMCodeGen {
         knownIntTemps = []
         tempHeapKinds = [:]
         tempObjectTypes = [:]
+        stackPromotedTemps = []
+        stackAllocaNames = [:]
 
         // Pre-pass: build temp → type name mapping for value type objects
         // 1. Track function parameters with known reference types
@@ -660,6 +666,9 @@ public final class LLVMCodeGen {
                 }
             }
         }
+
+        // Pre-pass: escape analysis for stack promotion of value-type objects
+        stackPromotedTemps = computeStackPromotedTemps(function)
 
         var lines: [String] = []
 
@@ -768,6 +777,18 @@ public final class LLVMCodeGen {
                 // Null-init ptr allocas so ARC write barriers can safely read old values.
                 if lt == "ptr" {
                     lines.append("  store ptr null, ptr \(allocaName)")
+                }
+            }
+            // Stack-promoted value type allocas (in prologue so they're safe inside loops)
+            for dest in stackPromotedTemps {
+                if let typeName = tempObjectTypes[dest],
+                   let decl = typeDecls[typeName] {
+                    let fieldCount = decl.fields.count
+                    let totalSize = 24 + fieldCount * 8
+                    let rawName = dest.hasPrefix("%") ? String(dest.dropFirst()) : dest
+                    let allocaName = "%\(rawName).stack"
+                    lines.append("  \(allocaName) = alloca i8, i64 \(totalSize)")
+                    stackAllocaNames[dest] = allocaName
                 }
             }
             // ARC flag allocas: i1 flags for heap temp tracking.
@@ -1718,6 +1739,13 @@ public final class LLVMCodeGen {
     /// Built per-function by scanning .newObject instructions.
     private var tempObjectTypes: [String: String] = [:]
 
+    /// Temps that hold value-type objects proven non-escaping within the current function.
+    /// These use LLVM alloca (stack) instead of rockit_object_alloc (heap).
+    private var stackPromotedTemps: Set<String> = []
+
+    /// Maps stack-promoted temp names → their pre-allocated stack alloca LLVM names.
+    private var stackAllocaNames: [String: String] = [:]
+
     /// Checks if a type name is a value type (primitive-only data class).
     private func isValueType(_ typeName: String) -> Bool {
         return typeDecls[typeName]?.isValueType ?? false
@@ -1729,6 +1757,200 @@ public final class LLVMCodeGen {
         if let tn = tempObjectTypes[temp], isValueType(tn) { return tn }
         if temp == "this", let cn = currentClassName, isValueType(cn) { return cn }
         return nil
+    }
+
+    // MARK: - Escape Analysis (Stack Promotion)
+
+    /// Cache of per-function parameter escape analysis: funcName → set of parameter indices that don't escape.
+    private var nonEscapingParams: [String: Set<Int>] = [:]
+
+    /// Analyze whether parameter at `paramIndex` escapes within `callee`.
+    /// A parameter doesn't escape if it's only used in getField/load (read-only access).
+    private func paramEscapesInCallee(_ calleeName: String, paramIndex: Int) -> Bool {
+        // Check cache
+        if let cached = nonEscapingParams[calleeName] {
+            return !cached.contains(paramIndex)
+        }
+        // Compute for all params of this function
+        guard let callee = mirFunctionsByName[calleeName] else { return true }
+        var safe = Set<Int>()
+        for (idx, (name, _)) in callee.parameters.enumerated() {
+            let paramLocal = "param.\(name)"
+            var escapes = false
+            // Build alias set for this parameter through load/store
+            var aliases: Set<String> = [paramLocal]
+            var changed = true
+            while changed {
+                changed = false
+                for block in callee.blocks {
+                    for inst in block.instructions {
+                        if case .load(let dest, let src) = inst, aliases.contains(src), !aliases.contains(dest) {
+                            aliases.insert(dest)
+                            changed = true
+                        }
+                        if case .store(let dest, let src) = inst, aliases.contains(src), !aliases.contains(dest) {
+                            aliases.insert(dest)
+                            changed = true
+                        }
+                    }
+                }
+            }
+            // Check if any alias escapes
+            outer: for block in callee.blocks {
+                for inst in block.instructions {
+                    switch inst {
+                    case .call(_, _, let args), .awaitCall(_, _, let args):
+                        for arg in args where aliases.contains(arg) { escapes = true; break outer }
+                    case .virtualCall(_, let obj, _, let args):
+                        if aliases.contains(obj) { escapes = true; break outer }
+                        for arg in args where aliases.contains(arg) { escapes = true; break outer }
+                    case .callIndirect(_, _, let args):
+                        for arg in args where aliases.contains(arg) { escapes = true; break outer }
+                    case .setField(let object, _, let value):
+                        if aliases.contains(value) {
+                            let objectIsAlias = aliases.contains(object)
+                            if !objectIsAlias { escapes = true; break outer }
+                        }
+                    default:
+                        break
+                    }
+                }
+                if let term = block.terminator {
+                    switch term {
+                    case .ret(let val):
+                        if let val = val, aliases.contains(val) { escapes = true; break outer }
+                    case .throwValue(let val):
+                        if aliases.contains(val) { escapes = true; break outer }
+                    default: break
+                    }
+                }
+            }
+            if !escapes { safe.insert(idx) }
+        }
+        nonEscapingParams[calleeName] = safe
+        return !safe.contains(paramIndex)
+    }
+
+    /// Analyze a function to identify value-type newObject temps that do not escape.
+    /// An object escapes if it is returned, thrown, passed to a call, or stored into another object.
+    /// Conservative: if we can't prove non-escaping, assume it escapes.
+    private func computeStackPromotedTemps(_ function: MIRFunction) -> Set<String> {
+        // Step 1: Find all value-type newObject destinations
+        var candidates: Set<String> = []
+        for block in function.blocks {
+            for inst in block.instructions {
+                if case .newObject(let dest, let typeName, _) = inst {
+                    if isValueType(typeName) {
+                        candidates.insert(dest)
+                    }
+                }
+            }
+        }
+        if candidates.isEmpty { return [] }
+
+        // Step 2: Build alias groups through load/store chains.
+        // If temp X holds a newObject result and `load Y, X` or `store Y, X`,
+        // then Y is an alias of X.
+        var aliasOrigin: [String: String] = [:]  // alias → original candidate
+        for candidate in candidates {
+            aliasOrigin[candidate] = candidate
+        }
+
+        var changed = true
+        while changed {
+            changed = false
+            for block in function.blocks {
+                for inst in block.instructions {
+                    if case .store(let dest, let src) = inst {
+                        if let origin = aliasOrigin[src], aliasOrigin[dest] == nil {
+                            aliasOrigin[dest] = origin
+                            changed = true
+                        }
+                    }
+                    if case .load(let dest, let src) = inst {
+                        if let origin = aliasOrigin[src], aliasOrigin[dest] == nil {
+                            aliasOrigin[dest] = origin
+                            changed = true
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 3: Identify parameter-origin locals
+        var paramOrigins: Set<String> = []
+        for (name, _) in function.parameters {
+            paramOrigins.insert("param.\(name)")
+        }
+
+        // Step 4: Check each use for escaping behavior
+        var escaped: Set<String> = []
+
+        for block in function.blocks {
+            for inst in block.instructions {
+                switch inst {
+                case .call(_, let callee, let args):
+                    for (i, arg) in args.enumerated() {
+                        if let origin = aliasOrigin[arg] {
+                            // Check if the param escapes within the callee
+                            if paramEscapesInCallee(callee, paramIndex: i) {
+                                escaped.insert(origin)
+                            }
+                        }
+                    }
+                case .awaitCall(_, _, let args):
+                    for arg in args {
+                        if let origin = aliasOrigin[arg] { escaped.insert(origin) }
+                    }
+                case .virtualCall(_, let obj, _, let args):
+                    if let origin = aliasOrigin[obj] { escaped.insert(origin) }
+                    for arg in args {
+                        if let origin = aliasOrigin[arg] { escaped.insert(origin) }
+                    }
+                case .callIndirect(_, _, let args):
+                    for arg in args {
+                        if let origin = aliasOrigin[arg] { escaped.insert(origin) }
+                    }
+                case .setField(let object, _, let value):
+                    // Value stored into a different object → escapes
+                    if let valueOrigin = aliasOrigin[value] {
+                        let objectOrigin = aliasOrigin[object]
+                        if objectOrigin != valueOrigin {
+                            escaped.insert(valueOrigin)
+                        }
+                    }
+                case .store(let dest, let src):
+                    // Storing to a parameter-origin location → escapes
+                    if let origin = aliasOrigin[src], paramOrigins.contains(dest) {
+                        escaped.insert(origin)
+                    }
+                case .typeCast(_, let operand, _):
+                    if let origin = aliasOrigin[operand] { escaped.insert(origin) }
+                case .stringConcat(_, let parts):
+                    for part in parts {
+                        if let origin = aliasOrigin[part] { escaped.insert(origin) }
+                    }
+                default:
+                    break
+                }
+            }
+
+            // Check terminator
+            if let term = block.terminator {
+                switch term {
+                case .ret(let val):
+                    if let val = val, let origin = aliasOrigin[val] {
+                        escaped.insert(origin)
+                    }
+                case .throwValue(let val):
+                    if let origin = aliasOrigin[val] { escaped.insert(origin) }
+                default:
+                    break
+                }
+            }
+        }
+
+        return candidates.subtracting(escaped)
     }
 
     // MARK: - ARC Tracking
@@ -2554,7 +2776,9 @@ public final class LLVMCodeGen {
                         dests.insert(dest)
                     }
                 case .newObject(let dest, _, _):
-                    dests.insert(dest)
+                    if !stackPromotedTemps.contains(dest) {
+                        dests.insert(dest)
+                    }
                 case .stringConcat(let dest, _):
                     dests.insert(dest)
                 case .add(let dest, _, _, let t):
@@ -3640,12 +3864,30 @@ public final class LLVMCodeGen {
         let typeNameGlobal = typeNamePool[typeName] ?? internTypeName(typeName)
         let fieldCount = typeDecls[typeName]?.fields.count ?? args.count
         let valueType = isValueType(typeName)
-
-        // Allocate the object
-        let objTmp = nextSSA()
-        lines.append("\(objTmp) = call ptr @rockit_object_alloc(ptr \(typeNameGlobal), i32 \(fieldCount))")
+        let isStackPromoted = stackPromotedTemps.contains(dest)
 
         if valueType {
+            // Allocate: stack or heap
+            let objTmp: String
+            if isStackPromoted, let stackAlloca = stackAllocaNames[dest] {
+                // Stack allocation: use pre-allocated prologue alloca
+                objTmp = stackAlloca
+                // Initialize header for layout compatibility
+                lines.append("store ptr \(typeNameGlobal), ptr \(objTmp)")
+                let rcGep = nextSSA()
+                lines.append("\(rcGep) = getelementptr i8, ptr \(objTmp), i64 8")
+                lines.append("store i64 -1, ptr \(rcGep)")  // sentinel: stack-allocated
+                let fcGep = nextSSA()
+                lines.append("\(fcGep) = getelementptr i8, ptr \(objTmp), i64 16")
+                lines.append("store i32 \(fieldCount), ptr \(fcGep)")
+                let bitsGep = nextSSA()
+                lines.append("\(bitsGep) = getelementptr i8, ptr \(objTmp), i64 20")
+                lines.append("store i32 0, ptr \(bitsGep)")
+            } else {
+                objTmp = nextSSA()
+                lines.append("\(objTmp) = call ptr @rockit_object_alloc(ptr \(typeNameGlobal), i32 \(fieldCount))")
+            }
+
             // Value type: inline GEP field stores, no ARC retain (all fields are primitives)
             for (i, arg) in args.enumerated() {
                 let argType = typeOf(arg)
@@ -3670,17 +3912,26 @@ public final class LLVMCodeGen {
                 lines.append("store i64 \(valI64), ptr \(fieldGep)")
             }
 
-            // ptrFieldBits = 0 (no pointer fields)
-            let bitsGep = nextSSA()
-            lines.append("\(bitsGep) = getelementptr i8, ptr \(objTmp), i64 20")
-            lines.append("store i32 0, ptr \(bitsGep)")
+            if !isStackPromoted {
+                // ptrFieldBits = 0 (no pointer fields) — stack path sets this in header init above
+                let bitsGep = nextSSA()
+                lines.append("\(bitsGep) = getelementptr i8, ptr \(objTmp), i64 20")
+                lines.append("store i32 0, ptr \(bitsGep)")
+            }
 
-            lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .object))
-            lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
-            trackHeapTemp(dest, kind: .object)
-            if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
+            if isStackPromoted {
+                // Stack promoted: just store the pointer, no ARC tracking
+                lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
+            } else {
+                lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .object))
+                lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
+                trackHeapTemp(dest, kind: .object)
+                if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
+            }
         } else {
             // Regular object: runtime calls + ARC
+            let objTmp = nextSSA()
+            lines.append("\(objTmp) = call ptr @rockit_object_alloc(ptr \(typeNameGlobal), i32 \(fieldCount))")
             var ptrFieldBits: UInt32 = 0
 
             if typeDecls[typeName] != nil {

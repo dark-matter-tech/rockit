@@ -103,6 +103,8 @@ The native compiler includes several optimizations that make Rockit competitive 
 
 **Value Types** — `data class` declarations with only primitive fields (Int, Float, Bool, etc.) use inline GEP field access instead of runtime function calls, and skip ARC retain/release for field values.
 
+**Escape Analysis & Stack Promotion** — Value-type `data class` instances that don't escape the current function are stack-allocated via LLVM `alloca` instead of heap-allocated via `malloc`. Interprocedural analysis proves parameters don't escape through read-only callees, enabling stack promotion even when objects are passed to functions.
+
 **Inline List Access** — `listGet`, `listSet`, and `listSize` are compiled to direct GEP memory operations with inline bounds checks instead of runtime function calls, eliminating call overhead while maintaining memory safety. Bounds checks add only 1-5% overhead — LLVM hot/cold splitting moves panic paths out of loop bodies.
 
 **Inline Integer Comparison** — `==` and `!=` on known integer operands compile to a single `icmp` instruction instead of calling the polymorphic `rockit_string_eq` runtime function.
@@ -126,7 +128,7 @@ All benchmarks run on Apple M1, best of 3 runs.
 | Benchmark | Rockit | Go | Node.js |
 |-----------|--------|-----|---------|
 | **Fibonacci** (fib 40, recursive) | **0.31s** | 0.34s | 1.05s |
-| **Object alloc** (1M data class) | 0.04s | **0.003s** | 0.07s |
+| **Object alloc** (1M data class) | 0.017s | **0.003s** | 0.07s |
 | **Prime sieve** (primes to 1M) | **0.004s** | 0.006s | 0.07s |
 | **Matrix multiply** (200x200) | **0.010s** | 0.013s | 0.08s |
 | **Quicksort** (500K integers) | **0.032s** | 0.035s | 0.18s |

@@ -630,4 +630,52 @@ final class LLVMCodeGenTests: XCTestCase {
         XCTAssertTrue(ir.contains("call i64 @compute"),
                        "await should pass through to the underlying call")
     }
+
+    // MARK: - Stack Promotion (Escape Analysis)
+
+    func testStackPromotionForNonEscapingValueType() {
+        let ir = emitLLVM("""
+        data class Point(x: Int, y: Int)
+        fun main(): Unit {
+            val p = Point(1, 2)
+            val sum = p.x + p.y
+            println(sum)
+        }
+        """)
+        XCTAssertTrue(ir.contains("alloca i8, i64 40"),
+                      "Non-escaping value type should be stack-allocated (40 = 24 header + 2*8 fields)")
+        XCTAssertFalse(ir.contains("call ptr @rockit_object_alloc"),
+                       "Non-escaping value type should NOT use heap allocation")
+    }
+
+    func testNoStackPromotionWhenReturned() {
+        let ir = emitLLVM("""
+        data class Point(x: Int, y: Int)
+        fun makePoint(): Point {
+            return Point(1, 2)
+        }
+        fun main(): Unit {
+            val p = makePoint()
+            println(p.x)
+        }
+        """)
+        XCTAssertTrue(ir.contains("rockit_object_alloc"),
+                      "Returned value type should use heap allocation")
+    }
+
+    func testStackPromotionWithInterproceduralAnalysis() {
+        let ir = emitLLVM("""
+        data class Point(x: Int, y: Int)
+        fun readX(p: Point): Int {
+            return p.x
+        }
+        fun main(): Unit {
+            val p = Point(3, 4)
+            println(readX(p))
+        }
+        """)
+        // p is passed to readX, but readX only reads fields — doesn't escape
+        XCTAssertTrue(ir.contains("alloca i8, i64 40"),
+                      "Value type passed to read-only function should be stack-promoted")
+    }
 }
