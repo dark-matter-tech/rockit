@@ -2487,8 +2487,22 @@ public final class LLVMCodeGen {
                 lines.append("\(lblSame):")
                 lines.append("  br label %\(lblDone)")
 
-                // Compare lengths
+                // Guard: if either pointer is the null sentinel (0xCAFEBABE), can't dereference
                 lines.append("\(lblLens):")
+                let nullSentinel = nextSSA()
+                lines.append("  \(nullSentinel) = inttoptr i64 3405691582 to ptr")
+                let aIsNull = nextSSA()
+                lines.append("  \(aIsNull) = icmp eq ptr \(aPtr), \(nullSentinel)")
+                let lblCheckB = "streq.ckb.\(labelCounter - 1)"
+                lines.append("  br i1 \(aIsNull), label %\(lblNeq), label %\(lblCheckB)")
+                lines.append("\(lblCheckB):")
+                let bIsNull = nextSSA()
+                lines.append("  \(bIsNull) = icmp eq ptr \(bPtr), \(nullSentinel)")
+                let lblLensReal = "streq.lens2.\(labelCounter - 1)"
+                lines.append("  br i1 \(bIsNull), label %\(lblNeq), label %\(lblLensReal)")
+
+                // Compare lengths
+                lines.append("\(lblLensReal):")
                 let aLenP = nextSSA()
                 lines.append("  \(aLenP) = getelementptr i8, ptr \(aPtr), i64 8")
                 let aLen = nextSSA()
