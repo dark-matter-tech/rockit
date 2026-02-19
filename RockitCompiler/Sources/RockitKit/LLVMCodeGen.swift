@@ -187,13 +187,15 @@ public final class LLVMCodeGen {
             lines.append("\(name) = private unnamed_addr constant [\(len) x i8] c\"\(escaped)\\00\"")
         }
         // Emit immortal RockitString globals (pre-built structs, no malloc needed)
-        // Layout matches C struct: { i64 refCount, i64 length, [N x i8] data }
+        // Layout matches C struct: { i64 refCount, i64 length, ptr chars, ptr base, [N x i8] data }
+        // chars points to the data[] portion (offset 32 bytes from struct start).
+        // base is null (owned string, not a slice).
         for (value, name) in rockitStringGlobals.sorted(by: { $0.value < $1.value }) {
             let escaped = llvmEscapeString(value)
             let dataLen = value.utf8.count + 1  // +1 for null terminator
             let strLen = value.utf8.count
-            // refCount = INT64_MAX (immortal), length = strLen
-            lines.append("\(name) = private global <{ i64, i64, [\(dataLen) x i8] }> <{ i64 9223372036854775807, i64 \(strLen), [\(dataLen) x i8] c\"\(escaped)\\00\" }>")
+            // chars = GEP into the data[] portion of the same global (offset 32 = 4 * i64)
+            lines.append("\(name) = private global <{ i64, i64, ptr, ptr, [\(dataLen) x i8] }> <{ i64 9223372036854775807, i64 \(strLen), ptr getelementptr (i8, ptr \(name), i64 32), ptr null, [\(dataLen) x i8] c\"\(escaped)\\00\" }>")
         }
         if !stringPool.isEmpty || !typeNamePool.isEmpty || !rockitStringGlobals.isEmpty {
             lines.append("")
@@ -349,7 +351,7 @@ public final class LLVMCodeGen {
     }
 
     /// Intern a string as an immortal RockitString global struct.
-    /// Layout: { i64 refCount, i64 length, i64 capacity, [N x i8] data }
+    /// Layout: { i64 refCount, i64 length, ptr chars, ptr base, [N x i8] data }
     @discardableResult
     private func internRockitString(_ value: String) -> String {
         if let existing = rockitStringGlobals[value] {
@@ -717,7 +719,8 @@ public final class LLVMCodeGen {
             params = paramList.joined(separator: ", ")
         }
 
-        lines.append("define \(retType) @\(funcName)(\(params)) {")
+        let linkage = funcName == "main" ? "" : "internal "
+        lines.append("define \(linkage)\(retType) @\(funcName)(\(params)) {")
 
         // Alloca prologue block: emit allocas for all temps
         let allTemps = collectTemps(function)
@@ -824,7 +827,65 @@ public final class LLVMCodeGen {
                 }
             }
 
+            // --- Flatten chains of string + into single concat_n ---
+            // Pre-scan: find string add chains where intermediate results are
+            // only used as the lhs of the next string add.
+            var stringAddParts: [String: (lhs: String, rhs: String)] = [:]
+            var useCount: [String: Int] = [:]
             for inst in block.instructions {
+                if case .add(let dest, let lhs, let rhs, let type) = inst,
+                   case .string = type {
+                    stringAddParts[dest] = (lhs, rhs)
+                }
+                // Count operand uses
+                for op in inst.operands {
+                    useCount[op, default: 0] += 1
+                }
+            }
+            // Also count operand uses in the terminator
+            if let term = block.terminator {
+                for op in term.operands {
+                    useCount[op, default: 0] += 1
+                }
+            }
+            // A string add dest is a chain intermediate if:
+            // 1. It's produced by a string add
+            // 2. It has exactly one use
+            // 3. That use is as the lhs of another string add
+            var chainIntermediate = Set<String>()
+            for (_, pair) in stringAddParts {
+                if stringAddParts[pair.lhs] != nil && useCount[pair.lhs] == 1 {
+                    chainIntermediate.insert(pair.lhs)
+                }
+            }
+            // Recursively flatten a chain's lhs into leaf parts
+            func flattenChain(_ temp: String) -> [String] {
+                if let pair = stringAddParts[temp], chainIntermediate.contains(temp) {
+                    return flattenChain(pair.lhs) + [pair.rhs]
+                }
+                return [temp]
+            }
+
+            for inst in block.instructions {
+                // Skip emitting chain intermediate string adds — they'll be
+                // folded into the root chain's concat_n call
+                if case .add(let dest, _, _, let type) = inst,
+                   case .string = type,
+                   chainIntermediate.contains(dest) {
+                    continue
+                }
+                // For chain root string adds, emit with flattened parts
+                if case .add(let dest, let lhs, let rhs, let type) = inst,
+                   case .string = type,
+                   stringAddParts[lhs] != nil,
+                   chainIntermediate.contains(lhs) {
+                    let parts = flattenChain(lhs) + [rhs]
+                    let emitted = emitStringConcat(dest: dest, parts: parts)
+                    for line in emitted {
+                        lines.append("  \(line)")
+                    }
+                    continue
+                }
                 let emitted = emitInstruction(inst)
                 for line in emitted {
                     lines.append("  \(line)")
@@ -1342,9 +1403,17 @@ public final class LLVMCodeGen {
                 let kind = tempHeapKinds[src] ?? .unknown
                 var result = emitOldTempRelease(dest: dest, kind: kind)
                 result.append("\(tmp) = load ptr, ptr \(addrOf(src))")
-                let tmpI64 = nextSSA()
-                result.append("\(tmpI64) = ptrtoint ptr \(tmp) to i64")
-                result.append("call void @rockit_retain_value(i64 \(tmpI64))")
+                // Use inline retain when kind is known (avoids function call overhead)
+                switch kind {
+                case .string:
+                    result.append(contentsOf: emitInlineStringRetain(tmp))
+                case .object:
+                    result.append("call void @rockit_retain(ptr \(tmp))")
+                default:
+                    let tmpI64 = nextSSA()
+                    result.append("\(tmpI64) = ptrtoint ptr \(tmp) to i64")
+                    result.append("call void @rockit_retain_value(i64 \(tmpI64))")
+                }
                 result.append("store ptr \(tmp), ptr \(addrOf(dest))")
                 result.append("store i1 1, ptr \(flagName)")
                 trackHeapTemp(dest, kind: kind)
@@ -1704,7 +1773,7 @@ public final class LLVMCodeGen {
     private func emitTempRetainBarrier(dest: String, newValI64: String, kind: HeapKind) -> [String] {
         guard let flagName = arcFlags[dest] else {
             // No flag alloca → just retain and track
-            return ["call void @rockit_retain_value(i64 \(newValI64))"]
+            return emitRetainCall(newValI64, kind: kind)
         }
 
         var lines: [String] = []
@@ -1724,17 +1793,15 @@ public final class LLVMCodeGen {
         let oldTmp = nextSSA()
         lines.append("  \(oldTmp) = load \(oldValType), ptr \(addrOf(dest))")
         if oldValType == "ptr" {
-            let oldI64 = nextSSA()
-            lines.append("  \(oldI64) = ptrtoint ptr \(oldTmp) to i64")
-            lines.append("  call void @rockit_release_value(i64 \(oldI64))")
+            lines.append(contentsOf: emitTypedRelease("ptr", oldTmp, kind: kind).map { "  " + $0 })
         } else {
-            lines.append("  call void @rockit_release_value(i64 \(oldTmp))")
+            lines.append(contentsOf: emitTypedRelease("i64", oldTmp, kind: kind).map { "  " + $0 })
         }
         lines.append("  br label %\(doneLabel)")
         lines.append("\(doneLabel):")
 
-        // Retain the new value
-        lines.append("call void @rockit_retain_value(i64 \(newValI64))")
+        // Retain the new value — use typed function when kind is known
+        lines.append(contentsOf: emitRetainCall(newValI64, kind: kind))
 
         // Set the flag
         lines.append("store i1 1, ptr \(flagName)")
@@ -1743,6 +1810,103 @@ public final class LLVMCodeGen {
         trackHeapTemp(dest, kind: kind)
 
         return lines
+    }
+
+    /// Emit inline retain for a string pointer (no function call on fast path).
+    /// Fast path: load refCount, check immortal, increment. No call needed.
+    private func emitInlineStringRetain(_ ptr: String) -> [String] {
+        let rc = nextSSA()
+        let isImmortal = nextSSA()
+        let doRetainLbl = "arc.ret.\(labelCounter)"
+        let skipLbl = "arc.rets.\(labelCounter)"
+        labelCounter += 1
+        let newRc = nextSSA()
+        return [
+            "\(rc) = load i64, ptr \(ptr)",
+            "\(isImmortal) = icmp eq i64 \(rc), 9223372036854775807",
+            "br i1 \(isImmortal), label %\(skipLbl), label %\(doRetainLbl)",
+            "\(doRetainLbl):",
+            "  \(newRc) = add i64 \(rc), 1",
+            "  store i64 \(newRc), ptr \(ptr)",
+            "  br label %\(skipLbl)",
+            "\(skipLbl):"
+        ]
+    }
+
+    /// Emit inline release for a string pointer (no function call on fast path).
+    /// Fast path: load refCount, check immortal, decrement. Call dealloc only when zero.
+    private func emitInlineStringRelease(_ ptr: String) -> [String] {
+        externalDecls.insert("declare void @rockit_string_dealloc(ptr)")
+        let rc = nextSSA()
+        let isImmortal = nextSSA()
+        let doRelLbl = "arc.rel.\(labelCounter)"
+        let skipLbl = "arc.rels.\(labelCounter)"
+        let freeLbl = "arc.free.\(labelCounter)"
+        labelCounter += 1
+        let newRc = nextSSA()
+        let needFree = nextSSA()
+        return [
+            "\(rc) = load i64, ptr \(ptr)",
+            "\(isImmortal) = icmp eq i64 \(rc), 9223372036854775807",
+            "br i1 \(isImmortal), label %\(skipLbl), label %\(doRelLbl)",
+            "\(doRelLbl):",
+            "  \(newRc) = sub i64 \(rc), 1",
+            "  store i64 \(newRc), ptr \(ptr)",
+            "  \(needFree) = icmp sle i64 \(newRc), 0",
+            "  br i1 \(needFree), label %\(freeLbl), label %\(skipLbl)",
+            "\(freeLbl):",
+            "  call void @rockit_string_dealloc(ptr \(ptr))",
+            "  br label %\(skipLbl)",
+            "\(skipLbl):"
+        ]
+    }
+
+    /// Emit a typed retain call. Uses inline IR for strings,
+    /// `rockit_retain(ptr)` for objects, `rockit_retain_value(i64)` for unknown.
+    private func emitRetainCall(_ valI64: String, kind: HeapKind) -> [String] {
+        switch kind {
+        case .string:
+            let ptr = nextSSA()
+            return ["\(ptr) = inttoptr i64 \(valI64) to ptr"] + emitInlineStringRetain(ptr)
+        case .object:
+            let ptr = nextSSA()
+            return [
+                "\(ptr) = inttoptr i64 \(valI64) to ptr",
+                "call void @rockit_retain(ptr \(ptr))"
+            ]
+        default:
+            return ["call void @rockit_retain_value(i64 \(valI64))"]
+        }
+    }
+
+    /// Emit a typed release call for a value of the given LLVM type.
+    private func emitTypedRelease(_ llType: String, _ val: String, kind: HeapKind) -> [String] {
+        switch kind {
+        case .string:
+            if llType == "ptr" {
+                return emitInlineStringRelease(val)
+            }
+            let ptr = nextSSA()
+            return ["\(ptr) = inttoptr i64 \(val) to ptr"] + emitInlineStringRelease(ptr)
+        case .object:
+            if llType == "ptr" {
+                return ["call void @rockit_release(ptr \(val))"]
+            }
+            let ptr = nextSSA()
+            return [
+                "\(ptr) = inttoptr i64 \(val) to ptr",
+                "call void @rockit_release(ptr \(ptr))"
+            ]
+        default:
+            if llType == "ptr" {
+                let i64 = nextSSA()
+                return [
+                    "\(i64) = ptrtoint ptr \(val) to i64",
+                    "call void @rockit_release_value(i64 \(i64))"
+                ]
+            }
+            return ["call void @rockit_release_value(i64 \(val))"]
+        }
     }
 
     /// Emit a conditional release of the old value in a temp before overwriting it.
@@ -1779,7 +1943,7 @@ public final class LLVMCodeGen {
         }
         switch kind {
         case .string:
-            lines.append("  call void @rockit_string_release(ptr \(oldPtr))")
+            lines.append(contentsOf: emitInlineStringRelease(oldPtr).map { "  " + $0 })
         case .object:
             lines.append("  call void @rockit_release(ptr \(oldPtr))")
         case .list:
@@ -1864,7 +2028,7 @@ public final class LLVMCodeGen {
             // Call type-specific release for proper cascading deallocation
             switch kind {
             case .string:
-                lines.append("  call void @rockit_string_release(ptr \(valPtr))")
+                lines.append(contentsOf: emitInlineStringRelease(valPtr).map { "  " + $0 })
             case .object:
                 lines.append("  call void @rockit_release(ptr \(valPtr))")
             case .list:
@@ -2030,14 +2194,89 @@ public final class LLVMCodeGen {
                 ]
             }
 
-            // Fall back to rockit_string_eq/neq for unknown types
+            // Inline string comparison when both operands are known string pointers.
+            // Avoids the expensive is_likely_string_ptr heuristic in rockit_string_eq.
+            // Emits: ptr compare → length compare → memcmp
+            let lhsType = typeOf(lhs)
+            let rhsType = typeOf(rhs)
+            let isEq = intCmp == "icmp eq"
+
+            if lhsIsPtr && rhsIsPtr {
+                externalDecls.insert("declare i32 @memcmp(ptr, ptr, i64)")
+                var lines: [String] = []
+                let aPtr = nextSSA()
+                let bPtr = nextSSA()
+                lines.append("\(aPtr) = load ptr, ptr \(addrOf(lhs))")
+                lines.append("\(bPtr) = load ptr, ptr \(addrOf(rhs))")
+
+                // Quick check: same pointer → equal
+                let samePtr = nextSSA()
+                lines.append("\(samePtr) = icmp eq ptr \(aPtr), \(bPtr)")
+                let lblSame = "streq.same.\(labelCounter)"
+                let lblLens = "streq.lens.\(labelCounter)"
+                let lblCmp = "streq.cmp.\(labelCounter)"
+                let lblDone = "streq.done.\(labelCounter)"
+                let lblNeq = "streq.neq.\(labelCounter)"
+                labelCounter += 1
+                lines.append("br i1 \(samePtr), label %\(lblSame), label %\(lblLens)")
+
+                // Same pointer → result is true (for eq) or false (for neq)
+                lines.append("\(lblSame):")
+                lines.append("  br label %\(lblDone)")
+
+                // Compare lengths
+                lines.append("\(lblLens):")
+                let aLenP = nextSSA()
+                lines.append("  \(aLenP) = getelementptr i8, ptr \(aPtr), i64 8")
+                let aLen = nextSSA()
+                lines.append("  \(aLen) = load i64, ptr \(aLenP)")
+                let bLenP = nextSSA()
+                lines.append("  \(bLenP) = getelementptr i8, ptr \(bPtr), i64 8")
+                let bLen = nextSSA()
+                lines.append("  \(bLen) = load i64, ptr \(bLenP)")
+                let lenEq = nextSSA()
+                lines.append("  \(lenEq) = icmp eq i64 \(aLen), \(bLen)")
+                lines.append("  br i1 \(lenEq), label %\(lblCmp), label %\(lblNeq)")
+
+                // Lengths match → memcmp chars
+                lines.append("\(lblCmp):")
+                let aCharsP = nextSSA()
+                lines.append("  \(aCharsP) = getelementptr i8, ptr \(aPtr), i64 16")
+                let aChars = nextSSA()
+                lines.append("  \(aChars) = load ptr, ptr \(aCharsP)")
+                let bCharsP = nextSSA()
+                lines.append("  \(bCharsP) = getelementptr i8, ptr \(bPtr), i64 16")
+                let bChars = nextSSA()
+                lines.append("  \(bChars) = load ptr, ptr \(bCharsP)")
+                let cmpResult = nextSSA()
+                lines.append("  \(cmpResult) = call i32 @memcmp(ptr \(aChars), ptr \(bChars), i64 \(aLen))")
+                let cmpEq = nextSSA()
+                lines.append("  \(cmpEq) = icmp eq i32 \(cmpResult), 0")
+                lines.append("  br label %\(lblDone)")
+
+                // Lengths differ → not equal
+                lines.append("\(lblNeq):")
+                lines.append("  br label %\(lblDone)")
+
+                // Merge
+                lines.append("\(lblDone):")
+                let phi = nextSSA()
+                lines.append("  \(phi) = phi i1 [ true, %\(lblSame) ], [ \(cmpEq), %\(lblCmp) ], [ false, %\(lblNeq) ]")
+                if !isEq {
+                    let negated = nextSSA()
+                    lines.append("  \(negated) = xor i1 \(phi), true")
+                    lines.append(storeToTemp(dest, value: negated, type: "i1"))
+                } else {
+                    lines.append(storeToTemp(dest, value: phi, type: "i1"))
+                }
+                return lines
+            }
+
+            // Fall back to rockit_string_eq/neq for mixed types
             let tmp1 = nextSSA()
             let tmp2 = nextSSA()
             let tmp3 = nextSSA()
-            let isEq = intCmp == "icmp eq"
             let funcName = isEq ? "@rockit_string_eq" : "@rockit_string_neq"
-            let lhsType = typeOf(lhs)
-            let rhsType = typeOf(rhs)
             var lines: [String] = []
             if lhsType == "ptr" {
                 let ptmp = nextSSA()
@@ -2098,6 +2337,52 @@ public final class LLVMCodeGen {
         }
         if function == "mutableMapOf" {
             return emitMapOf(dest: dest, args: args)
+        }
+
+        // Inline stringLength(s) — avoids function call overhead.
+        // Emits: s->length (load from offset 8 in RockitString struct)
+        if function == "stringLength", let dest = dest, args.count == 1 {
+            let arg = args[0]
+            var lines: [String] = []
+            let sPtr = nextSSA()
+            lines.append("\(sPtr) = load ptr, ptr \(addrOf(arg))")
+            let lenPtr = nextSSA()
+            lines.append("\(lenPtr) = getelementptr i8, ptr \(sPtr), i64 8")
+            let len = nextSSA()
+            lines.append("\(len) = load i64, ptr \(lenPtr)")
+            lines.append(storeToTemp(dest, value: len, type: "i64"))
+            registerTypes[dest] = "i64"
+            knownIntTemps.insert(dest)
+            return lines
+        }
+
+        // Inline charCodeAt(s, index) — avoids function call overhead.
+        // Emits: (i64)(unsigned char) s->chars[index]
+        // Layout: offset 16 = chars pointer in RockitString struct
+        if function == "charCodeAt", let dest = dest, args.count == 2 {
+            let sArg = args[0]
+            let idxArg = args[1]
+            var lines: [String] = []
+            let sPtr = nextSSA()
+            lines.append("\(sPtr) = load ptr, ptr \(addrOf(sArg))")
+            let idx = nextSSA()
+            lines.append("\(idx) = load i64, ptr \(addrOf(idxArg))")
+            // Load chars pointer (offset 16)
+            let charsFieldPtr = nextSSA()
+            lines.append("\(charsFieldPtr) = getelementptr i8, ptr \(sPtr), i64 16")
+            let charsPtr = nextSSA()
+            lines.append("\(charsPtr) = load ptr, ptr \(charsFieldPtr)")
+            // Load byte at index
+            let bytePtr = nextSSA()
+            lines.append("\(bytePtr) = getelementptr i8, ptr \(charsPtr), i64 \(idx)")
+            let byteVal = nextSSA()
+            lines.append("\(byteVal) = load i8, ptr \(bytePtr)")
+            let result = nextSSA()
+            lines.append("\(result) = zext i8 \(byteVal) to i64")
+            lines.append(storeToTemp(dest, value: result, type: "i64"))
+            registerTypes[dest] = "i64"
+            knownIntTemps.insert(dest)
+            return lines
         }
 
         // Inline toInt() for known integer arguments — avoids runtime call
@@ -2210,7 +2495,7 @@ public final class LLVMCodeGen {
                 }
                 switch dr.kind {
                 case .string:
-                    lines.append("  call void @rockit_string_release(ptr \(oldPtr))")
+                    lines.append(contentsOf: emitInlineStringRelease(oldPtr).map { "  " + $0 })
                 case .object:
                     lines.append("  call void @rockit_release(ptr \(oldPtr))")
                 case .list:
@@ -3280,25 +3565,43 @@ public final class LLVMCodeGen {
             return lines
         }
 
-        var (accumulator, accOwned) = loadAsString(parts[0], into: &lines)
-
-        for i in 1..<parts.count {
-            let (next, nextOwned) = loadAsString(parts[i], into: &lines)
+        // For 2 parts, use simple binary concat (common case, avoids alloca overhead)
+        if parts.count == 2 {
+            let (lhsStr, lhsOwned) = loadAsString(parts[0], into: &lines)
+            let (rhsStr, rhsOwned) = loadAsString(parts[1], into: &lines)
             let result = nextSSA()
-            lines.append("\(result) = call ptr @rockit_string_concat(ptr \(accumulator), ptr \(next))")
-            // Release intermediates: toString conversions and previous concat results
-            if accOwned {
-                lines.append("call void @rockit_string_release(ptr \(accumulator))")
-            }
-            if nextOwned {
-                lines.append("call void @rockit_string_release(ptr \(next))")
-            }
-            accumulator = result
-            accOwned = true  // concat results are always owned
+            lines.append("\(result) = call ptr @rockit_string_concat(ptr \(lhsStr), ptr \(rhsStr))")
+            if lhsOwned { lines.append(contentsOf: emitInlineStringRelease(lhsStr)) }
+            if rhsOwned { lines.append(contentsOf: emitInlineStringRelease(rhsStr)) }
+            lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .string))
+            lines.append(storeToTemp(dest, value: result, type: "ptr"))
+            trackHeapTemp(dest, kind: .string)
+            if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
+            return lines
         }
 
+        // For 3+ parts, use single-allocation concat_n: one alloc, N memcpys, no intermediates
+        externalDecls.insert("declare ptr @rockit_string_concat_n(i64, ptr)")
+        var ptrs: [(String, Bool)] = []  // (ptr value, is owned)
+        for part in parts {
+            ptrs.append(loadAsString(part, into: &lines))
+        }
+        // Build stack array of string pointers
+        let arrTmp = nextSSA()
+        lines.append("\(arrTmp) = alloca [\(parts.count) x ptr]")
+        for (i, (ptr, _)) in ptrs.enumerated() {
+            let gep = nextSSA()
+            lines.append("\(gep) = getelementptr ptr, ptr \(arrTmp), i64 \(i)")
+            lines.append("store ptr \(ptr), ptr \(gep)")
+        }
+        let result = nextSSA()
+        lines.append("\(result) = call ptr @rockit_string_concat_n(i64 \(parts.count), ptr \(arrTmp))")
+        // Release any owned intermediates (toString conversions)
+        for (ptr, owned) in ptrs {
+            if owned { lines.append(contentsOf: emitInlineStringRelease(ptr)) }
+        }
         lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .string))
-        lines.append(storeToTemp(dest, value: accumulator, type: "ptr"))
+        lines.append(storeToTemp(dest, value: result, type: "ptr"))
         trackHeapTemp(dest, kind: .string)
         if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
         return lines

@@ -11,26 +11,99 @@
 #include <malloc/malloc.h>
 #endif
 
+
 // ── RockitString ────────────────────────────────────────────────────────────
+
+// String pool: free list for small owned strings to avoid malloc/free overhead.
+#define POOL_MAX_LEN 48
+#define POOL_BLOCK_SIZE (sizeof(RockitString) + POOL_MAX_LEN + 1)
+
+static void* string_pool_free = NULL;
+
+// Slice pool: free list for string slice headers (fixed sizeof(RockitString) bytes).
+static void* slice_pool_free = NULL;
+
+static inline RockitString* string_alloc(int64_t len) {
+    if (len <= POOL_MAX_LEN && string_pool_free) {
+        RockitString* s = (RockitString*)string_pool_free;
+        string_pool_free = *(void**)string_pool_free;
+        return s;
+    }
+    if (len <= POOL_MAX_LEN) {
+        return (RockitString*)malloc(POOL_BLOCK_SIZE);
+    }
+    return (RockitString*)malloc(sizeof(RockitString) + len + 1);
+}
+
+static inline void string_dealloc(RockitString* s) {
+    if (s->length <= POOL_MAX_LEN) {
+        *(void**)s = string_pool_free;
+        string_pool_free = (void*)s;
+    } else {
+        free(s);
+    }
+}
+
+static inline RockitString* slice_alloc(void) {
+    if (slice_pool_free) {
+        RockitString* s = (RockitString*)slice_pool_free;
+        slice_pool_free = *(void**)slice_pool_free;
+        return s;
+    }
+    return (RockitString*)malloc(sizeof(RockitString));
+}
+
+static inline void slice_dealloc(RockitString* s) {
+    *(void**)s = slice_pool_free;
+    slice_pool_free = (void*)s;
+}
 
 RockitString* rockit_string_new(const char* utf8) {
     if (!utf8) utf8 = "";
     int64_t len = (int64_t)strlen(utf8);
-    RockitString* s = (RockitString*)malloc(sizeof(RockitString) + len + 1);
+    RockitString* s = string_alloc(len);
     s->refCount = 1;
     s->length = len;
+    s->base = NULL;
     memcpy(s->data, utf8, len + 1);
+    s->chars = s->data;
     return s;
 }
 
 RockitString* rockit_string_concat(RockitString* a, RockitString* b) {
+
     int64_t newLen = a->length + b->length;
-    RockitString* s = (RockitString*)malloc(sizeof(RockitString) + newLen + 1);
+    RockitString* s = string_alloc(newLen);
+
     s->refCount = 1;
     s->length = newLen;
-    memcpy(s->data, a->data, a->length);
-    memcpy(s->data + a->length, b->data, b->length);
+    s->base = NULL;
+    memcpy(s->data, a->chars, a->length);
+    memcpy(s->data + a->length, b->chars, b->length);
     s->data[newLen] = '\0';
+    s->chars = s->data;
+    return s;
+}
+
+// Single-allocation multi-string concatenation.
+// parts is a pointer to an array of n RockitString pointers.
+RockitString* rockit_string_concat_n(int64_t n, RockitString** parts) {
+    int64_t totalLen = 0;
+    for (int64_t i = 0; i < n; i++) {
+        totalLen += parts[i]->length;
+    }
+    if (totalLen == 0) return rockit_string_new("");
+    RockitString* s = string_alloc(totalLen);
+    s->refCount = 1;
+    s->length = totalLen;
+    s->base = NULL;
+    char* dst = s->data;
+    for (int64_t i = 0; i < n; i++) {
+        memcpy(dst, parts[i]->chars, parts[i]->length);
+        dst += parts[i]->length;
+    }
+    s->data[totalLen] = '\0';
+    s->chars = s->data;
     return s;
 }
 
@@ -40,7 +113,22 @@ void rockit_string_retain(RockitString* s) {
 
 void rockit_string_release(RockitString* s) {
     if (s && s->refCount != ROCKIT_IMMORTAL_REFCOUNT && --s->refCount <= 0) {
-        free(s);
+        if (s->base) {
+            rockit_string_release(s->base);
+            slice_dealloc(s);
+        } else {
+            string_dealloc(s);
+        }
+    }
+}
+
+// Called when refCount has already reached 0 — handles slice vs owned dealloc.
+void rockit_string_dealloc(RockitString* s) {
+    if (s->base) {
+        rockit_string_release(s->base);
+        slice_dealloc(s);
+    } else {
+        string_dealloc(s);
     }
 }
 
@@ -121,6 +209,7 @@ static int is_likely_heap_ptr(int64_t value) {
 }
 
 void rockit_retain_value(int64_t val) {
+
     if (!is_likely_heap_ptr(val)) return;
     void* ptr = (void*)(intptr_t)val;
     // RockitObject has typeName (a pointer) as its first field.
@@ -137,6 +226,7 @@ void rockit_retain_value(int64_t val) {
 }
 
 void rockit_release_value(int64_t val) {
+
     if (!is_likely_heap_ptr(val)) return;
     void* ptr = (void*)(intptr_t)val;
     int64_t first_field = *(int64_t*)ptr;
@@ -492,7 +582,8 @@ void rockit_println_bool(int8_t value) {
 
 void rockit_println_string(RockitString* s) {
     if (s) {
-        printf("%s\n", s->data);
+        fwrite(s->chars, 1, s->length, stdout);
+        putchar('\n');
     } else {
         printf("null\n");
     }
@@ -522,7 +613,7 @@ void rockit_print_bool(int8_t value) {
 
 void rockit_print_string(RockitString* s) {
     if (s) {
-        printf("%s", s->data);
+        fwrite(s->chars, 1, s->length, stdout);
     } else {
         printf("null");
     }
@@ -550,7 +641,8 @@ void rockit_println_any(int64_t value) {
         printf("0\n");
     } else if (is_likely_string_ptr(value)) {
         RockitString* s = (RockitString*)(intptr_t)value;
-        printf("%s\n", s->data);
+        fwrite(s->chars, 1, s->length, stdout);
+        putchar('\n');
     } else {
         printf("%lld\n", (long long)value);
     }
@@ -563,7 +655,7 @@ void rockit_print_any(int64_t value) {
         printf("0");
     } else if (is_likely_string_ptr(value)) {
         RockitString* s = (RockitString*)(intptr_t)value;
-        printf("%s", s->data);
+        fwrite(s->chars, 1, s->length, stdout);
     } else {
         printf("%lld", (long long)value);
     }
@@ -585,6 +677,32 @@ RockitString* rockit_double_to_string(double value) {
     char buf[64];
     snprintf(buf, sizeof(buf), "%g", value);
     return rockit_string_new(buf);
+}
+
+// ── Null-terminated C-string helper ──────────────────────────────────────────
+// For functions that need null-terminated strings (fopen, system, etc.).
+// Owned strings are already null-terminated. Slices may not be.
+// Returns a pointer to a null-terminated version. If the original is already
+// null-terminated, returns chars directly. Otherwise copies to buf (or heap).
+// Caller must call cstr_done(result, s, buf) to free heap copies.
+static inline const char* cstr(RockitString* s, char* buf, size_t bufsz) {
+    // Owned and immortal strings are always null-terminated
+    if (!s->base) return s->chars;
+    // Slice: check if the byte after our range happens to be '\0'
+    if (s->chars[s->length] == '\0') return s->chars;
+    // Need a null-terminated copy
+    if ((size_t)s->length < bufsz) {
+        memcpy(buf, s->chars, s->length);
+        buf[s->length] = '\0';
+        return buf;
+    }
+    char* heap = (char*)malloc(s->length + 1);
+    memcpy(heap, s->chars, s->length);
+    heap[s->length] = '\0';
+    return heap;
+}
+static inline void cstr_done(const char* c, RockitString* s, char* buf) {
+    if (c != s->chars && c != buf) free((char*)c);
 }
 
 // ── Conversion ──────────────────────────────────────────────────────────────
@@ -660,7 +778,7 @@ int8_t rockit_string_eq(int64_t a, int64_t b) {
     RockitString* sa = (RockitString*)(intptr_t)a;
     RockitString* sb = (RockitString*)(intptr_t)b;
     if (sa->length != sb->length) return 0;
-    return memcmp(sa->data, sb->data, sa->length) == 0;
+    return memcmp(sa->chars, sb->chars, sa->length) == 0;
 }
 
 int8_t rockit_string_neq(int64_t a, int64_t b) {
@@ -678,25 +796,25 @@ RockitString* charAt(RockitString* s, int64_t index) {
     if (!s || index < 0 || index >= s->length) {
         return rockit_string_new("");
     }
-    char buf[2] = { s->data[index], '\0' };
+    char buf[2] = { s->chars[index], '\0' };
     return rockit_string_new(buf);
 }
 
 int64_t charCodeAt(RockitString* s, int64_t index) {
     if (!s || index < 0 || index >= s->length) return 0;
-    return (int64_t)(unsigned char)s->data[index];
+    return (int64_t)(unsigned char)s->chars[index];
 }
 
 int8_t startsWith(RockitString* s, RockitString* prefix) {
     if (!s || !prefix) return 0;
     if (prefix->length > s->length) return 0;
-    return memcmp(s->data, prefix->data, prefix->length) == 0;
+    return memcmp(s->chars, prefix->chars, prefix->length) == 0;
 }
 
 int8_t endsWith(RockitString* s, RockitString* suffix) {
     if (!s || !suffix) return 0;
     if (suffix->length > s->length) return 0;
-    return memcmp(s->data + s->length - suffix->length, suffix->data, suffix->length) == 0;
+    return memcmp(s->chars + s->length - suffix->length, suffix->chars, suffix->length) == 0;
 }
 
 RockitString* stringConcat(RockitString* a, RockitString* b) {
@@ -705,9 +823,14 @@ RockitString* stringConcat(RockitString* a, RockitString* b) {
 
 int64_t stringIndexOf(RockitString* s, RockitString* needle) {
     if (!s || !needle) return -1;
-    char* found = strstr(s->data, needle->data);
-    if (!found) return -1;
-    return (int64_t)(found - s->data);
+    if (needle->length == 0) return 0;
+    if (needle->length > s->length) return -1;
+    for (int64_t i = 0; i <= s->length - needle->length; i++) {
+        if (memcmp(s->chars + i, needle->chars, needle->length) == 0) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 int64_t stringLength(RockitString* s) {
@@ -717,31 +840,36 @@ int64_t stringLength(RockitString* s) {
 RockitString* stringTrim(RockitString* s) {
     if (!s || s->length == 0) return rockit_string_new("");
     int64_t start = 0;
-    while (start < s->length && (s->data[start] == ' ' || s->data[start] == '\t' ||
-           s->data[start] == '\n' || s->data[start] == '\r')) start++;
+    while (start < s->length && (s->chars[start] == ' ' || s->chars[start] == '\t' ||
+           s->chars[start] == '\n' || s->chars[start] == '\r')) start++;
     int64_t end = s->length - 1;
-    while (end > start && (s->data[end] == ' ' || s->data[end] == '\t' ||
-           s->data[end] == '\n' || s->data[end] == '\r')) end--;
+    while (end > start && (s->chars[end] == ' ' || s->chars[end] == '\t' ||
+           s->chars[end] == '\n' || s->chars[end] == '\r')) end--;
     int64_t len = end - start + 1;
-    RockitString* result = (RockitString*)malloc(sizeof(RockitString) + len + 1);
+    RockitString* result = string_alloc(len);
     result->refCount = 1;
     result->length = len;
-    memcpy(result->data, s->data + start, len);
+    result->base = NULL;
+    memcpy(result->data, s->chars + start, len);
     result->data[len] = '\0';
+    result->chars = result->data;
     return result;
 }
 
 RockitString* substring(RockitString* s, int64_t start, int64_t end) {
+
     if (!s) return rockit_string_new("");
     if (start < 0) start = 0;
     if (end > s->length) end = s->length;
     if (start >= end) return rockit_string_new("");
-    int64_t len = end - start;
-    RockitString* result = (RockitString*)malloc(sizeof(RockitString) + len + 1);
+    // Zero-copy slice: point into the source string's character data.
+    RockitString* result = slice_alloc();
     result->refCount = 1;
-    result->length = len;
-    memcpy(result->data, s->data + start, len);
-    result->data[len] = '\0';
+    result->length = end - start;
+    result->chars = s->chars + start;
+    // Chain to root: if source is itself a slice, reference its base.
+    result->base = s->base ? s->base : s;
+    rockit_string_retain(result->base);
     return result;
 }
 
@@ -752,7 +880,12 @@ int64_t toInt(int64_t value) {
     if (value == 0) return 0;
     if (is_likely_string_ptr(value)) {
         RockitString* s = (RockitString*)(intptr_t)value;
-        return strtoll(s->data, NULL, 10);
+        // Use stack buffer for slices (may not be null-terminated)
+        char buf[32];
+        int64_t len = s->length < 31 ? s->length : 31;
+        memcpy(buf, s->chars, len);
+        buf[len] = '\0';
+        return strtoll(buf, NULL, 10);
     }
     return value;
 }
@@ -761,19 +894,19 @@ int64_t toInt(int64_t value) {
 
 int8_t isDigit(RockitString* ch) {
     if (!ch || ch->length == 0) return 0;
-    char c = ch->data[0];
+    char c = ch->chars[0];
     return c >= '0' && c <= '9';
 }
 
 int8_t isLetter(RockitString* ch) {
     if (!ch || ch->length == 0) return 0;
-    char c = ch->data[0];
+    char c = ch->chars[0];
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
 int8_t isLetterOrDigit(RockitString* ch) {
     if (!ch || ch->length == 0) return 0;
-    char c = ch->data[0];
+    char c = ch->chars[0];
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
 }
 
@@ -841,7 +974,7 @@ static uint64_t string_hash(RockitString* s) {
     if (!s) return 0;
     uint64_t h = 14695981039346656037ULL;
     for (int64_t i = 0; i < s->length; i++) {
-        h ^= (unsigned char)s->data[i];
+        h ^= (unsigned char)s->chars[i];
         h *= 1099511628211ULL;
     }
     return h;
@@ -851,7 +984,7 @@ static int8_t string_eq(RockitString* a, RockitString* b) {
     if (a == b) return 1;
     if (!a || !b) return 0;
     if (a->length != b->length) return 0;
-    return memcmp(a->data, b->data, a->length) == 0;
+    return memcmp(a->chars, b->chars, a->length) == 0;
 }
 
 // Stage 1 maps use RockitString* keys. We need string-content-based hashing.
@@ -975,14 +1108,20 @@ RockitString* readLine(void) {
 
 int8_t fileExists(RockitString* path) {
     if (!path) return 0;
-    FILE* f = fopen(path->data, "r");
+    char buf[1024];
+    const char* c = cstr(path, buf, sizeof(buf));
+    FILE* f = fopen(c, "r");
+    cstr_done(c, path, buf);
     if (f) { fclose(f); return 1; }
     return 0;
 }
 
 RockitString* fileRead(RockitString* path) {
     if (!path) return rockit_string_new("");
-    FILE* f = fopen(path->data, "rb");
+    char pbuf[1024];
+    const char* c = cstr(path, pbuf, sizeof(pbuf));
+    FILE* f = fopen(c, "rb");
+    cstr_done(c, path, pbuf);
     if (!f) return rockit_string_new("");
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -1000,7 +1139,10 @@ int64_t fileWriteBytes(RockitString* path, int64_t bytesListVal) {
     if (!path) return 0;
     RockitList* bytes = (RockitList*)(intptr_t)bytesListVal;
     if (!bytes) return 0;
-    FILE* f = fopen(path->data, "wb");
+    char pbuf[1024];
+    const char* c = cstr(path, pbuf, sizeof(pbuf));
+    FILE* f = fopen(c, "wb");
+    cstr_done(c, path, pbuf);
     if (!f) return 0;
     for (int64_t i = 0; i < bytes->size; i++) {
         uint8_t b = (uint8_t)(bytes->data[i] & 0xFF);
@@ -1042,14 +1184,22 @@ int64_t evalRockit(RockitString* source) {
 
 int64_t systemExec(RockitString* cmd) {
     if (!cmd) return -1;
-    return (int64_t)system(cmd->data);
+    char buf[4096];
+    const char* c = cstr(cmd, buf, sizeof(buf));
+    int64_t result = (int64_t)system(c);
+    cstr_done(c, cmd, buf);
+    return result;
 }
 
 // -- File deletion (cross-platform, replaces shell `rm -f`) --
 
 int64_t fileDelete(RockitString* path) {
     if (!path) return 0;
-    return remove(path->data) == 0 ? 1 : 0;
+    char buf[1024];
+    const char* c = cstr(path, buf, sizeof(buf));
+    int64_t result = remove(c) == 0 ? 1 : 0;
+    cstr_done(c, path, buf);
+    return result;
 }
 
 // -- toString wrapper (used by Stage 1) --

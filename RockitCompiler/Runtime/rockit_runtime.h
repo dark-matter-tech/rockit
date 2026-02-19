@@ -39,11 +39,14 @@ typedef struct RockitObject RockitObject;
 struct RockitString {
     int64_t refCount;
     int64_t length;
-    char data[];  // UTF-8, null-terminated, flexible array member
+    const char* chars;   // Active data pointer (owned: points to data[], slice: into base)
+    RockitString* base;  // Non-NULL for slices (base is retained)
+    char data[];         // UTF-8, null-terminated, flexible array member (owned strings only)
 };
 
 RockitString* rockit_string_new(const char* utf8);
 RockitString* rockit_string_concat(RockitString* a, RockitString* b);
+RockitString* rockit_string_concat_n(int64_t n, RockitString** parts);
 void rockit_string_retain(RockitString* s);
 void rockit_string_release(RockitString* s);
 int64_t rockit_string_length(RockitString* s);

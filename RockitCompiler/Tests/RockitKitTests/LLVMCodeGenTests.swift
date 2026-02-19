@@ -46,7 +46,7 @@ final class LLVMCodeGenTests: XCTestCase {
         fun helper(): Unit { }
         fun main(): Unit { helper() }
         """)
-        XCTAssertTrue(ir.contains("define void @helper()"), "helper should return void")
+        XCTAssertTrue(ir.contains("define internal void @helper()"), "helper should return void")
         XCTAssertTrue(ir.contains("define i32 @main(i32 %argc, ptr %argv)"), "main should return i32")
     }
 
@@ -182,7 +182,7 @@ final class LLVMCodeGenTests: XCTestCase {
             println(double(21))
         }
         """)
-        XCTAssertTrue(ir.contains("define i64 @double("), "Should define function returning i64")
+        XCTAssertTrue(ir.contains("define internal i64 @double("), "Should define function returning i64")
         XCTAssertTrue(ir.contains("%param.x"), "Should have parameter named x")
         XCTAssertTrue(ir.contains("ret i64"), "Should return i64")
     }
@@ -262,7 +262,7 @@ final class LLVMCodeGenTests: XCTestCase {
             println(greet("World"))
         }
         """)
-        XCTAssertTrue(ir.contains("define ptr @greet("), "greet should return ptr")
+        XCTAssertTrue(ir.contains("define internal ptr @greet("), "greet should return ptr")
         XCTAssertTrue(ir.contains("call ptr @greet("), "call site should use ptr return type")
         XCTAssertTrue(ir.contains("rockit_println_string"), "Should println as string, not int")
     }
@@ -276,7 +276,7 @@ final class LLVMCodeGenTests: XCTestCase {
             println(add(1, 2))
         }
         """)
-        XCTAssertTrue(ir.contains("define i64 @add("), "add should return i64")
+        XCTAssertTrue(ir.contains("define internal i64 @add("), "add should return i64")
         XCTAssertTrue(ir.contains("call i64 @add("), "call site should use i64 return type")
         XCTAssertTrue(ir.contains("rockit_println_int"), "Should println as int")
     }
@@ -290,7 +290,7 @@ final class LLVMCodeGenTests: XCTestCase {
             println(isPositive(5))
         }
         """)
-        XCTAssertTrue(ir.contains("define i1 @isPositive("), "isPositive should return i1")
+        XCTAssertTrue(ir.contains("define internal i1 @isPositive("), "isPositive should return i1")
         XCTAssertTrue(ir.contains("call i1 @isPositive("), "call site should use i1 return type")
         XCTAssertTrue(ir.contains("rockit_println_bool"), "Should println as bool")
     }
@@ -304,7 +304,7 @@ final class LLVMCodeGenTests: XCTestCase {
             println(half(7.0))
         }
         """)
-        XCTAssertTrue(ir.contains("define double @half("), "half should return double")
+        XCTAssertTrue(ir.contains("define internal double @half("), "half should return double")
         XCTAssertTrue(ir.contains("call double @half("), "call site should use double return type")
         XCTAssertTrue(ir.contains("rockit_println_float"), "Should println as float")
     }
@@ -321,8 +321,8 @@ final class LLVMCodeGenTests: XCTestCase {
             println(quadruple(10))
         }
         """)
-        XCTAssertTrue(ir.contains("define i64 @double("), "double should return i64")
-        XCTAssertTrue(ir.contains("define i64 @quadruple("), "quadruple should return i64")
+        XCTAssertTrue(ir.contains("define internal i64 @double("), "double should return i64")
+        XCTAssertTrue(ir.contains("define internal i64 @quadruple("), "quadruple should return i64")
         XCTAssertTrue(ir.contains("call i64 @double("), "should call double with i64 return")
     }
 
@@ -364,7 +364,7 @@ final class LLVMCodeGenTests: XCTestCase {
             println(p.sum())
         }
         """)
-        XCTAssertTrue(ir.contains("define i64 @IntPair_sum(ptr %this"), "Method should have this param")
+        XCTAssertTrue(ir.contains("define internal i64 @IntPair_sum(ptr %this"), "Method should have this param")
         XCTAssertTrue(ir.contains("rockit_object_get_field"), "Method should access fields via this")
     }
 
@@ -575,7 +575,7 @@ final class LLVMCodeGenTests: XCTestCase {
             c.increment()
         }
         """)
-        XCTAssertTrue(ir.contains("define void @Counter_increment(ptr %this)"),
+        XCTAssertTrue(ir.contains("define internal void @Counter_increment(ptr %this)"),
                        "Actor method should have implicit this parameter")
     }
 
@@ -611,7 +611,7 @@ final class LLVMCodeGenTests: XCTestCase {
             println(c.getCount())
         }
         """)
-        XCTAssertTrue(ir.contains("define i64 @Counter_getCount(ptr %this)"),
+        XCTAssertTrue(ir.contains("define internal i64 @Counter_getCount(ptr %this)"),
                        "Actor getter should have this param and return i64")
         XCTAssertTrue(ir.contains("rockit_object_get_field"),
                        "Bare field read should use get_field")

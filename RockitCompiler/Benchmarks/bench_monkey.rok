@@ -1,0 +1,442 @@
+// bench_monkey.rok — Benchmark: lex+parse Monkey source N times
+
+val TOK_ILLEGAL: Int = 0
+val TOK_EOF: Int = 1
+val TOK_IDENT: Int = 2
+val TOK_INT: Int = 3
+val TOK_ASSIGN: Int = 4
+val TOK_PLUS: Int = 5
+val TOK_MINUS: Int = 6
+val TOK_BANG: Int = 7
+val TOK_SLASH: Int = 8
+val TOK_ASTERISK: Int = 9
+val TOK_LT: Int = 10
+val TOK_GT: Int = 11
+val TOK_EQ: Int = 12
+val TOK_NOT_EQ: Int = 13
+val TOK_COMMA: Int = 14
+val TOK_SEMICOLON: Int = 15
+val TOK_LPAREN: Int = 16
+val TOK_RPAREN: Int = 17
+val TOK_LBRACE: Int = 18
+val TOK_RBRACE: Int = 19
+val TOK_FUNCTION: Int = 20
+val TOK_LET: Int = 21
+val TOK_IF: Int = 22
+val TOK_ELSE: Int = 23
+val TOK_RETURN: Int = 24
+val TOK_TRUE: Int = 25
+val TOK_FALSE: Int = 26
+
+var lexInput: String = ""
+var lexPos: Int = 0
+var lexReadPos: Int = 0
+var lexCh: Int = 0
+var tokType: Int = 0
+var tokLiteral: String = ""
+
+fun lexReadChar(): Unit {
+    if (lexReadPos >= stringLength(lexInput)) {
+        lexCh = 0
+    } else {
+        lexCh = charCodeAt(lexInput, lexReadPos)
+    }
+    lexPos = lexReadPos
+    lexReadPos = lexReadPos + 1
+}
+
+fun lexPeekChar(): Int {
+    if (lexReadPos >= stringLength(lexInput)) {
+        return 0
+    }
+    return charCodeAt(lexInput, lexReadPos)
+}
+
+fun lexInit(input: String): Unit {
+    lexInput = input
+    lexPos = 0
+    lexReadPos = 0
+    lexCh = 0
+    lexReadChar()
+}
+
+fun lexSkipWhitespace(): Unit {
+    while (lexCh == 32 || lexCh == 9 || lexCh == 10 || lexCh == 13) {
+        lexReadChar()
+    }
+}
+
+fun isLetterChar(ch: Int): Bool {
+    return (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch == 95
+}
+
+fun isDigitChar(ch: Int): Bool {
+    return ch >= 48 && ch <= 57
+}
+
+fun lexReadIdentifier(): String {
+    val start: Int = lexPos
+    while (isLetterChar(lexCh)) {
+        lexReadChar()
+    }
+    return substring(lexInput, start, lexPos)
+}
+
+fun lexReadNumber(): String {
+    val start: Int = lexPos
+    while (isDigitChar(lexCh)) {
+        lexReadChar()
+    }
+    return substring(lexInput, start, lexPos)
+}
+
+fun lookupKeyword(ident: String): Int {
+    if (ident == "fn") { return TOK_FUNCTION }
+    if (ident == "let") { return TOK_LET }
+    if (ident == "if") { return TOK_IF }
+    if (ident == "else") { return TOK_ELSE }
+    if (ident == "return") { return TOK_RETURN }
+    if (ident == "true") { return TOK_TRUE }
+    if (ident == "false") { return TOK_FALSE }
+    return TOK_IDENT
+}
+
+fun nextToken(): Unit {
+    lexSkipWhitespace()
+    if (lexCh == 61) {
+        if (lexPeekChar() == 61) {
+            lexReadChar()
+            tokType = TOK_EQ
+            tokLiteral = "=="
+        } else {
+            tokType = TOK_ASSIGN
+            tokLiteral = "="
+        }
+    } else if (lexCh == 43) {
+        tokType = TOK_PLUS
+        tokLiteral = "+"
+    } else if (lexCh == 45) {
+        tokType = TOK_MINUS
+        tokLiteral = "-"
+    } else if (lexCh == 33) {
+        if (lexPeekChar() == 61) {
+            lexReadChar()
+            tokType = TOK_NOT_EQ
+            tokLiteral = "!="
+        } else {
+            tokType = TOK_BANG
+            tokLiteral = "!"
+        }
+    } else if (lexCh == 47) {
+        tokType = TOK_SLASH
+        tokLiteral = "/"
+    } else if (lexCh == 42) {
+        tokType = TOK_ASTERISK
+        tokLiteral = "*"
+    } else if (lexCh == 60) {
+        tokType = TOK_LT
+        tokLiteral = "<"
+    } else if (lexCh == 62) {
+        tokType = TOK_GT
+        tokLiteral = ">"
+    } else if (lexCh == 44) {
+        tokType = TOK_COMMA
+        tokLiteral = ","
+    } else if (lexCh == 59) {
+        tokType = TOK_SEMICOLON
+        tokLiteral = ";"
+    } else if (lexCh == 40) {
+        tokType = TOK_LPAREN
+        tokLiteral = "("
+    } else if (lexCh == 41) {
+        tokType = TOK_RPAREN
+        tokLiteral = ")"
+    } else if (lexCh == 123) {
+        tokType = TOK_LBRACE
+        tokLiteral = "{"
+    } else if (lexCh == 125) {
+        tokType = TOK_RBRACE
+        tokLiteral = "}"
+    } else if (lexCh == 0) {
+        tokType = TOK_EOF
+        tokLiteral = ""
+    } else if (isLetterChar(lexCh)) {
+        tokLiteral = lexReadIdentifier()
+        tokType = lookupKeyword(tokLiteral)
+        return
+    } else if (isDigitChar(lexCh)) {
+        tokLiteral = lexReadNumber()
+        tokType = TOK_INT
+        return
+    } else {
+        tokType = TOK_ILLEGAL
+        tokLiteral = charAt(lexInput, lexPos)
+    }
+    lexReadChar()
+}
+
+val PREC_LOWEST: Int = 1
+val PREC_EQUALS: Int = 2
+val PREC_LESSGREATER: Int = 3
+val PREC_SUM: Int = 4
+val PREC_PRODUCT: Int = 5
+val PREC_PREFIX: Int = 6
+val PREC_CALL: Int = 7
+
+var curType: Int = 0
+var curLiteral: String = ""
+var peekType: Int = 0
+var peekLiteral: String = ""
+
+fun parserInit(input: String): Unit {
+    lexInit(input)
+    curType = TOK_EOF
+    curLiteral = ""
+    peekType = TOK_EOF
+    peekLiteral = ""
+    parserAdvance()
+    parserAdvance()
+}
+
+fun parserAdvance(): Unit {
+    curType = peekType
+    curLiteral = peekLiteral
+    nextToken()
+    peekType = tokType
+    peekLiteral = tokLiteral
+}
+
+fun expectPeek(t: Int): Bool {
+    if (peekType == t) {
+        parserAdvance()
+        return true
+    }
+    return false
+}
+
+fun peekPrecedence(): Int {
+    if (peekType == TOK_EQ) { return PREC_EQUALS }
+    if (peekType == TOK_NOT_EQ) { return PREC_EQUALS }
+    if (peekType == TOK_LT) { return PREC_LESSGREATER }
+    if (peekType == TOK_GT) { return PREC_LESSGREATER }
+    if (peekType == TOK_PLUS) { return PREC_SUM }
+    if (peekType == TOK_MINUS) { return PREC_SUM }
+    if (peekType == TOK_SLASH) { return PREC_PRODUCT }
+    if (peekType == TOK_ASTERISK) { return PREC_PRODUCT }
+    if (peekType == TOK_LPAREN) { return PREC_CALL }
+    return PREC_LOWEST
+}
+
+fun curPrecedence(): Int {
+    if (curType == TOK_EQ) { return PREC_EQUALS }
+    if (curType == TOK_NOT_EQ) { return PREC_EQUALS }
+    if (curType == TOK_LT) { return PREC_LESSGREATER }
+    if (curType == TOK_GT) { return PREC_LESSGREATER }
+    if (curType == TOK_PLUS) { return PREC_SUM }
+    if (curType == TOK_MINUS) { return PREC_SUM }
+    if (curType == TOK_SLASH) { return PREC_PRODUCT }
+    if (curType == TOK_ASTERISK) { return PREC_PRODUCT }
+    if (curType == TOK_LPAREN) { return PREC_CALL }
+    return PREC_LOWEST
+}
+
+fun hasInfix(t: Int): Bool {
+    return t == TOK_PLUS || t == TOK_MINUS || t == TOK_SLASH ||
+           t == TOK_ASTERISK || t == TOK_EQ || t == TOK_NOT_EQ ||
+           t == TOK_LT || t == TOK_GT || t == TOK_LPAREN
+}
+
+fun parseExpression(precedence: Int): String {
+    var left: String = ""
+    if (curType == TOK_IDENT) {
+        left = curLiteral
+    } else if (curType == TOK_INT) {
+        left = curLiteral
+    } else if (curType == TOK_TRUE) {
+        left = "true"
+    } else if (curType == TOK_FALSE) {
+        left = "false"
+    } else if (curType == TOK_BANG || curType == TOK_MINUS) {
+        val op: String = curLiteral
+        parserAdvance()
+        val right: String = parseExpression(PREC_PREFIX)
+        left = "(" + op + right + ")"
+    } else if (curType == TOK_LPAREN) {
+        parserAdvance()
+        left = parseExpression(PREC_LOWEST)
+        if (peekType == TOK_RPAREN) {
+            parserAdvance()
+        }
+    } else if (curType == TOK_IF) {
+        left = parseIfExpression()
+    } else if (curType == TOK_FUNCTION) {
+        left = parseFunctionLiteral()
+    } else {
+        left = "?"
+    }
+
+    while (peekType != TOK_SEMICOLON && precedence < peekPrecedence()) {
+        if (!hasInfix(peekType)) {
+            return left
+        }
+        parserAdvance()
+        if (curType == TOK_LPAREN) {
+            left = parseCallExpression(left)
+        } else {
+            val op: String = curLiteral
+            val prec: Int = curPrecedence()
+            parserAdvance()
+            val right: String = parseExpression(prec)
+            left = "(" + left + " " + op + " " + right + ")"
+        }
+    }
+
+    return left
+}
+
+fun parseIfExpression(): String {
+    var result: String = "if"
+    if (!expectPeek(TOK_LPAREN)) { return result }
+    parserAdvance()
+    val condition: String = parseExpression(PREC_LOWEST)
+    result = result + condition
+    if (!expectPeek(TOK_RPAREN)) { return result }
+    if (!expectPeek(TOK_LBRACE)) { return result }
+    val consequence: String = parseBlockStatement()
+    result = result + consequence
+    if (peekType == TOK_ELSE) {
+        parserAdvance()
+        if (!expectPeek(TOK_LBRACE)) { return result }
+        val alternative: String = parseBlockStatement()
+        result = result + "else" + alternative
+    }
+    return result
+}
+
+fun parseFunctionLiteral(): String {
+    var result: String = "fn"
+    if (!expectPeek(TOK_LPAREN)) { return result }
+    val params: String = parseFunctionParameters()
+    result = result + "(" + params + ")"
+    if (!expectPeek(TOK_LBRACE)) { return result }
+    val body: String = parseBlockStatement()
+    result = result + body
+    return result
+}
+
+fun parseFunctionParameters(): String {
+    var result: String = ""
+    if (peekType == TOK_RPAREN) {
+        parserAdvance()
+        return result
+    }
+    parserAdvance()
+    result = curLiteral
+    while (peekType == TOK_COMMA) {
+        parserAdvance()
+        parserAdvance()
+        result = result + ", " + curLiteral
+    }
+    if (!expectPeek(TOK_RPAREN)) { return result }
+    return result
+}
+
+fun parseCallExpression(function: String): String {
+    val args: String = parseCallArguments()
+    return function + "(" + args + ")"
+}
+
+fun parseCallArguments(): String {
+    var result: String = ""
+    if (peekType == TOK_RPAREN) {
+        parserAdvance()
+        return result
+    }
+    parserAdvance()
+    result = parseExpression(PREC_LOWEST)
+    while (peekType == TOK_COMMA) {
+        parserAdvance()
+        parserAdvance()
+        result = result + ", " + parseExpression(PREC_LOWEST)
+    }
+    if (!expectPeek(TOK_RPAREN)) { return result }
+    return result
+}
+
+fun parseBlockStatement(): String {
+    var result: String = ""
+    parserAdvance()
+    while (curType != TOK_RBRACE && curType != TOK_EOF) {
+        val stmt: String = parseStatement()
+        if (stringLength(stmt) > 0) {
+            result = result + stmt
+        }
+        parserAdvance()
+    }
+    return result
+}
+
+fun parseStatement(): String {
+    if (curType == TOK_LET) {
+        return parseLetStatement()
+    }
+    if (curType == TOK_RETURN) {
+        return parseReturnStatement()
+    }
+    return parseExpressionStatement()
+}
+
+fun parseLetStatement(): String {
+    if (!expectPeek(TOK_IDENT)) { return "" }
+    val name: String = curLiteral
+    if (!expectPeek(TOK_ASSIGN)) { return "" }
+    parserAdvance()
+    val value: String = parseExpression(PREC_LOWEST)
+    if (peekType == TOK_SEMICOLON) {
+        parserAdvance()
+    }
+    return "let " + name + " = " + value + ";"
+}
+
+fun parseReturnStatement(): String {
+    parserAdvance()
+    val value: String = parseExpression(PREC_LOWEST)
+    if (peekType == TOK_SEMICOLON) {
+        parserAdvance()
+    }
+    return "return " + value + ";"
+}
+
+fun parseExpressionStatement(): String {
+    val expr: String = parseExpression(PREC_LOWEST)
+    if (peekType == TOK_SEMICOLON) {
+        parserAdvance()
+    }
+    return expr
+}
+
+fun parseProgram(): String {
+    var result: String = ""
+    while (curType != TOK_EOF) {
+        val stmt: String = parseStatement()
+        if (stringLength(stmt) > 0) {
+            result = result + stmt
+        }
+        parserAdvance()
+    }
+    return result
+}
+
+fun main(): Unit {
+    val input: String = "let five = 5;\nlet ten = 10;\nlet add = fn(x, y) { x + y; };\nlet result = add(five, ten);\n!-/*5;\n5 < 10 > 5;\nif (5 < 10) { return true; } else { return false; }\n10 == 10;\n10 != 9;\n"
+    val N: Int = 100000
+    var i: Int = 0
+    var len: Int = 0
+    while (i < N) {
+        parserInit(input)
+        val result: String = parseProgram()
+        len = stringLength(result)
+        i = i + 1
+    }
+    println(toString(len))
+}
