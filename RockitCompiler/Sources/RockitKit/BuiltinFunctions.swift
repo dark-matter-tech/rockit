@@ -366,6 +366,10 @@ public final class BuiltinRegistry {
             return .null
         }
 
+        register(name: "executablePath") { _ in
+            return .string(CommandLine.arguments[0])
+        }
+
         // Math
         register(name: "abs") { args in
             switch args.first {

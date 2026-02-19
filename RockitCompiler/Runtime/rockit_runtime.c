@@ -1173,6 +1173,21 @@ int64_t processArgs(void) {
     return list;
 }
 
+int64_t getEnv(RockitString* name) {
+    const char* val = getenv(name->data);
+    if (val == NULL) {
+        return (int64_t)(intptr_t)rockit_string_new("");
+    }
+    return (int64_t)(intptr_t)rockit_string_new(val);
+}
+
+int64_t executablePath(void) {
+    if (s_argc > 0 && s_argv != NULL && s_argv[0] != NULL) {
+        return (int64_t)(intptr_t)rockit_string_new(s_argv[0]);
+    }
+    return (int64_t)(intptr_t)rockit_string_new("");
+}
+
 // -- Meta --
 
 int64_t evalRockit(RockitString* source) {

@@ -49,8 +49,10 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "mapKeys", "i64|i64")
     mapPut(t, "toInt", "i64|i64")
     mapPut(t, "processArgs", "i64|")
+    mapPut(t, "executablePath", "i64|")
 
     // Functions taking ptr args
+    mapPut(t, "getEnv", "i64|ptr")
     mapPut(t, "mapGet", "i64|i64,ptr")
     mapPut(t, "mapPut", "i64|i64,ptr,i64")
     mapPut(t, "toString", "ptr|i64")

@@ -507,6 +507,8 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i64 @fileWriteBytes(ptr, i64)")
         // Process
         externalDecls.insert("declare i64 @processArgs()")
+        externalDecls.insert("declare i64 @getEnv(ptr)")
+        externalDecls.insert("declare i64 @executablePath()")
         // Meta
         externalDecls.insert("declare i64 @evalRockit(ptr)")
         externalDecls.insert("declare i64 @systemExec(ptr)")

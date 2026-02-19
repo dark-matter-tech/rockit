@@ -4777,8 +4777,10 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "mapKeys", "i64|i64")
     mapPut(t, "toInt", "i64|i64")
     mapPut(t, "processArgs", "i64|")
+    mapPut(t, "executablePath", "i64|")
 
     // Functions taking ptr args
+    mapPut(t, "getEnv", "i64|ptr")
     mapPut(t, "mapGet", "i64|i64,ptr")
     mapPut(t, "mapPut", "i64|i64,ptr,i64")
     mapPut(t, "toString", "ptr|i64")
@@ -11369,6 +11371,50 @@ fun replMain(): Unit {
 }
 
 // ---------------------------------------------------------------------------
+// Runtime Discovery
+// ---------------------------------------------------------------------------
+
+fun findRuntimePath(sourceDir: String): String {
+    val runtimeFile = "rockit_runtime.c"
+
+    // 1. ROCKIT_HOME env var
+    val home = toString(getEnv("ROCKIT_HOME"))
+    if (stringLength(home) > 0) {
+        val candidate = stringConcat(home, stringConcat("/", runtimeFile))
+        if (fileExists(candidate)) { return candidate }
+    }
+
+    // 2. Relative to executable: same directory
+    val exePath = toString(executablePath())
+    if (stringLength(exePath) > 0) {
+        val exeDir = dirName(exePath)
+        val candidate = stringConcat(exeDir, stringConcat("/", runtimeFile))
+        if (fileExists(candidate)) { return candidate }
+        // 3. Relative to executable: ../share/rockit/
+        val candidate2 = stringConcat(exeDir, stringConcat("/../share/rockit/", runtimeFile))
+        if (fileExists(candidate2)) { return candidate2 }
+        // 4. Relative to executable: ../Runtime/
+        val candidate3 = stringConcat(exeDir, stringConcat("/../Runtime/", runtimeFile))
+        if (fileExists(candidate3)) { return candidate3 }
+    }
+
+    // 5. Relative to source: ../Runtime/
+    val candidate4 = stringConcat(sourceDir, stringConcat("/../Runtime/", runtimeFile))
+    if (fileExists(candidate4)) { return candidate4 }
+
+    // 6. Runtime/ in current directory
+    val candidate5 = stringConcat("Runtime/", runtimeFile)
+    if (fileExists(candidate5)) { return candidate5 }
+
+    // 7. Standard install locations
+    if (fileExists("/usr/local/share/rockit/rockit_runtime.c")) {
+        return "/usr/local/share/rockit/rockit_runtime.c"
+    }
+
+    return ""
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -11533,19 +11579,11 @@ fun main(): Unit {
 
         // Find runtime path
         if (stringLength(runtimePath) == 0) {
-            // Try relative to source: ../Runtime/rockit_runtime.c
-            val candidate = stringConcat(sourceDir, "/../Runtime/rockit_runtime.c")
-            if (fileExists(candidate)) {
-                runtimePath = candidate
-            } else {
-                // Try Runtime/rockit_runtime.c from current dir
-                val candidate2 = "Runtime/rockit_runtime.c"
-                if (fileExists(candidate2)) {
-                    runtimePath = candidate2
-                } else {
-                    println("error: cannot find rockit_runtime.c — use --runtime-path")
-                    return
-                }
+            runtimePath = findRuntimePath(sourceDir)
+            if (stringLength(runtimePath) == 0) {
+                println("error: cannot find rockit_runtime.c")
+                println("Set ROCKIT_HOME or use --runtime-path")
+                return
             }
         }
 
