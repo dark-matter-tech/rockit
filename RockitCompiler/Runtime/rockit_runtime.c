@@ -1075,6 +1075,29 @@ RockitString* floatToString(double value) {
     return rockit_string_new(buf);
 }
 
+RockitString* formatFloat(double value, int64_t decimals) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%.*f", (int)decimals, value);
+    return rockit_string_new(buf);
+}
+
+double toFloat(int64_t value) {
+    return (double)value;
+}
+
+// Double-typed list access (bitcast between int64_t and double)
+void listSetFloat(RockitList* list, int64_t index, double value) {
+    if (index < 0 || index >= list->size) return;
+    memcpy(&list->data[index], &value, sizeof(double));
+}
+
+double listGetFloat(RockitList* list, int64_t index) {
+    if (index < 0 || index >= list->size) return 0.0;
+    double value;
+    memcpy(&value, &list->data[index], sizeof(double));
+    return value;
+}
+
 // ── Actor Runtime (Stage 0 — synchronous) ──────────────────────────────
 
 RockitActor* rockit_actor_create(const char* typeName, int32_t fieldCount) {

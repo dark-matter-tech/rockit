@@ -1,0 +1,81 @@
+// bench_spectralnorm.rok — Spectral Norm (CLBG)
+// Measures: floating-point arithmetic, nested loops, array access
+// Standard: Computer Language Benchmarks Game
+// N=5500 for performance testing
+
+fun evalA(i: Int, j: Int): Double {
+    val ij: Int = i + j
+    val denom: Int = ij * (ij + 1) / 2 + i + 1
+    return 1.0 / toFloat(denom)
+}
+
+fun evalAtimesU(n: Int, u: List, au: List): Unit {
+    var i: Int = 0
+    while (i < n) {
+        var sum: Double = 0.0
+        var j: Int = 0
+        while (j < n) {
+            sum = sum + evalA(i, j) * listGetFloat(u, j)
+            j = j + 1
+        }
+        listSetFloat(au, i, sum)
+        i = i + 1
+    }
+}
+
+fun evalAttimesU(n: Int, u: List, au: List): Unit {
+    var i: Int = 0
+    while (i < n) {
+        var sum: Double = 0.0
+        var j: Int = 0
+        while (j < n) {
+            sum = sum + evalA(j, i) * listGetFloat(u, j)
+            j = j + 1
+        }
+        listSetFloat(au, i, sum)
+        i = i + 1
+    }
+}
+
+fun evalAtAtimesU(n: Int, u: List, atau: List): Unit {
+    val v = listCreateFilled(n, 0)
+    evalAtimesU(n, u, v)
+    evalAttimesU(n, v, atau)
+}
+
+fun main(): Unit {
+    val n: Int = 5500
+
+    val u = listCreateFilled(n, 0)
+    val v = listCreateFilled(n, 0)
+
+    // Initialize u to all 1.0
+    var i: Int = 0
+    while (i < n) {
+        listSetFloat(u, i, 1.0)
+        i = i + 1
+    }
+
+    // 10 iterations of the power method
+    i = 0
+    while (i < 10) {
+        evalAtAtimesU(n, u, v)
+        evalAtAtimesU(n, v, u)
+        i = i + 1
+    }
+
+    // Compute result
+    var vBv: Double = 0.0
+    var vv: Double = 0.0
+    i = 0
+    while (i < n) {
+        val ui: Double = listGetFloat(u, i)
+        val vi: Double = listGetFloat(v, i)
+        vBv = vBv + ui * vi
+        vv = vv + vi * vi
+        i = i + 1
+    }
+
+    val result: Double = rockit_math_sqrt(vBv / vv)
+    println(formatFloat(result, 9))
+}

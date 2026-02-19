@@ -97,6 +97,22 @@ public final class BuiltinRegistry {
             return .string("\(v)")
         }
 
+        register(name: "formatFloat") { args in
+            guard args.count >= 2,
+                  case .float(let v) = args[0],
+                  case .int(let decimals) = args[1] else {
+                throw VMError.typeMismatch(expected: "Float64, Int", actual: "\(args)", operation: "formatFloat")
+            }
+            return .string(String(format: "%.\(decimals)f", v))
+        }
+
+        register(name: "toFloat") { args in
+            guard case .int(let v) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "toFloat")
+            }
+            return .float(Double(v))
+        }
+
         // String operations
         register(name: "stringLength") { args in
             guard case .string(let s) = args.first else {
@@ -746,6 +762,30 @@ public final class BuiltinRegistry {
             arc.retain(newValue)
             arc.release(oldValue)
             return .unit
+        }
+
+        register(name: "listSetFloat") { args in
+            let obj = try extractList(args, operation: "listSetFloat")
+            guard args.count >= 3, case .int(let index) = args[1], case .float(let value) = args[2] else {
+                throw VMError.typeMismatch(expected: "List, Int, Float", actual: "\(args)", operation: "listSetFloat")
+            }
+            guard obj.listStorage != nil, index >= 0, Int(index) < obj.listStorage!.count else {
+                throw VMError.indexOutOfBounds(index: Int(index), count: obj.listStorage?.count ?? 0)
+            }
+            obj.listStorage![Int(index)] = .float(value)
+            return .unit
+        }
+
+        register(name: "listGetFloat") { args in
+            let obj = try extractList(args, operation: "listGetFloat")
+            guard args.count >= 2, case .int(let index) = args[1] else {
+                throw VMError.typeMismatch(expected: "List, Int", actual: "\(args)", operation: "listGetFloat")
+            }
+            guard let storage = obj.listStorage, index >= 0, Int(index) < storage.count else {
+                throw VMError.indexOutOfBounds(index: Int(index), count: obj.listStorage?.count ?? 0)
+            }
+            if case .float(let value) = storage[Int(index)] { return .float(value) }
+            return .float(0.0)
         }
 
         register(name: "listSize") { args in

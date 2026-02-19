@@ -525,6 +525,10 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare double @rockit_math_exp(double)")
         externalDecls.insert("declare double @rockit_math_abs(double)")
         externalDecls.insert("declare double @rockit_math_atan2(double, double)")
+        externalDecls.insert("declare ptr @formatFloat(double, i64)")
+        externalDecls.insert("declare double @toFloat(i64)")
+        externalDecls.insert("declare void @listSetFloat(ptr, i64, double)")
+        externalDecls.insert("declare double @listGetFloat(ptr, i64)")
     }
 
     /// Scan emitted IR for `call` instructions and auto-declare any functions
@@ -2307,6 +2311,10 @@ public final class LLVMCodeGen {
             return emitInlineListSet(args: args)
         case "listSize":
             return emitInlineListSize(dest: dest, args: args)
+        case "listGetFloat":
+            return emitInlineListGetFloat(dest: dest, args: args)
+        case "listSetFloat":
+            return emitInlineListSetFloat(args: args)
         case "listContains":
             return emitNativeCollectionCallBool(dest: dest, nativeFn: "rockit_list_contains", args: args)
         case "listRemoveAt":
@@ -2439,7 +2447,23 @@ public final class LLVMCodeGen {
         var lines: [String] = []
         let listPtr = loadArgAsPtr(args[0], lines: &lines)
         let idx = loadArgAsI64(args[1], lines: &lines)
-        let val = loadArgAsI64(args[2], lines: &lines)
+
+        // Load value — handle both i64 and double types
+        let valType = typeOf(args[2])
+        let valTmp = nextSSA()
+        lines.append("\(valTmp) = load \(valType), ptr \(addrOf(args[2]))")
+        let val: String
+        if valType == "double" {
+            let castTmp = nextSSA()
+            lines.append("\(castTmp) = bitcast double \(valTmp) to i64")
+            val = castTmp
+        } else if valType == "ptr" {
+            let castTmp = nextSSA()
+            lines.append("\(castTmp) = ptrtoint ptr \(valTmp) to i64")
+            val = castTmp
+        } else {
+            val = valTmp
+        }
 
         // Bounds check: idx < size
         let sizeAddr = nextSSA()
@@ -2483,6 +2507,90 @@ public final class LLVMCodeGen {
 
         lines.append(storeToTemp(dest, value: result, type: "i64"))
         registerTypes[dest] = "i64"
+        return lines
+    }
+
+    /// Inline listGetFloat: GEP into RockitList.data[index], load i64, bitcast to double
+    private func emitInlineListGetFloat(dest: String?, args: [String]) -> [String] {
+        guard let dest = dest, args.count >= 2 else { return [] }
+        var lines: [String] = []
+        let listPtr = loadArgAsPtr(args[0], lines: &lines)
+        let idx = loadArgAsI64(args[1], lines: &lines)
+
+        // Bounds check: idx < size
+        let sizeAddr = nextSSA()
+        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+        let size = nextSSA()
+        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+        let ok = nextSSA()
+        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+        let okLabel = "list.ok.\(labelCounter)"
+        let oobLabel = "list.oob.\(labelCounter)"
+        labelCounter += 1
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel)")
+        lines.append("\(oobLabel):")
+        let oobIdx = internString("list index out of bounds")
+        lines.append("call void @rockit_panic(ptr \(oobIdx))")
+        lines.append("unreachable")
+        lines.append("\(okLabel):")
+
+        // Inline GEP: data pointer at offset 24, then index into data array
+        let dataAddr = nextSSA()
+        lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
+        let dataPtr = nextSSA()
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
+        let elemAddr = nextSSA()
+        lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
+        let rawVal = nextSSA()
+        lines.append("\(rawVal) = load i64, ptr \(elemAddr), !tbaa !4")
+        // Bitcast i64 to double
+        let result = nextSSA()
+        lines.append("\(result) = bitcast i64 \(rawVal) to double")
+
+        lines.append(storeToTemp(dest, value: result, type: "double"))
+        registerTypes[dest] = "double"
+        return lines
+    }
+
+    /// Inline listSetFloat: bitcast double to i64, GEP into RockitList.data[index], store
+    private func emitInlineListSetFloat(args: [String]) -> [String] {
+        guard args.count >= 3 else { return [] }
+        var lines: [String] = []
+        let listPtr = loadArgAsPtr(args[0], lines: &lines)
+        let idx = loadArgAsI64(args[1], lines: &lines)
+
+        // Load the double value and bitcast to i64 for storage
+        let valTmp = nextSSA()
+        lines.append("\(valTmp) = load double, ptr \(addrOf(args[2]))")
+        let val = nextSSA()
+        lines.append("\(val) = bitcast double \(valTmp) to i64")
+
+        // Bounds check: idx < size
+        let sizeAddr = nextSSA()
+        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+        let size = nextSSA()
+        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+        let ok = nextSSA()
+        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+        let okLabel = "list.ok.\(labelCounter)"
+        let oobLabel = "list.oob.\(labelCounter)"
+        labelCounter += 1
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel)")
+        lines.append("\(oobLabel):")
+        let oobIdx = internString("list index out of bounds")
+        lines.append("call void @rockit_panic(ptr \(oobIdx))")
+        lines.append("unreachable")
+        lines.append("\(okLabel):")
+
+        // Inline GEP store
+        let dataAddr = nextSSA()
+        lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
+        let dataPtr = nextSSA()
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
+        let elemAddr = nextSSA()
+        lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
+        lines.append("store i64 \(val), ptr \(elemAddr), !tbaa !4")
+
         return lines
     }
 
@@ -3486,6 +3594,7 @@ public final class LLVMCodeGen {
         // Builtins
         switch function {
         case "toString", "intToString", "floatToString", "boolToString",
+             "formatFloat",
              "stringSubstring", "substring", "charAt", "stringTrim",
              "stringReplace", "stringToLower", "stringToUpper",
              "stringConcat", "stringFromCharCodes", "readLine",
@@ -3497,6 +3606,12 @@ public final class LLVMCodeGen {
         case "listOf", "mutableListOf", "mapOf", "mutableMapOf",
              "listCreate", "listCreateFilled", "mapCreate":
             return "ptr"
+        case "toFloat", "listGetFloat",
+             "rockit_math_sqrt", "rockit_math_sin", "rockit_math_cos",
+             "rockit_math_tan", "rockit_math_pow", "rockit_math_floor",
+             "rockit_math_ceil", "rockit_math_round", "rockit_math_log",
+             "rockit_math_exp", "rockit_math_abs", "rockit_math_atan2":
+            return "double"
         case "startsWith", "endsWith", "stringContains", "isDigit",
              "isLetter", "isWhitespace", "isLetterOrDigit",
              "fileExists", "fileWrite", "fileDelete",

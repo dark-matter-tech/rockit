@@ -224,6 +224,10 @@ public final class SymbolTable {
             ("toInt",         .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .int)),
             ("intToString",   .function(parameterTypes: [.int], returnType: .string)),
             ("floatToString", .function(parameterTypes: [.float64], returnType: .string)),
+            ("formatFloat", .function(parameterTypes: [.float64, .int], returnType: .string)),
+            ("toFloat", .function(parameterTypes: [.int], returnType: .float64)),
+            ("listGetFloat", .function(parameterTypes: [.classType(name: "List", typeArguments: []), .int], returnType: .float64)),
+            ("listSetFloat", .function(parameterTypes: [.classType(name: "List", typeArguments: []), .int, .float64], returnType: .unit)),
 
             // Existing string ops (registered in runtime but missing from type checker)
             ("stringLength",    .function(parameterTypes: [.string], returnType: .int)),

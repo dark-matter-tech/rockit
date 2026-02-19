@@ -1,0 +1,98 @@
+// bench_fannkuch.rok — Fannkuch-Redux (CLBG)
+// Measures: array access, integer arithmetic, permutation generation
+// Standard: Computer Language Benchmarks Game
+// N=12 for performance testing
+
+fun main(): Unit {
+    val n: Int = 12
+
+    val perm = listCreateFilled(n, 0)
+    val perm1 = listCreateFilled(n, 0)
+    val count = listCreateFilled(n, 0)
+
+    // Initialize perm1 to identity
+    var i: Int = 0
+    while (i < n) {
+        listSet(perm1, i, i)
+        i = i + 1
+    }
+
+    var maxFlips: Int = 0
+    var checksum: Int = 0
+    var permCount: Int = 0
+    var r: Int = n
+
+    var done: Int = 0
+    while (done == 0) {
+        // Set count[r-1] = r for each r > 1
+        while (r != 1) {
+            listSet(count, r - 1, r)
+            r = r - 1
+        }
+
+        // Copy perm1 to perm
+        i = 0
+        while (i < n) {
+            listSet(perm, i, toInt(listGet(perm1, i)))
+            i = i + 1
+        }
+
+        // Count flips
+        var flips: Int = 0
+        var k: Int = toInt(listGet(perm, 0))
+        while (k != 0) {
+            // Reverse first k+1 elements
+            var lo: Int = 0
+            var hi: Int = k
+            while (lo < hi) {
+                val tmp: Int = toInt(listGet(perm, lo))
+                listSet(perm, lo, toInt(listGet(perm, hi)))
+                listSet(perm, hi, tmp)
+                lo = lo + 1
+                hi = hi - 1
+            }
+            flips = flips + 1
+            k = toInt(listGet(perm, 0))
+        }
+
+        if (flips > maxFlips) {
+            maxFlips = flips
+        }
+        if (permCount % 2 == 0) {
+            checksum = checksum + flips
+        } else {
+            checksum = checksum - flips
+        }
+
+        // Generate next permutation
+        var advanced: Int = 0
+        while (advanced == 0) {
+            if (r == n) {
+                done = 1
+                advanced = 1
+            } else {
+                val perm0: Int = toInt(listGet(perm1, 0))
+                i = 0
+                while (i < r) {
+                    val j: Int = i + 1
+                    listSet(perm1, i, toInt(listGet(perm1, j)))
+                    i = j
+                }
+                listSet(perm1, r, perm0)
+                listSet(count, r, toInt(listGet(count, r)) - 1)
+                if (toInt(listGet(count, r)) > 0) {
+                    advanced = 1
+                } else {
+                    r = r + 1
+                }
+            }
+        }
+        permCount = permCount + 1
+    }
+
+    println(checksum)
+    print("Pfannkuchen(")
+    print(n)
+    print(") = ")
+    println(maxFlips)
+}

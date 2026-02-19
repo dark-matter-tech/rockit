@@ -1,0 +1,101 @@
+// bench_binarytrees.rok — Binary Trees (CLBG)
+// Measures: allocation, recursion, memory throughput
+// Standard: Computer Language Benchmarks Game
+// N=21 for performance testing
+
+// Node pool: each node stores left/right child indices; -1 = leaf
+var poolLeft = listCreate()
+var poolRight = listCreate()
+
+fun resetPool(): Unit {
+    poolLeft = listCreate()
+    poolRight = listCreate()
+}
+
+fun newNode(left: Int, right: Int): Int {
+    val id: Int = listSize(poolLeft)
+    listAppend(poolLeft, left)
+    listAppend(poolRight, right)
+    return id
+}
+
+fun bottomUpTree(depth: Int): Int {
+    if (depth == 0) {
+        return newNode(-1, -1)
+    }
+    val left: Int = bottomUpTree(depth - 1)
+    val right: Int = bottomUpTree(depth - 1)
+    return newNode(left, right)
+}
+
+fun itemCheck(node: Int): Int {
+    val left: Int = toInt(listGet(poolLeft, node))
+    if (left == -1) {
+        return 1
+    }
+    val right: Int = toInt(listGet(poolRight, node))
+    return 1 + itemCheck(left) + itemCheck(right)
+}
+
+fun main(): Unit {
+    val n: Int = 21
+    val minDepth: Int = 4
+    var maxDepth: Int = n
+    if (minDepth + 2 > n) {
+        maxDepth = minDepth + 2
+    }
+    val stretchDepth: Int = maxDepth + 1
+
+    // Stretch tree
+    resetPool()
+    val stretchTree: Int = bottomUpTree(stretchDepth)
+    val stretchCheck: Int = itemCheck(stretchTree)
+    print("stretch tree of depth ")
+    print(stretchDepth)
+    print("\t check: ")
+    println(stretchCheck)
+
+    // Long-lived tree
+    resetPool()
+    val longLivedTree: Int = bottomUpTree(maxDepth)
+    // Save the long-lived pool
+    val longLeft = poolLeft
+    val longRight = poolRight
+
+    // Iterative trees
+    var depth: Int = minDepth
+    while (depth <= maxDepth) {
+        var iterations: Int = 1
+        var shift: Int = maxDepth - depth + minDepth
+        while (shift > 0) {
+            iterations = iterations * 2
+            shift = shift - 1
+        }
+
+        var check: Int = 0
+        var i: Int = 0
+        while (i < iterations) {
+            resetPool()
+            val tree: Int = bottomUpTree(depth)
+            check = check + itemCheck(tree)
+            i = i + 1
+        }
+
+        print(iterations)
+        print("\t trees of depth ")
+        print(depth)
+        print("\t check: ")
+        println(check)
+
+        depth = depth + 2
+    }
+
+    // Long-lived tree check
+    poolLeft = longLeft
+    poolRight = longRight
+    val longCheck: Int = itemCheck(longLivedTree)
+    print("long lived tree of depth ")
+    print(maxDepth)
+    print("\t check: ")
+    println(longCheck)
+}
