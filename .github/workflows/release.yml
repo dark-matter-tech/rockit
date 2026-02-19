@@ -5,77 +5,16 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-
-env:
-  SWIFT_VERSION: "5.10.1"
-
 jobs:
-  build-macos-arm64:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build release binary
-        working-directory: RockitCompiler
-        run: swift build -c release
-
-      - name: Package
-        working-directory: RockitCompiler
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          ARCHIVE="rockit-${VERSION}-macos-arm64.tar.gz"
-          mkdir -p dist/rockit/runtime
-          cp .build/release/rockit dist/rockit/
-          cp Runtime/rockit_runtime.c dist/rockit/runtime/
-          cp Runtime/rockit_runtime.h dist/rockit/runtime/
-          mkdir -p dist/rockit/editors/vscode dist/rockit/editors/vim
-          cp -r ../ide/vscode/* dist/rockit/editors/vscode/
-          cp -r ../ide/vim/* dist/rockit/editors/vim/
-          tar -czf "$ARCHIVE" -C dist rockit
-          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-arm64
-          path: RockitCompiler/${{ env.ARCHIVE }}
-
-  build-macos-x86_64:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build release binary
-        working-directory: RockitCompiler
-        run: swift build -c release
-
-      - name: Package
-        working-directory: RockitCompiler
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          ARCHIVE="rockit-${VERSION}-macos-x86_64.tar.gz"
-          mkdir -p dist/rockit/runtime
-          cp .build/release/rockit dist/rockit/
-          cp Runtime/rockit_runtime.c dist/rockit/runtime/
-          cp Runtime/rockit_runtime.h dist/rockit/runtime/
-          mkdir -p dist/rockit/editors/vscode dist/rockit/editors/vim
-          cp -r ../ide/vscode/* dist/rockit/editors/vscode/
-          cp -r ../ide/vim/* dist/rockit/editors/vim/
-          tar -czf "$ARCHIVE" -C dist rockit
-          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-x86_64
-          path: RockitCompiler/${{ env.ARCHIVE }}
-
-  build-linux-x86_64:
+  build-and-release:
     runs-on: ubuntu-22.04
     container: swift:5.10.1-jammy
+
     steps:
       - name: Install dependencies
-        run: apt-get update && apt-get install -y git clang-15 && ln -sf /usr/bin/clang-15 /usr/bin/clang
+        run: |
+          apt-get update && apt-get install -y git clang-15 curl jq
+          ln -sf /usr/bin/clang-15 /usr/bin/clang
 
       - name: Checkout
         run: |
@@ -86,80 +25,71 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Build release binary
+      - name: Build Stage 0 compiler
         working-directory: RockitCompiler
         run: swift build -c release
 
-      - name: Package
+      - name: Build Stage 1 compiler
         working-directory: RockitCompiler
+        run: |
+          .build/release/rockit build-native Stage1/command.rok
+          echo "Stage 1 compiler built"
+          Stage1/command version
+
+      - name: Clone and build Fuel
+        run: |
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
+          RockitCompiler/Stage1/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path RockitCompiler/Runtime/rockit_runtime.c
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+      - name: Package Linux x86_64
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           ARCHIVE="rockit-${VERSION}-linux-x86_64.tar.gz"
-          mkdir -p dist/rockit/runtime
-          cp .build/release/rockit dist/rockit/
-          cp Runtime/rockit_runtime.c dist/rockit/runtime/
-          cp Runtime/rockit_runtime.h dist/rockit/runtime/
-          mkdir -p dist/rockit/editors/vscode dist/rockit/editors/vim
-          cp -r ../ide/vscode/* dist/rockit/editors/vscode/
-          cp -r ../ide/vim/* dist/rockit/editors/vim/
-          tar -czf "$ARCHIVE" -C dist rockit
-          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/bin
+          mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit
+          cp RockitCompiler/Stage1/command dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
+          cp /tmp/fuel/fuel dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
+          chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
+          chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
+          cp RockitCompiler/Runtime/rockit_runtime.c dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
+          cp RockitCompiler/Runtime/rockit_runtime.h dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
+          cd dist && tar -czf "${ARCHIVE}" "rockit-${VERSION}-linux-x86_64"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          ls -la "${ARCHIVE}"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-x86_64
-          path: RockitCompiler/${{ env.ARCHIVE }}
-
-  build-windows-x86_64:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: compnerd/gha-setup-swift@main
-        with:
-          branch: swift-${{ env.SWIFT_VERSION }}-release
-          tag: ${{ env.SWIFT_VERSION }}-RELEASE
-
-      - name: Build release binary
-        working-directory: RockitCompiler
-        run: swift build -c release
-
-      - name: Package
-        working-directory: RockitCompiler
-        shell: pwsh
+      - name: Create Gitea release and upload
         run: |
-          $Version = "$env:GITHUB_REF_NAME" -replace '^v',''
-          $Archive = "rockit-${Version}-windows-x86_64.zip"
-          New-Item -ItemType Directory -Force -Path dist\rockit\runtime | Out-Null
-          Copy-Item ".build\release\rockit.exe" "dist\rockit\"
-          Copy-Item "Runtime\rockit_runtime.c" "dist\rockit\runtime\"
-          Copy-Item "Runtime\rockit_runtime.h" "dist\rockit\runtime\"
-          New-Item -ItemType Directory -Force -Path dist\rockit\editors\vscode | Out-Null
-          New-Item -ItemType Directory -Force -Path dist\rockit\editors\vim | Out-Null
-          Copy-Item "..\ide\vscode\*" "dist\rockit\editors\vscode\" -Recurse
-          Copy-Item "..\ide\vim\*" "dist\rockit\editors\vim\" -Recurse
-          Compress-Archive -Path "dist\rockit" -DestinationPath $Archive
-          "ARCHIVE=$Archive" | Out-File -FilePath $env:GITHUB_ENV -Append
+          GITEA_URL="${GITHUB_SERVER_URL}"
+          API="${GITEA_URL}/api/v1"
+          TAG="${GITHUB_REF_NAME}"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-x86_64
-          path: RockitCompiler/${{ env.ARCHIVE }}
+          # Create release
+          RELEASE_ID=$(curl -s -X POST \
+            -H "Authorization: token ${FUEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${API}/repos/${GITHUB_REPOSITORY}/releases" \
+            -d "{
+              \"tag_name\": \"${TAG}\",
+              \"name\": \"Rockit ${TAG}\",
+              \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/develop/RockitCompiler/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
+              \"draft\": false,
+              \"prerelease\": false
+            }" | jq -r '.id')
 
-  create-release:
-    needs: [build-macos-arm64, build-macos-x86_64, build-linux-x86_64, build-windows-x86_64]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
+          echo "Release created: ID=${RELEASE_ID}"
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            artifacts/macos-arm64/*
-            artifacts/macos-x86_64/*
-            artifacts/linux-x86_64/*
-            artifacts/windows-x86_64/*
+          # Upload tarball
+          curl -s -X POST \
+            -H "Authorization: token ${FUEL_TOKEN}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary "@dist/${ARCHIVE}" \
+            "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${ARCHIVE}"
+
+          echo "Uploaded: ${ARCHIVE}"
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
