@@ -370,6 +370,16 @@ public final class BuiltinRegistry {
             return .string(CommandLine.arguments[0])
         }
 
+        register(name: "platformOS") { _ in
+            #if os(Windows)
+            return .string("windows")
+            #elseif os(macOS)
+            return .string("macos")
+            #else
+            return .string("linux")
+            #endif
+        }
+
         // Math
         register(name: "abs") { args in
             switch args.first {

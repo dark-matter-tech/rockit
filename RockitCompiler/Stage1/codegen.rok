@@ -3734,12 +3734,13 @@ fun compileProgram(ast: Map): Map {
     return compiler
 }
 
-// Get directory of a file path (everything before last '/')
+// Get directory of a file path (everything before last '/' or '\')
 fun dirName(path: String): String {
     val len = stringLength(path)
     var i: Int = len - 1
     while (i >= 0) {
-        if (charAt(path, i) == "/") {
+        val ch = charAt(path, i)
+        if (ch == "/" || ch == "\\") {
             return substring(path, 0, i)
         }
         i = i - 1
@@ -3747,17 +3748,25 @@ fun dirName(path: String): String {
     return "."
 }
 
+fun pathSep(): String {
+    if (toString(platformOS()) == "windows") {
+        return "\\"
+    }
+    return "/"
+}
+
 // Resolve an import path like "foo.bar" to a file path
 // Searches: 1) relative to source dir, 2) lib path
 fun resolveImport(importPath: String, sourceDir: String, libPath: String): String {
-    // Convert dots to slashes: "foo.bar.baz" -> "foo/bar/baz"
+    // Convert dots to path separators: "foo.bar.baz" -> "foo/bar/baz" or "foo\bar\baz"
+    val sep = pathSep()
     var resolved: String = ""
     val len = stringLength(importPath)
     var i: Int = 0
     while (i < len) {
         val ch = charAt(importPath, i)
         if (ch == ".") {
-            resolved = stringConcat(resolved, "/")
+            resolved = stringConcat(resolved, sep)
         } else {
             resolved = stringConcat(resolved, ch)
         }
@@ -3765,14 +3774,14 @@ fun resolveImport(importPath: String, sourceDir: String, libPath: String): Strin
     }
 
     // Try relative to source dir
-    val relPath = stringConcat(sourceDir, stringConcat("/", stringConcat(resolved, ".rok")))
+    val relPath = stringConcat(sourceDir, stringConcat(sep, stringConcat(resolved, ".rok")))
     if (fileExists(relPath)) {
         return relPath
     }
 
     // Try lib path
     if (stringLength(libPath) > 0) {
-        val libFilePath = stringConcat(libPath, stringConcat("/", stringConcat(resolved, ".rok")))
+        val libFilePath = stringConcat(libPath, stringConcat(sep, stringConcat(resolved, ".rok")))
         if (fileExists(libFilePath)) {
             return libFilePath
         }
@@ -3943,11 +3952,12 @@ fun replMain(): Unit {
 
 fun findRuntimePath(sourceDir: String): String {
     val runtimeFile = "rockit_runtime.c"
+    val sep = pathSep()
 
     // 1. ROCKIT_HOME env var
     val home = toString(getEnv("ROCKIT_HOME"))
     if (stringLength(home) > 0) {
-        val candidate = stringConcat(home, stringConcat("/", runtimeFile))
+        val candidate = stringConcat(home, stringConcat(sep, runtimeFile))
         if (fileExists(candidate)) { return candidate }
     }
 
@@ -3955,27 +3965,41 @@ fun findRuntimePath(sourceDir: String): String {
     val exePath = toString(executablePath())
     if (stringLength(exePath) > 0) {
         val exeDir = dirName(exePath)
-        val candidate = stringConcat(exeDir, stringConcat("/", runtimeFile))
+        val candidate = stringConcat(exeDir, stringConcat(sep, runtimeFile))
         if (fileExists(candidate)) { return candidate }
         // 3. Relative to executable: ../share/rockit/
-        val candidate2 = stringConcat(exeDir, stringConcat("/../share/rockit/", runtimeFile))
+        val candidate2 = stringConcat(exeDir, stringConcat(sep, stringConcat("..", stringConcat(sep, stringConcat("share", stringConcat(sep, stringConcat("rockit", stringConcat(sep, runtimeFile))))))))
         if (fileExists(candidate2)) { return candidate2 }
         // 4. Relative to executable: ../Runtime/
-        val candidate3 = stringConcat(exeDir, stringConcat("/../Runtime/", runtimeFile))
+        val candidate3 = stringConcat(exeDir, stringConcat(sep, stringConcat("..", stringConcat(sep, stringConcat("Runtime", stringConcat(sep, runtimeFile))))))
         if (fileExists(candidate3)) { return candidate3 }
     }
 
     // 5. Relative to source: ../Runtime/
-    val candidate4 = stringConcat(sourceDir, stringConcat("/../Runtime/", runtimeFile))
+    val candidate4 = stringConcat(sourceDir, stringConcat(sep, stringConcat("..", stringConcat(sep, stringConcat("Runtime", stringConcat(sep, runtimeFile))))))
     if (fileExists(candidate4)) { return candidate4 }
 
     // 6. Runtime/ in current directory
-    val candidate5 = stringConcat("Runtime/", runtimeFile)
+    val candidate5 = stringConcat("Runtime", stringConcat(sep, runtimeFile))
     if (fileExists(candidate5)) { return candidate5 }
 
     // 7. Standard install locations
-    if (fileExists("/usr/local/share/rockit/rockit_runtime.c")) {
-        return "/usr/local/share/rockit/rockit_runtime.c"
+    if (toString(platformOS()) == "windows") {
+        // Windows: check LOCALAPPDATA and Program Files
+        val localAppData = toString(getEnv("LOCALAPPDATA"))
+        if (stringLength(localAppData) > 0) {
+            val winCandidate = stringConcat(localAppData, stringConcat("\\Rockit\\share\\rockit\\", runtimeFile))
+            if (fileExists(winCandidate)) { return winCandidate }
+        }
+        val progFiles = toString(getEnv("ProgramFiles"))
+        if (stringLength(progFiles) > 0) {
+            val winCandidate2 = stringConcat(progFiles, stringConcat("\\Rockit\\share\\rockit\\", runtimeFile))
+            if (fileExists(winCandidate2)) { return winCandidate2 }
+        }
+    } else {
+        if (fileExists("/usr/local/share/rockit/rockit_runtime.c")) {
+            return "/usr/local/share/rockit/rockit_runtime.c"
+        }
     }
 
     return ""
@@ -4162,9 +4186,20 @@ fun main(): Unit {
             }
         }
 
+        // Add .exe extension on Windows
+        if (toString(platformOS()) == "windows") {
+            if (endsWith(outputFile, ".exe") == false) {
+                outputFile = stringConcat(outputFile, ".exe")
+            }
+        }
+
         // Invoke clang (with -I for the runtime header directory)
         val runtimeDir = dirName(runtimePath)
-        val clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+        var clangCmd: String = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
+        // Linux needs -lm for math; Windows and macOS don't
+        if (toString(platformOS()) == "linux") {
+            clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+        }
         val exitCode = systemExec(clangCmd)
         // Clean up temp .ll file
         fileDelete(llFile)

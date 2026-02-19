@@ -9,6 +9,9 @@
 #include <math.h>
 #ifdef __APPLE__
 #include <malloc/malloc.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <malloc.h>
 #endif
 
 
@@ -253,8 +256,10 @@ void rockit_release_value(int64_t val) {
             // Guard with allocation size check to prevent heap-buffer-overflow.
 #ifdef __APPLE__
             size_t alloc_size = malloc_size(ptr);
+#elif defined(_WIN32)
+            size_t alloc_size = _msize(ptr);
 #else
-            size_t alloc_size = 32;  // assume safe on non-Apple (most allocators round up)
+            size_t alloc_size = 32;  // assume safe on Linux (most allocators round up)
 #endif
             int64_t potential_ptr = (alloc_size >= 32) ? *((int64_t*)((char*)ptr + 24)) : 0;
             if (is_likely_heap_ptr(potential_ptr)) {
@@ -1182,10 +1187,28 @@ int64_t getEnv(RockitString* name) {
 }
 
 int64_t executablePath(void) {
+#ifdef _WIN32
+    char path[MAX_PATH];
+    if (GetModuleFileNameA(NULL, path, MAX_PATH) > 0) {
+        return (int64_t)(intptr_t)rockit_string_new(path);
+    }
+#endif
     if (s_argc > 0 && s_argv != NULL && s_argv[0] != NULL) {
         return (int64_t)(intptr_t)rockit_string_new(s_argv[0]);
     }
     return (int64_t)(intptr_t)rockit_string_new("");
+}
+
+// -- Platform detection --
+
+int64_t platformOS(void) {
+#ifdef _WIN32
+    return (int64_t)(intptr_t)rockit_string_new("windows");
+#elif defined(__APPLE__)
+    return (int64_t)(intptr_t)rockit_string_new("macos");
+#else
+    return (int64_t)(intptr_t)rockit_string_new("linux");
+#endif
 }
 
 // -- Meta --

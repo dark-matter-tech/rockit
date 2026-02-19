@@ -367,6 +367,7 @@ public final class SymbolTable {
             ("processExit", .function(parameterTypes: [.int], returnType: .nothing)),
             ("getEnv",      .function(parameterTypes: [.string], returnType: .nullable(.string))),
             ("executablePath", .function(parameterTypes: [], returnType: .string)),
+            ("platformOS",    .function(parameterTypes: [], returnType: .string)),
         ]
 
         for (name, type) in processBuiltins {
