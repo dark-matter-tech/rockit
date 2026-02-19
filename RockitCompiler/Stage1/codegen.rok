@@ -3988,9 +3988,10 @@ fun findRuntimePath(sourceDir: String): String {
 fun main(): Unit {
     val args = processArgs()
     if (listSize(args) < 1) {
-        println("Usage: command compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]")
-        println("       command build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
-        println("       command repl")
+        println("Usage: rockit compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]")
+        println("       rockit build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
+        println("       rockit repl")
+        println("       rockit version")
         return
     }
 
@@ -4002,10 +4003,17 @@ fun main(): Unit {
         return
     }
 
+    // Version
+    if (command == "version" || command == "--version" || command == "-v") {
+        println("rockit 0.1.0")
+        return
+    }
+
     if (listSize(args) < 2) {
-        println("Usage: command compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]")
-        println("       command build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
-        println("       command repl")
+        println("Usage: rockit compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]")
+        println("       rockit build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
+        println("       rockit repl")
+        println("       rockit version")
         return
     }
     var sourceFile: String = toString(listGet(args, 1))

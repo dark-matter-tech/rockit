@@ -67,11 +67,12 @@ install_binary() {
         info "Installing Rockit ${VERSION}..."
         tar -xzf "${tmp}/${archive}" -C "$tmp"
 
+        local extracted="${tmp}/rockit-${VERSION}-${platform}/rockit"
         sudo mkdir -p "${BIN_DIR}" "${SHARE_DIR}"
-        sudo cp "${tmp}/rockit/bin/rockit" "${BIN_DIR}/rockit"
-        sudo cp "${tmp}/rockit/bin/fuel" "${BIN_DIR}/fuel"
+        sudo cp "${extracted}/bin/rockit" "${BIN_DIR}/rockit"
+        sudo cp "${extracted}/bin/fuel" "${BIN_DIR}/fuel"
         sudo chmod +x "${BIN_DIR}/rockit" "${BIN_DIR}/fuel"
-        sudo cp "${tmp}/rockit/share/rockit/rockit_runtime.c" "${SHARE_DIR}/rockit_runtime.c"
+        sudo cp "${extracted}/share/rockit/rockit_runtime.c" "${SHARE_DIR}/rockit_runtime.c"
 
         rm -rf "$tmp"
         return 0
