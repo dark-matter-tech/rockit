@@ -343,21 +343,23 @@ jobs:
           sleep 0.3
 
           # ============================================================
-          # STAGE 2 -> STAGE 3 (bytecode comparison — avoids clang OOM)
+          # STAGE 2 -> STAGE 3 -> STAGE 4 (fixed-point verification)
           # ============================================================
           echo "  ╔═══════════════════════════════════════════╗"
-          echo "  ║  🔥🔥🔥 Stage 2 → Stage 3                 ║"
-          echo "  ║  Self-compiled compiler builds itself     ║"
+          echo "  ║  🔥🔥🔥 Stage 2 → Stage 3 → Stage 4       ║"
+          echo "  ║  Self-compiled compiler reaches fixed pt  ║"
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
-          # Generate bytecode from Stage 1 and Stage 2, then compare
-          Stage1/command compile Stage1/command.rok -o /tmp/stage2.rokb 2>&1
+          # Build Stage 3 native from Stage 2
+          /tmp/stage2 build-native Stage1/command.rok -o /tmp/stage3 --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE 2>&1
+          # Generate bytecodes from Stage 2 and Stage 3, then compare
           /tmp/stage2 compile Stage1/command.rok -o /tmp/stage3.rokb 2>&1
+          /tmp/stage3 compile Stage1/command.rok -o /tmp/stage4.rokb 2>&1
           END=$(date +%s)
-          if diff /tmp/stage2.rokb /tmp/stage3.rokb > /dev/null 2>&1; then
-            echo "  ✅ Stage 3 verified — bytecode identical ($(($END - $START))s)"
+          if diff /tmp/stage3.rokb /tmp/stage4.rokb > /dev/null 2>&1; then
+            echo "  ✅ Fixed point verified — Stage 3 == Stage 4 bytecode ($(($END - $START))s)"
           else
-            echo "  ❌ Stage 3 MISMATCH — bytecode differs!"
+            echo "  ❌ Fixed point MISMATCH — Stage 3 != Stage 4 bytecode!"
             exit 1
           fi
           echo ""
@@ -410,7 +412,8 @@ jobs:
           echo "🚀   Stage 0 (Swift) ─── compiled ──▶ Stage 1 (Rockit)    🚀"
           echo "🚀   Stage 1 ─────────── compiled ──▶ Stage 2             🚀"
           echo "🚀   Stage 2 ─────────── compiled ──▶ Stage 3             🚀"
-          echo "🚀   Stage 2 == Stage 3  ✅  Fixed point (bytecode match) 🚀"
+          echo "🚀   Stage 3 ─────────── compiled ──▶ Stage 4             🚀"
+          echo "🚀   Stage 3 == Stage 4  ✅  Fixed point (bytecode match) 🚀"
           echo "🚀                                                        🚀"
           echo "🚀   Zero external dependencies. Pure Rockit.             🚀"
           echo "🚀                                                        🚀"
