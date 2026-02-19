@@ -103,6 +103,7 @@ fun makeCompiler(): Map {
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     mapPut(c, "externFuncs", mapCreate())  // name -> {params, returnType} for extern fun declarations
+    mapPut(c, "creprTypes", mapCreate())  // typeName -> layout {fields, totalSize, alignment}
     return c
 }
 
@@ -901,7 +902,7 @@ fun compileExpr(fs: Map, node: Map): Int {
             val classNames = mapGet(mapGet(fs, "compiler"), "classNames")
             val isClass = mapGet(classNames, funcName)
             if (isClass != null) {
-                // Constructor call → NEW_OBJECT
+                // Constructor call
                 val argRegs = listCreate()
                 var i: Int = 0
                 while (i < listSize(callArgs)) {
@@ -915,18 +916,24 @@ fun compileExpr(fs: Map, node: Map): Int {
                     i = i + 1
                 }
                 val dest = allocReg(fs)
-                emitNewObject(fs, dest, funcName, argRegs)
-                // Initialize body-declared fields with default values
-                val bodyInits = mapGet(mapGet(mapGet(fs, "compiler"), "classBodyInits"), funcName)
-                if (bodyInits != null) {
-                    var bi: Int = 0
-                    while (bi < listSize(bodyInits)) {
-                        val initRec = listGet(bodyInits, bi)
-                        val fieldName = toString(mapGet(initRec, "name"))
-                        val initExpr = mapGet(initRec, "init")
-                        val valReg = compileExpr(fs, initExpr)
-                        emitSetField(fs, dest, fieldName, valReg)
-                        bi = bi + 1
+                // @CRepr → __crepr_new_TypeName, regular → OP_NEW_OBJECT
+                val creprLayout = mapGet(mapGet(mapGet(fs, "compiler"), "creprTypes"), funcName)
+                if (creprLayout != null) {
+                    emitCall(fs, dest, stringConcat("__crepr_new_", funcName), argRegs)
+                } else {
+                    emitNewObject(fs, dest, funcName, argRegs)
+                    // Initialize body-declared fields with default values
+                    val bodyInits = mapGet(mapGet(mapGet(fs, "compiler"), "classBodyInits"), funcName)
+                    if (bodyInits != null) {
+                        var bi: Int = 0
+                        while (bi < listSize(bodyInits)) {
+                            val initRec = listGet(bodyInits, bi)
+                            val fieldName = toString(mapGet(initRec, "name"))
+                            val initExpr = mapGet(initRec, "init")
+                            val valReg = compileExpr(fs, initExpr)
+                            emitSetField(fs, dest, fieldName, valReg)
+                            bi = bi + 1
+                        }
                     }
                 }
                 return dest
@@ -1070,6 +1077,58 @@ fun compileExpr(fs: Map, node: Map): Int {
             if (overloads != null) {
                 funcName = stringConcat(funcName, stringConcat("$", toString(listSize(argRegs))))
             }
+
+            // Handle sizeOf<T>, offsetOf<T>, bitcast<T>, alloc<T>
+            val typeArgNode = mapGet(node, "typeArg")
+            if (typeArgNode != null) {
+                val typeArgName = toString(mapGet(typeArgNode, "name"))
+                if (funcName == "sizeOf") {
+                    val layout = mapGet(mapGet(mapGet(fs, "compiler"), "creprTypes"), typeArgName)
+                    val dest = allocReg(fs)
+                    if (layout != null) {
+                        emitConstInt(fs, dest, toInt(mapGet(layout, "totalSize")))
+                    } else {
+                        emitConstInt(fs, dest, 8)
+                    }
+                    return dest
+                }
+                if (funcName == "offsetOf") {
+                    val layout = mapGet(mapGet(mapGet(fs, "compiler"), "creprTypes"), typeArgName)
+                    val dest = allocReg(fs)
+                    if (layout != null) {
+                        // First arg is a string literal with field name
+                        val fieldNameStr = toString(mapGet(listGet(callArgs, 0), "value"))
+                        val layoutFields = mapGet(layout, "fields")
+                        var ofi: Int = 0
+                        var foundOffset: Int = 0
+                        while (ofi < listSize(layoutFields)) {
+                            val lf = listGet(layoutFields, ofi)
+                            if (toString(mapGet(lf, "name")) == fieldNameStr) {
+                                foundOffset = toInt(mapGet(lf, "offset"))
+                            }
+                            ofi = ofi + 1
+                        }
+                        emitConstInt(fs, dest, foundOffset)
+                    } else {
+                        emitConstInt(fs, dest, 0)
+                    }
+                    return dest
+                }
+                if (funcName == "bitcast") {
+                    val dest = allocReg(fs)
+                    emitCall(fs, dest, stringConcat("__bitcast_", typeArgName), argRegs)
+                    return dest
+                }
+                if (funcName == "alloc") {
+                    val layout = mapGet(mapGet(mapGet(fs, "compiler"), "creprTypes"), typeArgName)
+                    if (layout != null) {
+                        val dest = allocReg(fs)
+                        emitCall(fs, dest, stringConcat("__alloc_", typeArgName), argRegs)
+                        return dest
+                    }
+                }
+            }
+
             val dest = allocReg(fs)
             emitCall(fs, dest, funcName, argRegs)
             return dest
@@ -2613,6 +2672,62 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
 }
 
 // ---------------------------------------------------------------------------
+// @CRepr C layout computation
+// ---------------------------------------------------------------------------
+
+fun creprFieldSize(typeName: String): Int {
+    if (typeName == "Int") { return 8 }
+    if (typeName == "Float") { return 8 }
+    if (typeName == "Double") { return 8 }
+    if (typeName == "Bool") { return 1 }
+    if (typeName == "Byte") { return 1 }
+    if (typeName == "Ptr") { return 8 }
+    if (typeName == "String") { return 8 }
+    return 8
+}
+
+fun creprFieldAlign(typeName: String): Int {
+    if (typeName == "Bool") { return 1 }
+    if (typeName == "Byte") { return 1 }
+    return 8
+}
+
+fun alignUp(value: Int, align: Int): Int {
+    val rem = value % align
+    if (rem == 0) { return value }
+    return value + (align - rem)
+}
+
+fun computeCLayout(fields: List): Map {
+    val layout = mapCreate()
+    val offsets = listCreate()
+    var offset: Int = 0
+    var maxAlign: Int = 1
+    var i: Int = 0
+    while (i < listSize(fields)) {
+        val field = listGet(fields, i)
+        val typeName = toString(mapGet(field, "typeName"))
+        val size = creprFieldSize(typeName)
+        val align = creprFieldAlign(typeName)
+        if (align > maxAlign) { maxAlign = align }
+        offset = alignUp(offset, align)
+        val fieldLayout = mapCreate()
+        mapPut(fieldLayout, "name", toString(mapGet(field, "name")))
+        mapPut(fieldLayout, "typeName", typeName)
+        mapPut(fieldLayout, "offset", offset)
+        mapPut(fieldLayout, "size", size)
+        listAppend(offsets, fieldLayout)
+        offset = offset + size
+        i = i + 1
+    }
+    val totalSize = alignUp(offset, maxAlign)
+    mapPut(layout, "fields", offsets)
+    mapPut(layout, "totalSize", totalSize)
+    mapPut(layout, "alignment", maxAlign)
+    return layout
+}
+
+// ---------------------------------------------------------------------------
 // Class compilation
 // ---------------------------------------------------------------------------
 
@@ -2686,6 +2801,20 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
     }
     // Store field names for when destructuring patterns
     mapPut(mapGet(compiler, "classFieldNames"), className, fieldNames)
+
+    // Check for @CRepr annotation
+    val annotations = mapGet(decl, "annotations")
+    if (annotations != null) {
+        var ai: Int = 0
+        while (ai < listSize(annotations)) {
+            val annot = listGet(annotations, ai)
+            if (toString(mapGet(annot, "name")) == "CRepr") {
+                val layout = computeCLayout(fields)
+                mapPut(mapGet(compiler, "creprTypes"), className, layout)
+            }
+            ai = ai + 1
+        }
+    }
 
     // Collect method names first (needed for self-calls within methods)
     val methods = listCreate()

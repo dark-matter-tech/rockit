@@ -282,6 +282,18 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
             }
         }
         mapPut(classInfo, "fields", fields)
+        // Check for @CRepr annotation
+        val annots = mapGet(decl, "annotations")
+        if (annots != null) {
+            var ai: Int = 0
+            while (ai < listSize(annots)) {
+                val annot = listGet(annots, ai)
+                if (toString(mapGet(annot, "name")) == "CRepr") {
+                    mapPut(classInfo, "isCRepr", true)
+                }
+                ai = ai + 1
+            }
+        }
         mapPut(mapGet(tc, "classes"), name, classInfo)
 
         // Track sealed classes

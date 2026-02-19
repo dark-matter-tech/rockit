@@ -1115,7 +1115,17 @@ fun parsePrimary(p: Map): Map {
     if (tt == "IDENT" || tt == "KW_THIS" || tt == "KW_SUPER") {
         val tok = advance(p)
         val node = makeNodeAt("ident", line, col)
-        mapPut(node, "name", toString(mapGet(tok, "value")))
+        val identName = toString(mapGet(tok, "value"))
+        mapPut(node, "name", identName)
+        // Special-case <Type> parsing for builtins
+        if (identName == "sizeOf" || identName == "offsetOf" || identName == "bitcast" || identName == "alloc") {
+            if (check(p, "LESS")) {
+                advance(p)
+                val typeArg = parseType(p)
+                expect(p, "GREATER")
+                mapPut(node, "typeArg", typeArg)
+            }
+        }
         return node
     }
 
@@ -1153,6 +1163,11 @@ fun parsePostfix(p: Map, left: Map): Map {
             val node = makeNode("call")
             mapPut(node, "callee", expr)
             mapPut(node, "args", args)
+            // Propagate typeArg from callee (sizeOf<T>, offsetOf<T>, bitcast<T>, alloc<T>)
+            val calleeTypeArg = mapGet(expr, "typeArg")
+            if (calleeTypeArg != null) {
+                mapPut(node, "typeArg", calleeTypeArg)
+            }
             expr = node
             continue
         }
@@ -3080,6 +3095,18 @@ fun tcGatherDecl(tc: Map, decl: Map): Unit {
             }
         }
         mapPut(classInfo, "fields", fields)
+        // Check for @CRepr annotation
+        val annots = mapGet(decl, "annotations")
+        if (annots != null) {
+            var ai: Int = 0
+            while (ai < listSize(annots)) {
+                val annot = listGet(annots, ai)
+                if (toString(mapGet(annot, "name")) == "CRepr") {
+                    mapPut(classInfo, "isCRepr", true)
+                }
+                ai = ai + 1
+            }
+        }
         mapPut(mapGet(tc, "classes"), name, classInfo)
 
         // Track sealed classes
@@ -5215,6 +5242,8 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
     mapPut(state, "usedExterns", usedExterns)
     val doubleRegs = mapCreate()
     mapPut(state, "doubleRegs", doubleRegs)
+    val creprRegs = mapCreate()
+    mapPut(state, "creprRegs", creprRegs)
 
     // Function signature
     if (isMain) {
@@ -5342,6 +5371,12 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             if (mapGet(dRegs17, toString(src)) != null) {
                 mapPut(dRegs17, toString(dest), true)
             }
+            // Propagate @CRepr flag
+            val creprRegs17 = mapGet(state, "creprRegs")
+            val creprTag17 = mapGet(creprRegs17, toString(src))
+            if (creprTag17 != null) {
+                mapPut(creprRegs17, toString(dest), creprTag17)
+            }
             ip = ip + 5
         } else if (op == 18) {
             // OP_LOAD: dest(u16) + src(u16)
@@ -5354,6 +5389,12 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val dRegs18 = mapGet(state, "doubleRegs")
             if (mapGet(dRegs18, toString(src)) != null) {
                 mapPut(dRegs18, toString(dest), true)
+            }
+            // Propagate @CRepr flag
+            val creprRegs18 = mapGet(state, "creprRegs")
+            val creprTag18 = mapGet(creprRegs18, toString(src))
+            if (creprTag18 != null) {
+                mapPut(creprRegs18, toString(dest), creprTag18)
             }
             ip = ip + 5
         } else if (op == 19) {
@@ -5563,30 +5604,111 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val dest = llvmReadU16(bc, ip + 1)
             val objReg = llvmReadU16(bc, ip + 3)
             val fieldPoolIdx = llvmReadU16(bc, ip + 5)
-            val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
-            val tobj = llvmNextSSA(state)
-            val tobjPtr = llvmNextSSA(state)
-            val tres = llvmNextSSA(state)
-            mapPut(usedExterns, "rockit_object_get_field", true)
-            llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
-            llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
-            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @rockit_object_get_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), ")")))))))
-            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            // Check if obj is @CRepr
+            val creprType96 = mapGet(mapGet(state, "creprRegs"), toString(objReg))
+            if (creprType96 != null) {
+                val creprLayout96 = mapGet(mapGet(compiler, "creprTypes"), toString(creprType96))
+                val fieldName96 = llvmPoolString(compiler, fieldPoolIdx)
+                val layoutFields96 = mapGet(creprLayout96, "fields")
+                var lfOffset96: Int = 0
+                var lfType96: String = "Int"
+                var lfi96: Int = 0
+                while (lfi96 < listSize(layoutFields96)) {
+                    val lf96 = listGet(layoutFields96, lfi96)
+                    if (toString(mapGet(lf96, "name")) == fieldName96) {
+                        lfOffset96 = toInt(mapGet(lf96, "offset"))
+                        lfType96 = toString(mapGet(lf96, "typeName"))
+                    }
+                    lfi96 = lfi96 + 1
+                }
+                val tobj96 = llvmNextSSA(state)
+                val tobjPtr96 = llvmNextSSA(state)
+                val tgep96 = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tobj96, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr96, stringConcat(" = inttoptr i64 ", stringConcat(tobj96, " to ptr")))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tgep96, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr96, stringConcat(", i64 ", toString(lfOffset96)))))))
+                if (lfType96 == "Float" || lfType96 == "Double") {
+                    val tload96 = llvmNextSSA(state)
+                    val tres96 = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tload96, stringConcat(" = load double, ptr ", tgep96))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tres96, stringConcat(" = bitcast double ", stringConcat(tload96, " to i64")))))
+                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres96, stringConcat(", ptr %t", toString(dest)))))
+                    mapPut(mapGet(state, "doubleRegs"), toString(dest), true)
+                } else if (lfType96 == "Bool" || lfType96 == "Byte") {
+                    val tload96 = llvmNextSSA(state)
+                    val tres96 = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tload96, stringConcat(" = load i8, ptr ", tgep96))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tres96, stringConcat(" = zext i8 ", stringConcat(tload96, " to i64")))))
+                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres96, stringConcat(", ptr %t", toString(dest)))))
+                } else {
+                    val tres96 = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tres96, stringConcat(" = load i64, ptr ", tgep96))))
+                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres96, stringConcat(", ptr %t", toString(dest)))))
+                }
+            } else {
+                val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
+                val tobj = llvmNextSSA(state)
+                val tobjPtr = llvmNextSSA(state)
+                val tres = llvmNextSSA(state)
+                mapPut(usedExterns, "rockit_object_get_field", true)
+                llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @rockit_object_get_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), ")")))))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            }
             ip = ip + 7
         } else if (op == 97) {
             // OP_SET_FIELD: obj(u16) + fieldIdx(u16) + val(u16)
             val objReg = llvmReadU16(bc, ip + 1)
             val fieldPoolIdx = llvmReadU16(bc, ip + 3)
-            val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
             val valReg = llvmReadU16(bc, ip + 5)
-            val tobj = llvmNextSSA(state)
-            val tobjPtr = llvmNextSSA(state)
-            val tval = llvmNextSSA(state)
-            mapPut(usedExterns, "rockit_object_set_field", true)
-            llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
-            llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
-            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
-            llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), stringConcat(", i64 ", stringConcat(tval, ")")))))))
+            // Check if obj is @CRepr
+            val creprType97 = mapGet(mapGet(state, "creprRegs"), toString(objReg))
+            if (creprType97 != null) {
+                val creprLayout97 = mapGet(mapGet(compiler, "creprTypes"), toString(creprType97))
+                val fieldName97 = llvmPoolString(compiler, fieldPoolIdx)
+                val layoutFields97 = mapGet(creprLayout97, "fields")
+                var lfOffset97: Int = 0
+                var lfType97: String = "Int"
+                var lfi97: Int = 0
+                while (lfi97 < listSize(layoutFields97)) {
+                    val lf97 = listGet(layoutFields97, lfi97)
+                    if (toString(mapGet(lf97, "name")) == fieldName97) {
+                        lfOffset97 = toInt(mapGet(lf97, "offset"))
+                        lfType97 = toString(mapGet(lf97, "typeName"))
+                    }
+                    lfi97 = lfi97 + 1
+                }
+                val tobj97 = llvmNextSSA(state)
+                val tobjPtr97 = llvmNextSSA(state)
+                val tgep97 = llvmNextSSA(state)
+                val tval97 = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tobj97, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr97, stringConcat(" = inttoptr i64 ", stringConcat(tobj97, " to ptr")))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tgep97, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr97, stringConcat(", i64 ", toString(lfOffset97)))))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tval97, stringConcat(" = load i64, ptr %t", toString(valReg)))))
+                if (lfType97 == "Float" || lfType97 == "Double") {
+                    val tdbl97 = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tdbl97, stringConcat(" = bitcast i64 ", stringConcat(tval97, " to double")))))
+                    llvmLine(buf, stringConcat("  store double ", stringConcat(tdbl97, stringConcat(", ptr ", tgep97))))
+                } else if (lfType97 == "Bool" || lfType97 == "Byte") {
+                    val ti8_97 = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(ti8_97, stringConcat(" = trunc i64 ", stringConcat(tval97, " to i8")))))
+                    llvmLine(buf, stringConcat("  store i8 ", stringConcat(ti8_97, stringConcat(", ptr ", tgep97))))
+                } else {
+                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval97, stringConcat(", ptr ", tgep97))))
+                }
+            } else {
+                val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
+                val tobj = llvmNextSSA(state)
+                val tobjPtr = llvmNextSSA(state)
+                val tval = llvmNextSSA(state)
+                mapPut(usedExterns, "rockit_object_set_field", true)
+                llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
+                llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), stringConcat(", i64 ", stringConcat(tval, ")")))))))
+            }
             ip = ip + 7
         } else if (op == 112) {
             // OP_NEW_OBJECT: dest(u16) + typeIdx(u16) + argc(u16) + args(u16*N)
@@ -6054,6 +6176,8 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
     mapPut(rState, "usedExterns", rExterns)
     val rDoubleRegs = mapCreate()
     mapPut(rState, "doubleRegs", rDoubleRegs)
+    val rCreprRegs = mapCreate()
+    mapPut(rState, "creprRegs", rCreprRegs)
 
     val blockStarts = llvmFindBlockStarts(bc)
     var currentSeg: Int = 0
@@ -6799,6 +6923,108 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
     }
     // ── End pointer intrinsics ──────────────────────────────────────────
 
+    // ── @CRepr intrinsics ──────────────────────────────────────────────
+    // __crepr_new_TypeName(field1, field2, ...): malloc + GEP stores
+    if (startsWith(callName, "__crepr_new_")) {
+        val creprTypeName = substring(callName, 12, stringLength(callName))
+        val creprLayout = mapGet(mapGet(compiler, "creprTypes"), creprTypeName)
+        if (creprLayout != null) {
+            val totalSize = toInt(mapGet(creprLayout, "totalSize"))
+            val layoutFields = mapGet(creprLayout, "fields")
+            mapPut(usedExterns, "malloc", true)
+            val tptr = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tptr, stringConcat(" = call ptr @malloc(i64 ", stringConcat(toString(totalSize), ")")))))
+            // Store each field via GEP
+            var cfi: Int = 0
+            while (cfi < listSize(layoutFields) && cfi < argc) {
+                val lf = listGet(layoutFields, cfi)
+                val lfTypeName = toString(mapGet(lf, "typeName"))
+                val lfOffset = toInt(mapGet(lf, "offset"))
+                val argReg = llvmReadU16(bc, argStart + cfi * 2)
+                val targ = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(targ, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+                if (lfTypeName == "Float" || lfTypeName == "Double") {
+                    val tgep = llvmNextSSA(state)
+                    val tdbl = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tptr, stringConcat(", i64 ", toString(lfOffset)))))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tdbl, stringConcat(" = bitcast i64 ", stringConcat(targ, " to double")))))
+                    llvmLine(buf, stringConcat("  store double ", stringConcat(tdbl, stringConcat(", ptr ", tgep))))
+                } else if (lfTypeName == "Bool" || lfTypeName == "Byte") {
+                    val tgep = llvmNextSSA(state)
+                    val ti8 = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tptr, stringConcat(", i64 ", toString(lfOffset)))))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(ti8, stringConcat(" = trunc i64 ", stringConcat(targ, " to i8")))))
+                    llvmLine(buf, stringConcat("  store i8 ", stringConcat(ti8, stringConcat(", ptr ", tgep))))
+                } else {
+                    val tgep = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tptr, stringConcat(", i64 ", toString(lfOffset)))))))
+                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(targ, stringConcat(", ptr ", tgep))))
+                }
+                cfi = cfi + 1
+            }
+            val tres = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = ptrtoint ptr ", stringConcat(tptr, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            // Tag register as @CRepr
+            mapPut(mapGet(state, "creprRegs"), toString(dest), creprTypeName)
+            return
+        }
+    }
+
+    // __bitcast_Float(i64): reinterpret i64 bits as double
+    if (callName == "__bitcast_Float" && argc == 1) {
+        val argReg = llvmReadU16(bc, argStart)
+        val targ = llvmNextSSA(state)
+        val tdbl = llvmNextSSA(state)
+        val tres = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(targ, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tdbl, stringConcat(" = bitcast i64 ", stringConcat(targ, " to double")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = bitcast double ", stringConcat(tdbl, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+        mapPut(mapGet(state, "doubleRegs"), toString(dest), true)
+        return
+    }
+    // __bitcast_Int(double): reinterpret double bits as i64
+    if (callName == "__bitcast_Int" && argc == 1) {
+        val argReg = llvmReadU16(bc, argStart)
+        val targ = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(targ, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+        // If arg is a double reg, bitcast double to i64
+        val isDblReg = mapGet(mapGet(state, "doubleRegs"), toString(argReg))
+        if (isDblReg != null) {
+            val tdbl = llvmNextSSA(state)
+            val tres = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tdbl, stringConcat(" = bitcast i64 ", stringConcat(targ, " to double")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = bitcast double ", stringConcat(tdbl, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+        } else {
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(targ, stringConcat(", ptr %t", toString(dest)))))
+        }
+        return
+    }
+
+    // __alloc_TypeName(count): malloc(count * totalSize)
+    if (startsWith(callName, "__alloc_") && argc == 1) {
+        val allocTypeName = substring(callName, 8, stringLength(callName))
+        val allocLayout = mapGet(mapGet(compiler, "creprTypes"), allocTypeName)
+        if (allocLayout != null) {
+            val allocSize = toInt(mapGet(allocLayout, "totalSize"))
+            val cntReg = llvmReadU16(bc, argStart)
+            val tc = llvmNextSSA(state)
+            val tsz = llvmNextSSA(state)
+            val tptr = llvmNextSSA(state)
+            val tres = llvmNextSSA(state)
+            mapPut(usedExterns, "malloc", true)
+            llvmLine(buf, stringConcat("  ", stringConcat(tc, stringConcat(" = load i64, ptr %t", toString(cntReg)))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tsz, stringConcat(" = mul i64 ", stringConcat(tc, stringConcat(", ", toString(allocSize)))))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tptr, stringConcat(" = call ptr @malloc(i64 ", stringConcat(tsz, ")")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = ptrtoint ptr ", stringConcat(tptr, " to i64")))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            return
+        }
+    }
+    // ── End @CRepr intrinsics ──────────────────────────────────────────
+
     // Check if println/print/toString arg is a double register
     if ((callName == "println" || callName == "print" || callName == "toString") && argc == 1) {
         val argReg = llvmReadU16(bc, argStart)
@@ -7287,6 +7513,7 @@ fun makeCompiler(): Map {
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
     mapPut(c, "externFuncs", mapCreate())  // name -> {params, returnType} for extern fun declarations
+    mapPut(c, "creprTypes", mapCreate())  // typeName -> layout {fields, totalSize, alignment}
     return c
 }
 
@@ -8085,7 +8312,7 @@ fun compileExpr(fs: Map, node: Map): Int {
             val classNames = mapGet(mapGet(fs, "compiler"), "classNames")
             val isClass = mapGet(classNames, funcName)
             if (isClass != null) {
-                // Constructor call → NEW_OBJECT
+                // Constructor call
                 val argRegs = listCreate()
                 var i: Int = 0
                 while (i < listSize(callArgs)) {
@@ -8099,18 +8326,24 @@ fun compileExpr(fs: Map, node: Map): Int {
                     i = i + 1
                 }
                 val dest = allocReg(fs)
-                emitNewObject(fs, dest, funcName, argRegs)
-                // Initialize body-declared fields with default values
-                val bodyInits = mapGet(mapGet(mapGet(fs, "compiler"), "classBodyInits"), funcName)
-                if (bodyInits != null) {
-                    var bi: Int = 0
-                    while (bi < listSize(bodyInits)) {
-                        val initRec = listGet(bodyInits, bi)
-                        val fieldName = toString(mapGet(initRec, "name"))
-                        val initExpr = mapGet(initRec, "init")
-                        val valReg = compileExpr(fs, initExpr)
-                        emitSetField(fs, dest, fieldName, valReg)
-                        bi = bi + 1
+                // @CRepr → __crepr_new_TypeName, regular → OP_NEW_OBJECT
+                val creprLayout = mapGet(mapGet(mapGet(fs, "compiler"), "creprTypes"), funcName)
+                if (creprLayout != null) {
+                    emitCall(fs, dest, stringConcat("__crepr_new_", funcName), argRegs)
+                } else {
+                    emitNewObject(fs, dest, funcName, argRegs)
+                    // Initialize body-declared fields with default values
+                    val bodyInits = mapGet(mapGet(mapGet(fs, "compiler"), "classBodyInits"), funcName)
+                    if (bodyInits != null) {
+                        var bi: Int = 0
+                        while (bi < listSize(bodyInits)) {
+                            val initRec = listGet(bodyInits, bi)
+                            val fieldName = toString(mapGet(initRec, "name"))
+                            val initExpr = mapGet(initRec, "init")
+                            val valReg = compileExpr(fs, initExpr)
+                            emitSetField(fs, dest, fieldName, valReg)
+                            bi = bi + 1
+                        }
                     }
                 }
                 return dest
@@ -8254,6 +8487,58 @@ fun compileExpr(fs: Map, node: Map): Int {
             if (overloads != null) {
                 funcName = stringConcat(funcName, stringConcat("$", toString(listSize(argRegs))))
             }
+
+            // Handle sizeOf<T>, offsetOf<T>, bitcast<T>, alloc<T>
+            val typeArgNode = mapGet(node, "typeArg")
+            if (typeArgNode != null) {
+                val typeArgName = toString(mapGet(typeArgNode, "name"))
+                if (funcName == "sizeOf") {
+                    val layout = mapGet(mapGet(mapGet(fs, "compiler"), "creprTypes"), typeArgName)
+                    val dest = allocReg(fs)
+                    if (layout != null) {
+                        emitConstInt(fs, dest, toInt(mapGet(layout, "totalSize")))
+                    } else {
+                        emitConstInt(fs, dest, 8)
+                    }
+                    return dest
+                }
+                if (funcName == "offsetOf") {
+                    val layout = mapGet(mapGet(mapGet(fs, "compiler"), "creprTypes"), typeArgName)
+                    val dest = allocReg(fs)
+                    if (layout != null) {
+                        // First arg is a string literal with field name
+                        val fieldNameStr = toString(mapGet(listGet(callArgs, 0), "value"))
+                        val layoutFields = mapGet(layout, "fields")
+                        var ofi: Int = 0
+                        var foundOffset: Int = 0
+                        while (ofi < listSize(layoutFields)) {
+                            val lf = listGet(layoutFields, ofi)
+                            if (toString(mapGet(lf, "name")) == fieldNameStr) {
+                                foundOffset = toInt(mapGet(lf, "offset"))
+                            }
+                            ofi = ofi + 1
+                        }
+                        emitConstInt(fs, dest, foundOffset)
+                    } else {
+                        emitConstInt(fs, dest, 0)
+                    }
+                    return dest
+                }
+                if (funcName == "bitcast") {
+                    val dest = allocReg(fs)
+                    emitCall(fs, dest, stringConcat("__bitcast_", typeArgName), argRegs)
+                    return dest
+                }
+                if (funcName == "alloc") {
+                    val layout = mapGet(mapGet(mapGet(fs, "compiler"), "creprTypes"), typeArgName)
+                    if (layout != null) {
+                        val dest = allocReg(fs)
+                        emitCall(fs, dest, stringConcat("__alloc_", typeArgName), argRegs)
+                        return dest
+                    }
+                }
+            }
+
             val dest = allocReg(fs)
             emitCall(fs, dest, funcName, argRegs)
             return dest
@@ -9797,6 +10082,62 @@ fun compileFunction(compiler: Map, decl: Map): Unit {
 }
 
 // ---------------------------------------------------------------------------
+// @CRepr C layout computation
+// ---------------------------------------------------------------------------
+
+fun creprFieldSize(typeName: String): Int {
+    if (typeName == "Int") { return 8 }
+    if (typeName == "Float") { return 8 }
+    if (typeName == "Double") { return 8 }
+    if (typeName == "Bool") { return 1 }
+    if (typeName == "Byte") { return 1 }
+    if (typeName == "Ptr") { return 8 }
+    if (typeName == "String") { return 8 }
+    return 8
+}
+
+fun creprFieldAlign(typeName: String): Int {
+    if (typeName == "Bool") { return 1 }
+    if (typeName == "Byte") { return 1 }
+    return 8
+}
+
+fun alignUp(value: Int, align: Int): Int {
+    val rem = value % align
+    if (rem == 0) { return value }
+    return value + (align - rem)
+}
+
+fun computeCLayout(fields: List): Map {
+    val layout = mapCreate()
+    val offsets = listCreate()
+    var offset: Int = 0
+    var maxAlign: Int = 1
+    var i: Int = 0
+    while (i < listSize(fields)) {
+        val field = listGet(fields, i)
+        val typeName = toString(mapGet(field, "typeName"))
+        val size = creprFieldSize(typeName)
+        val align = creprFieldAlign(typeName)
+        if (align > maxAlign) { maxAlign = align }
+        offset = alignUp(offset, align)
+        val fieldLayout = mapCreate()
+        mapPut(fieldLayout, "name", toString(mapGet(field, "name")))
+        mapPut(fieldLayout, "typeName", typeName)
+        mapPut(fieldLayout, "offset", offset)
+        mapPut(fieldLayout, "size", size)
+        listAppend(offsets, fieldLayout)
+        offset = offset + size
+        i = i + 1
+    }
+    val totalSize = alignUp(offset, maxAlign)
+    mapPut(layout, "fields", offsets)
+    mapPut(layout, "totalSize", totalSize)
+    mapPut(layout, "alignment", maxAlign)
+    return layout
+}
+
+// ---------------------------------------------------------------------------
 // Class compilation
 // ---------------------------------------------------------------------------
 
@@ -9870,6 +10211,20 @@ fun compileClassDecl(compiler: Map, decl: Map): Unit {
     }
     // Store field names for when destructuring patterns
     mapPut(mapGet(compiler, "classFieldNames"), className, fieldNames)
+
+    // Check for @CRepr annotation
+    val annotations = mapGet(decl, "annotations")
+    if (annotations != null) {
+        var ai: Int = 0
+        while (ai < listSize(annotations)) {
+            val annot = listGet(annotations, ai)
+            if (toString(mapGet(annot, "name")) == "CRepr") {
+                val layout = computeCLayout(fields)
+                mapPut(mapGet(compiler, "creprTypes"), className, layout)
+            }
+            ai = ai + 1
+        }
+    }
 
     // Collect method names first (needed for self-calls within methods)
     val methods = listCreate()

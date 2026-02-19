@@ -337,7 +337,17 @@ fun parsePrimary(p: Map): Map {
     if (tt == "IDENT" || tt == "KW_THIS" || tt == "KW_SUPER") {
         val tok = advance(p)
         val node = makeNodeAt("ident", line, col)
-        mapPut(node, "name", toString(mapGet(tok, "value")))
+        val identName = toString(mapGet(tok, "value"))
+        mapPut(node, "name", identName)
+        // Special-case <Type> parsing for builtins
+        if (identName == "sizeOf" || identName == "offsetOf" || identName == "bitcast" || identName == "alloc") {
+            if (check(p, "LESS")) {
+                advance(p)
+                val typeArg = parseType(p)
+                expect(p, "GREATER")
+                mapPut(node, "typeArg", typeArg)
+            }
+        }
         return node
     }
 
@@ -375,6 +385,11 @@ fun parsePostfix(p: Map, left: Map): Map {
             val node = makeNode("call")
             mapPut(node, "callee", expr)
             mapPut(node, "args", args)
+            // Propagate typeArg from callee (sizeOf<T>, offsetOf<T>, bitcast<T>, alloc<T>)
+            val calleeTypeArg = mapGet(expr, "typeArg")
+            if (calleeTypeArg != null) {
+                mapPut(node, "typeArg", calleeTypeArg)
+            }
             expr = node
             continue
         }

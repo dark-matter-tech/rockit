@@ -1,0 +1,28 @@
+// test_crepr.rok — Test @CRepr structs, sizeOf, offsetOf, bitcast
+
+@CRepr
+data class Point(x: Float, y: Float)
+
+fun main() {
+    // Test 1: sizeOf<Point>() — two doubles = 16 bytes
+    println(sizeOf<Point>())
+
+    // Test 2: offsetOf<Point>("y") — second double at offset 8
+    println(offsetOf<Point>("y"))
+
+    // Test 3: @CRepr constructor + field access
+    val p = Point(3.14, 2.72)
+    println(p.x)
+    println(p.y)
+
+    // Test 4: bitcast — reinterpret double bits as i64 and back
+    val bits = bitcast<Int>(3.14)
+    println(bits)
+    val back = bitcast<Float>(bits)
+    println(back)
+
+    // Test 5: free @CRepr object
+    free(p)
+
+    println("All @CRepr tests passed!")
+}
