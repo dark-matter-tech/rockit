@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
-# Rockit Compiler — Install Script
+# Rockit — Install Script
 # Dark Matter Tech
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.sh | bash
+#   curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
 #
 # Or clone and run locally:
 #   ./install.sh
 
 set -euo pipefail
 
-REPO="Dark-Matter/moon"
-GITHUB_API="https://api.github.com"
+VERSION="0.1.0"
+GITEA="https://rustygits.com"
+REPO_COMPILER="Dark-Matter/moon"
+REPO_FUEL="Dark-Matter/fuel"
 PREFIX="${ROCKIT_PREFIX:-/usr/local}"
-INSTALL_DIR="${PREFIX}/bin"
-LIB_DIR="${PREFIX}/lib/rockit"
-TMPDIR="${TMPDIR:-/tmp}"
-BUILD_DIR="${TMPDIR}/rockit-install-$$"
+BIN_DIR="${PREFIX}/bin"
+SHARE_DIR="${PREFIX}/share/rockit"
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BOLD='\033[1m'
@@ -28,7 +27,6 @@ info()  { echo -e "${BOLD}==>${RESET} $1"; }
 ok()    { echo -e "${GREEN}==>${RESET} $1"; }
 fail()  { echo -e "${RED}error:${RESET} $1"; exit 1; }
 
-# --- Detect platform ---
 detect_platform() {
     local os arch
     os="$(uname -s)"
@@ -37,148 +35,128 @@ detect_platform() {
     case "$os" in
         Darwin) os="macos" ;;
         Linux)  os="linux" ;;
-        *)      os="" ;;
+        *)      fail "Unsupported OS: $os" ;;
     esac
 
     case "$arch" in
         arm64|aarch64) arch="arm64" ;;
         x86_64|amd64)  arch="x86_64" ;;
-        *)             arch="" ;;
+        *)             fail "Unsupported architecture: $arch" ;;
     esac
 
-    if [ -n "$os" ] && [ -n "$arch" ]; then
-        echo "${os}-${arch}"
-    fi
+    echo "${os}-${arch}"
 }
 
-# --- Try installing from prebuilt binary ---
+check_deps() {
+    command -v clang >/dev/null 2>&1 || fail "clang is required.
+  macOS:  xcode-select --install
+  Linux:  sudo apt install clang"
+}
+
+# --- Try installing from prebuilt release ---
 install_binary() {
     local platform="$1"
-
-    command -v curl >/dev/null 2>&1 || return 1
+    local archive="rockit-${VERSION}-${platform}.tar.gz"
+    local url="${GITEA}/${REPO_COMPILER}/releases/download/v${VERSION}/${archive}"
+    local tmp="/tmp/rockit-install-$$"
 
     info "Checking for prebuilt binary (${platform})..."
+    mkdir -p "$tmp"
 
-    # Get latest release tag
-    local release_info
-    release_info=$(curl -fsSL "${GITHUB_API}/repos/${REPO}/releases/latest" 2>/dev/null) || return 1
+    if curl -fSL "$url" -o "${tmp}/${archive}" 2>/dev/null; then
+        info "Installing Rockit ${VERSION}..."
+        tar -xzf "${tmp}/${archive}" -C "$tmp"
 
-    local tag
-    tag=$(echo "$release_info" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
-    [ -n "$tag" ] || return 1
+        sudo mkdir -p "${BIN_DIR}" "${SHARE_DIR}"
+        sudo cp "${tmp}/rockit/bin/rockit" "${BIN_DIR}/rockit"
+        sudo cp "${tmp}/rockit/bin/fuel" "${BIN_DIR}/fuel"
+        sudo chmod +x "${BIN_DIR}/rockit" "${BIN_DIR}/fuel"
+        sudo cp "${tmp}/rockit/share/rockit/rockit_runtime.c" "${SHARE_DIR}/rockit_runtime.c"
 
-    local version="${tag#v}"
-    local archive="rockit-${version}-${platform}.tar.gz"
-    local download_url="https://github.com/${REPO}/releases/download/${tag}/${archive}"
-
-    info "Downloading ${archive}..."
-    local tmp_archive="${TMPDIR}/rockit-download-$$.tar.gz"
-    curl -fSL "$download_url" -o "$tmp_archive" 2>/dev/null || return 1
-
-    info "Installing to ${INSTALL_DIR}..."
-    mkdir -p "${INSTALL_DIR}"
-    mkdir -p "${LIB_DIR}"
-
-    local tmp_extract="${TMPDIR}/rockit-extract-$$"
-    mkdir -p "$tmp_extract"
-    tar -xzf "$tmp_archive" -C "$tmp_extract"
-
-    cp "${tmp_extract}/rockit/rockit" "${INSTALL_DIR}/rockit"
-    chmod +x "${INSTALL_DIR}/rockit"
-    if [ -d "${tmp_extract}/rockit/runtime" ]; then
-        mkdir -p "${LIB_DIR}/runtime"
-        cp "${tmp_extract}/rockit/runtime/"* "${LIB_DIR}/runtime/"
-    fi
-    if [ -d "${tmp_extract}/rockit/editors" ]; then
-        mkdir -p "${LIB_DIR}/editors"
-        cp -r "${tmp_extract}/rockit/editors/"* "${LIB_DIR}/editors/"
+        rm -rf "$tmp"
+        return 0
     fi
 
-    rm -rf "$tmp_archive" "$tmp_extract"
-    ok "Installed rockit ${version} (${platform})"
-    return 0
+    rm -rf "$tmp"
+    return 1
 }
 
 # --- Fallback: build from source ---
 install_source() {
     info "Building from source..."
 
-    command -v swift >/dev/null 2>&1 || fail "Swift 5.9+ is required. Install from https://swift.org/download"
-    command -v clang >/dev/null 2>&1 || fail "Clang is required. Install via: apt install clang (Linux) or xcode-select --install (macOS)"
-    command -v git   >/dev/null 2>&1 || fail "Git is required."
+    command -v swift >/dev/null 2>&1 || fail "Swift 5.9+ is required to build from source.
+  Install from https://swift.org/download
+  Or wait for prebuilt binaries at ${GITEA}/${REPO_COMPILER}/releases"
+    command -v git >/dev/null 2>&1 || fail "Git is required."
 
-    SWIFT_VERSION=$(swift --version 2>&1 | head -1)
-    ok "Swift: ${SWIFT_VERSION}"
-    ok "Clang: $(clang --version 2>&1 | head -1)"
+    local tmp="/tmp/rockit-build-$$"
+    rm -rf "$tmp"
+    mkdir -p "$tmp"
 
+    # Clone compiler
     info "Downloading Rockit compiler..."
-    rm -rf "${BUILD_DIR}"
-    git clone --depth 1 "https://github.com/${REPO}.git" "${BUILD_DIR}" 2>/dev/null || \
-        fail "Failed to clone repository. Check your network connection."
+    git clone --depth 1 --branch develop "${GITEA}/${REPO_COMPILER}.git" "${tmp}/moon" 2>&1 | tail -1
 
-    cd "${BUILD_DIR}/RockitCompiler"
+    # Build Stage 1 compiler
+    info "Building compiler (this takes a minute)..."
+    cd "${tmp}/moon/RockitCompiler"
+    swift run rockit build-native Stage1/command.rok 2>&1
 
-    info "Building (release mode)..."
-    swift build -c release 2>&1 | tail -3
+    # Clone and build Fuel
+    info "Building Fuel package manager..."
+    git clone --depth 1 --branch develop "${GITEA}/${REPO_FUEL}.git" "${tmp}/fuel" 2>&1 | tail -1
+    Stage1/command build-native "${tmp}/fuel/src/fuel.rok" -o "${tmp}/fuel/fuel"
 
-    info "Installing to ${INSTALL_DIR}..."
-    mkdir -p "${INSTALL_DIR}"
-    mkdir -p "${LIB_DIR}/runtime"
+    # Install
+    info "Installing to ${BIN_DIR}..."
+    sudo mkdir -p "${BIN_DIR}" "${SHARE_DIR}"
+    sudo cp Stage1/command "${BIN_DIR}/rockit"
+    sudo cp "${tmp}/fuel/fuel" "${BIN_DIR}/fuel"
+    sudo chmod +x "${BIN_DIR}/rockit" "${BIN_DIR}/fuel"
+    sudo cp Runtime/rockit_runtime.c "${SHARE_DIR}/rockit_runtime.c"
 
-    cp .build/release/rockit "${INSTALL_DIR}/rockit"
-    cp Runtime/rockit_runtime.c "${LIB_DIR}/runtime/"
-    cp Runtime/rockit_runtime.h "${LIB_DIR}/runtime/"
-
-    # Bundle editor files
-    mkdir -p "${LIB_DIR}/editors/vscode"
-    mkdir -p "${LIB_DIR}/editors/vim"
-    if [ -d "../ide/vscode" ]; then
-        cp -r ../ide/vscode/* "${LIB_DIR}/editors/vscode/"
-    fi
-    if [ -d "../ide/vim" ]; then
-        cp -r ../ide/vim/* "${LIB_DIR}/editors/vim/"
-    fi
-
-    rm -rf "${BUILD_DIR}"
-    ok "Installed rockit (built from source)"
+    rm -rf "$tmp"
+    ok "Built and installed from source"
 }
 
 # --- Main ---
-PLATFORM=$(detect_platform)
+echo ""
+echo "  Rockit Installer v${VERSION}"
+echo "  Dark Matter Tech"
+echo ""
 
-if [ -n "$PLATFORM" ] && install_binary "$PLATFORM"; then
-    : # Binary install succeeded
+PLATFORM=$(detect_platform)
+check_deps
+
+if install_binary "$PLATFORM"; then
+    ok "Installed Rockit ${VERSION} (${PLATFORM})"
 else
-    if [ -n "$PLATFORM" ]; then
-        info "No prebuilt binary available for ${PLATFORM}, falling back to source build..."
-    fi
+    info "No prebuilt binary for ${PLATFORM}, building from source..."
     install_source
 fi
 
 # --- Verify ---
+echo ""
 if command -v rockit >/dev/null 2>&1; then
-    ok "Installed successfully!"
-    echo "  $(rockit version 2>/dev/null || echo "rockit ready")"
+    ok "rockit installed: $(rockit version 2>/dev/null || echo "${BIN_DIR}/rockit")"
 else
-    echo ""
-    echo "  rockit was installed to ${INSTALL_DIR}/rockit"
-    echo "  Add it to your PATH if not already:"
-    echo ""
-    echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
-    echo ""
+    echo "  Add to your PATH:"
+    echo "    export PATH=\"${BIN_DIR}:\$PATH\""
 fi
 
-# --- Set up editor plugins ---
-info "Setting up editor support..."
-"${INSTALL_DIR}/rockit" setup-editors 2>/dev/null || true
+if command -v fuel >/dev/null 2>&1; then
+    ok "fuel installed: $(fuel version 2>/dev/null || echo "${BIN_DIR}/fuel")"
+fi
 
 echo ""
-echo "  Rockit is ready. Try:"
+echo "  Get started:"
+echo "    fuel init my-app"
+echo "    cd my-app"
+echo "    fuel build"
+echo "    fuel run"
 echo ""
-echo "    rockit run hello.rok       # bytecode (interpreted)"
-echo "    rockit run-native hello.rok # native (compiled via LLVM)"
-echo "    rockit repl                 # interactive REPL"
-echo ""
-echo "  Update:    rockit update"
-echo "  Uninstall: rm ${INSTALL_DIR}/rockit && rm -rf ${LIB_DIR}"
+echo "  Uninstall:"
+echo "    sudo rm ${BIN_DIR}/rockit ${BIN_DIR}/fuel"
+echo "    sudo rm -rf ${SHARE_DIR}"
 echo ""
