@@ -11595,8 +11595,9 @@ fun main(): Unit {
             }
         }
 
-        // Invoke clang
-        val clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
+        // Invoke clang (with -I for the runtime header directory)
+        val runtimeDir = dirName(runtimePath)
+        val clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
         val exitCode = systemExec(clangCmd)
         // Clean up temp .ll file
         fileDelete(llFile)

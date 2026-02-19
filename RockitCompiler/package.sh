@@ -97,6 +97,7 @@ mkdir -p "${STAGING}/bin" "${STAGING}/share/rockit"
 cp "$COMPILER"                    "${STAGING}/bin/rockit"
 cp "${FUEL_SRC}/fuel"             "${STAGING}/bin/fuel"
 cp "$RUNTIME"                     "${STAGING}/share/rockit/rockit_runtime.c"
+cp "${SCRIPT_DIR}/Runtime/rockit_runtime.h" "${STAGING}/share/rockit/rockit_runtime.h"
 chmod +x "${STAGING}/bin/rockit" "${STAGING}/bin/fuel"
 
 # Clean up temp clone

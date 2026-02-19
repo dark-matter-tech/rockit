@@ -73,6 +73,7 @@ install_binary() {
         sudo cp "${extracted}/bin/fuel" "${BIN_DIR}/fuel"
         sudo chmod +x "${BIN_DIR}/rockit" "${BIN_DIR}/fuel"
         sudo cp "${extracted}/share/rockit/rockit_runtime.c" "${SHARE_DIR}/rockit_runtime.c"
+        sudo cp "${extracted}/share/rockit/rockit_runtime.h" "${SHARE_DIR}/rockit_runtime.h"
 
         rm -rf "$tmp"
         return 0
@@ -116,6 +117,7 @@ install_source() {
     sudo cp "${tmp}/fuel/fuel" "${BIN_DIR}/fuel"
     sudo chmod +x "${BIN_DIR}/rockit" "${BIN_DIR}/fuel"
     sudo cp Runtime/rockit_runtime.c "${SHARE_DIR}/rockit_runtime.c"
+    sudo cp Runtime/rockit_runtime.h "${SHARE_DIR}/rockit_runtime.h"
 
     rm -rf "$tmp"
     ok "Built and installed from source"
