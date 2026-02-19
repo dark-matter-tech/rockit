@@ -202,8 +202,10 @@ jobs:
           FEATURES=""
           START=$(date +%s)
           for f in Examples/test_*.rok; do
-            TOTAL=$((TOTAL + 1))
             name=$(basename "$f" .rok)
+            # Skip Stage 1-only tests (compiled with Stage 1 binary after bootstrap)
+            case "$name" in test_unsafe*) echo "  ┌──────────────────────────────────────────────"; printf "  │ ⏭️  %-42s" "$name"; echo "⏭️  SKIP (Stage 1 only)"; echo "  └──────────────────────────────────────────────"; continue;; esac
+            TOTAL=$((TOTAL + 1))
             echo "  ┌──────────────────────────────────────────────"
             printf "  │ 🚀 %-42s" "$name"
             if $ROCKIT build-native "$f" > /tmp/build_log 2>&1; then
@@ -416,3 +418,48 @@ jobs:
           echo "🚀   Zero external dependencies. Pure Rockit.             🚀"
           echo "🚀                                                        🚀"
           echo "🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀"
+
+          # ============================================================
+          # Stage 1-only feature tests (unsafe, extern, etc.)
+          # ============================================================
+          echo ""
+          echo "  ╔═══════════════════════════════════════════╗"
+          echo "  ║  🔬 Stage 1 Feature Tests                  ║"
+          echo "  ╚═══════════════════════════════════════════╝"
+          STAGE1_CMD=Stage1/command
+          S1_PASS=0; S1_FAIL=0; S1_TOTAL=0
+          S1_FAILED=""
+          for f in Examples/test_unsafe*.rok; do
+            [ -f "$f" ] || continue
+            S1_TOTAL=$((S1_TOTAL + 1))
+            name=$(basename "$f" .rok)
+            echo "  ┌──────────────────────────────────────────────"
+            printf "  │ 🔬 %-42s" "$name"
+            if $STAGE1_CMD build-native "$f" -o "Examples/$name" --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE > /tmp/s1_build_log 2>&1; then
+              output=$("Examples/$name" 2>&1) || true
+              echo "✅ PASS"
+              if [ -n "$output" ]; then
+                echo "$output" | while IFS= read -r line; do
+                  echo "  │   📟 $line"
+                done
+              fi
+              S1_PASS=$((S1_PASS + 1))
+            else
+              echo "❌ FAIL"
+              cat /tmp/s1_build_log | while IFS= read -r line; do
+                echo "  │   💥 $line"
+              done
+              S1_FAIL=$((S1_FAIL + 1))
+              S1_FAILED="$S1_FAILED\n    💥 $name"
+            fi
+            echo "  └──────────────────────────────────────────────"
+          done
+          if [ "$S1_TOTAL" -gt 0 ]; then
+            if [ "$S1_FAIL" -eq 0 ]; then
+              echo "  ✅ Stage 1 tests: $S1_PASS/$S1_TOTAL passed"
+            else
+              echo "  💀 Stage 1 tests: $S1_FAIL/$S1_TOTAL failed"
+              printf "$S1_FAILED\n"
+              exit 1
+            fi
+          fi

@@ -3827,6 +3827,7 @@ fun main(): Unit {
     var outputFile: String = ""
     var libPath: String = ""
     var runtimePath: String = ""
+    var targetTriple: String = ""
 
     // Parse remaining args
     var ai: Int = 2
@@ -3857,6 +3858,11 @@ fun main(): Unit {
             doOptimize = true
         } else if (arg == "--emit-llvm") {
             emitLlvm = true
+        } else if (arg == "--target-triple") {
+            if (ai + 1 < listSize(args)) {
+                ai = ai + 1
+                targetTriple = toString(listGet(args, ai))
+            }
         } else {
             if (stringLength(outputFile) == 0) {
                 outputFile = arg
@@ -3949,7 +3955,7 @@ fun main(): Unit {
     if (isBuildNative) {
         // build-native: .rok → LLVM IR → clang → native binary
         val llFile = stringConcat(outputFile, ".ll")
-        emitLLVM(compiler, llFile)
+        emitLLVM(compiler, llFile, targetTriple)
         println(stringConcat(sourceFile, stringConcat(" -> ", stringConcat(outputFile, " (native)"))))
         println(stringConcat("  ", stringConcat(toString(funcCount), " function(s)")))
 
@@ -3983,7 +3989,7 @@ fun main(): Unit {
         }
     } else if (emitLlvm) {
         // Emit LLVM IR
-        emitLLVM(compiler, outputFile)
+        emitLLVM(compiler, outputFile, targetTriple)
         println(stringConcat(sourceFile, stringConcat(" -> ", outputFile)))
         println(stringConcat("  ", stringConcat(toString(funcCount), " function(s), LLVM IR")))
     } else {
