@@ -2665,7 +2665,7 @@ public final class LLVMCodeGen {
         // Inline toInt() for known integer arguments — avoids runtime call
         if function == "toInt", let dest = dest, args.count == 1 {
             let arg = args[0]
-            if knownIntTemps.contains(arg) || registerTypes[arg] == "i64" {
+            if knownIntTemps.contains(arg) {
                 let tmp = nextSSA()
                 let argType = typeOf(arg)
                 var lines: [String] = []
