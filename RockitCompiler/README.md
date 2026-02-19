@@ -127,23 +127,24 @@ All benchmarks run on Apple M1, best of 3 runs.
 
 | Benchmark | Rockit | Go | Node.js |
 |-----------|--------|-----|---------|
-| **Fibonacci** (fib 40, recursive) | **0.31s** | 0.34s | 1.05s |
+| **Fibonacci** (fib 40, recursive) | **0.31s** | 0.34s | 1.03s |
 | **Object alloc** (1M data class) | **0.002s** | 0.003s | 0.07s |
-| **Prime sieve** (primes to 1M) | **0.004s** | 0.006s | 0.07s |
-| **Matrix multiply** (200x200) | **0.010s** | 0.013s | 0.08s |
-| **Quicksort** (500K integers) | **0.032s** | 0.035s | 0.18s |
-| **Monkey interpreter** (lex+parse+eval) | 0.24s | **0.19s** | – |
+| **Prime sieve** (primes to 1M) | **0.004s** | 0.004s | 0.07s |
+| **Matrix multiply** (200x200) | **0.006s** | 0.011s | 0.08s |
+| **Quicksort** (500K integers) | **0.031s** | 0.034s | 0.18s |
+| **String concat** (500K iterations) | **0.17s** | 0.35s | **0.06s** |
+| **Monkey interpreter** (lex+parse+eval) | 0.25s | **0.19s** | – |
 
 #### CLBG Benchmarks
 
 | Benchmark | Rockit | Go |
 |-----------|--------|-----|
-| **Binary trees** (depth 21) | **5.27s** | 10.41s |
-| **Fannkuch** (n=12) | **25.05s** | 25.33s |
-| **N-body** (50M steps) | 2.68s | **2.46s** |
-| **Spectral norm** (n=5500) | **1.17s** | 1.19s |
+| **Binary trees** (depth 21) | **5.41s** | 10.52s |
+| **Fannkuch** (n=12) | 25.03s | **24.79s** |
+| **N-body** (50M steps) | 2.63s | **2.42s** |
+| **Spectral norm** (n=5500) | 1.15s | **1.14s** |
 
-Rockit beats Go on 8 of 10 benchmarks. Rockit outperforms Node.js 3-18x across all measured benchmarks.
+Rockit beats Go on 7 of 11 benchmarks. Rockit outperforms Node.js 3-15x across all measured benchmarks.
 
 Run the full suite: `bash Benchmarks/run_benchmarks.sh`
 
