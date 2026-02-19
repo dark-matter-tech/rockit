@@ -4374,6 +4374,8 @@ extension LLVMCodeGen {
         let diagnostics = DiagnosticEngine()
 
         // Frontend pipeline
+        print("  Parsing \(fileName)...", terminator: "")
+        fflush(stdout)
         let lexer = Lexer(source: source, fileName: fileName, diagnostics: diagnostics)
         let tokens = lexer.tokenize()
         let parser = Parser(tokens: tokens, diagnostics: diagnostics)
@@ -4383,28 +4385,39 @@ extension LLVMCodeGen {
         let sourceDir = (fileName as NSString).deletingLastPathComponent
         let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
         let ast = importResolver.resolve(parsedAST)
+        print(" done")
 
+        print("  Type checking...", terminator: "")
+        fflush(stdout)
         let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
         let typeResult = checker.check()
 
         if diagnostics.hasErrors {
+            print("")
             diagnostics.dump()
             throw LLVMCodeGenError.frontendErrors(diagnostics.errorCount)
         }
+        print(" done")
 
         // MIR pipeline
+        print("  Lowering to MIR...", terminator: "")
+        fflush(stdout)
         let lowering = MIRLowering(typeCheckResult: typeResult)
         let unoptimized = lowering.lower()
         let optimizer = MIROptimizer()
         let optimized = optimizer.optimize(unoptimized)
+        print(" done")
 
         // LLVM IR emission
+        print("  Generating LLVM IR...", terminator: "")
+        fflush(stdout)
         let codeGen = LLVMCodeGen()
         let llvmIR = codeGen.emit(module: optimized)
 
         // Write .ll file
         let llPath = outputPath + ".ll"
         try llvmIR.write(toFile: llPath, atomically: true, encoding: .utf8)
+        print(" done")
 
         if emitLLVM {
             return llPath
@@ -4416,6 +4429,8 @@ extension LLVMCodeGen {
         }
 
         // Compile C runtime
+        print("  Compiling runtime...", terminator: "")
+        fflush(stdout)
         let runtimeObjPath = Platform.tempFilePath("rockit_runtime" + Platform.objectFileExtension)
         let runtimeSrcPath = Platform.pathJoin(runtimeDir, "rockit_runtime.c")
 
@@ -4427,8 +4442,11 @@ extension LLVMCodeGen {
         guard compileRuntime.terminationStatus == 0 else {
             throw LLVMCodeGenError.runtimeCompileFailed
         }
+        print(" done")
 
         // Compile + link
+        print("  Linking native binary...", terminator: "")
+        fflush(stdout)
         let finalOutputPath = Platform.withExeExtension(outputPath)
         let link = Process()
         link.executableURL = URL(fileURLWithPath: clangPath)
@@ -4442,6 +4460,7 @@ extension LLVMCodeGen {
         guard link.terminationStatus == 0 else {
             throw LLVMCodeGenError.linkFailed
         }
+        print(" done")
 
         return finalOutputPath
     }
