@@ -5267,13 +5267,11 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
                 llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = ptrtoint ptr @", stringConcat(strVal, " to i64")))))
                 llvmLine(buf, stringConcat("  store i64 ", stringConcat(s1, stringConcat(", ptr %t", toString(dest)))))
             } else {
-                val strGlobal = stringConcat("@.str.", toString(poolIdx))
+                // Use immortal RockitString global directly (no rockit_string_new call needed)
+                val strGlobal = stringConcat("@.rstr.", toString(poolIdx))
                 val s1 = llvmNextSSA(state)
-                val s2 = llvmNextSSA(state)
-                mapPut(usedExterns, "rockit_string_new", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = call ptr @rockit_string_new(ptr ", stringConcat(strGlobal, ")")))))
-                llvmLine(buf, stringConcat("  ", stringConcat(s2, stringConcat(" = ptrtoint ptr ", stringConcat(s1, " to i64")))))
-                llvmLine(buf, stringConcat("  store i64 ", stringConcat(s2, stringConcat(", ptr %t", toString(dest)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = ptrtoint ptr ", stringConcat(strGlobal, " to i64")))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(s1, stringConcat(", ptr %t", toString(dest)))))
             }
             ip = ip + 5
         } else if (op == 6) {
@@ -6083,13 +6081,11 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
                 llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = ptrtoint ptr @", stringConcat(strVal, " to i64")))))
                 llvmLine(buf, stringConcat("  store i64 ", stringConcat(s1, stringConcat(", ptr %t", toString(dest)))))
             } else {
-                val strGlobal = stringConcat("@.str.", toString(poolIdx))
+                // Use immortal RockitString global directly (no rockit_string_new call needed)
+                val strGlobal = stringConcat("@.rstr.", toString(poolIdx))
                 val s1 = llvmNextSSA(rState)
-                val s2 = llvmNextSSA(rState)
-                mapPut(rExterns, "rockit_string_new", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = call ptr @rockit_string_new(ptr ", stringConcat(strGlobal, ")")))))
-                llvmLine(buf, stringConcat("  ", stringConcat(s2, stringConcat(" = ptrtoint ptr ", stringConcat(s1, " to i64")))))
-                llvmLine(buf, stringConcat("  store i64 ", stringConcat(s2, stringConcat(", ptr %t", toString(dest)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(s1, stringConcat(" = ptrtoint ptr ", stringConcat(strGlobal, " to i64")))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(s1, stringConcat(", ptr %t", toString(dest)))))
             }
             ip = ip + 5
         } else if (op == 6) {
@@ -6852,10 +6848,14 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
         val kind = toInt(mapGet(entry, "kind"))
         if (kind == 1 || kind == 4 || kind == 5) {
             // CK_STRING, CK_FUNC_NAME, CK_METHOD_NAME — all are string literals
+            // Emit as immortal RockitString struct globals (matches LLVMCodeGen.swift)
+            // Layout: { i64 refCount, i64 length, ptr chars, ptr base, [N x i8] data }
             val value = toString(mapGet(entry, "value"))
             val escaped = llvmEscapeString(value)
-            val byteLen = stringLength(value) + 1  // +1 for null terminator
-            llvmLine(mainBuf, stringConcat("@.str.", stringConcat(toString(si), stringConcat(" = private unnamed_addr constant [", stringConcat(toString(byteLen), stringConcat(" x i8] c\"", stringConcat(escaped, "\\00\"")))))))
+            val strLen = stringLength(value)
+            val dataLen = strLen + 1  // +1 for null terminator
+            val globalName = stringConcat("@.rstr.", toString(si))
+            llvmLine(mainBuf, stringConcat(globalName, stringConcat(" = private global <{ i64, i64, ptr, ptr, [", stringConcat(toString(dataLen), stringConcat(" x i8] }> <{ i64 9223372036854775807, i64 ", stringConcat(toString(strLen), stringConcat(", ptr getelementptr (i8, ptr ", stringConcat(globalName, stringConcat(", i64 32), ptr null, [", stringConcat(toString(dataLen), stringConcat(" x i8] c\"", stringConcat(escaped, "\\00\" }>"))))))))))))
         }
         si = si + 1
     }
