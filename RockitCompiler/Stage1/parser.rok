@@ -840,6 +840,15 @@ fun parseStatement(p: Map): Map {
     if (tt == "KW_FOR") { return parseFor(p) }
     if (tt == "KW_TRY") { return parseTryCatch(p) }
     if (tt == "KW_CONCURRENT") { return parseConcurrent(p) }
+    if (tt == "KW_UNSAFE") {
+        val uline = peekLine(p)
+        val ucol = peekCol(p)
+        advance(p)
+        val ublock = parseBlock(p)
+        val unode = makeNodeAt("unsafeBlock", uline, ucol)
+        mapPut(unode, "body", ublock)
+        return unode
+    }
 
     // Nested declarations
     if (tt == "KW_FUN" || tt == "KW_SUSPEND") { return parseFunDecl(p) }
@@ -1564,6 +1573,12 @@ fun parseProgram(p: Map): Map {
             }
             mapPut(decl, "annotations", annotations)
             listAppend(decls, decl)
+        } else if (tt == "KW_EXTERN") {
+            // extern fun name(params): ReturnType — no body
+            advance(p)
+            val externDecl = parseFunDecl(p)
+            mapPut(externDecl, "isExtern", true)
+            listAppend(decls, externDecl)
         } else if (tt == "KW_FUN" || tt == "KW_SUSPEND") {
             listAppend(decls, parseFunDecl(p))
         } else if (tt == "KW_CLASS" || tt == "KW_DATA" || tt == "KW_SEALED") {

@@ -129,6 +129,13 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "rockit_math_pow", "double|double,double")
     mapPut(t, "rockit_math_atan2", "double|double,double")
 
+    // Pointer builtins (libc)
+    mapPut(t, "malloc", "ptr|i64")
+    mapPut(t, "free", "void|ptr")
+    mapPut(t, "memcpy", "ptr|ptr,ptr,i64")
+    mapPut(t, "memset", "ptr|ptr,i32,i64")
+    mapPut(t, "memmove", "ptr|ptr,ptr,i64")
+
     return t
 }
 
@@ -1984,6 +1991,123 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
     // Determine actual C function name and signature
     var cName: String = callName
 
+    // ── Pointer intrinsics ──────────────────────────────────────────────
+    // __ptr_load(ptr): load i64 from pointer address
+    if (callName == "__ptr_load" && argc == 1) {
+        val ptrReg = llvmReadU16(bc, argStart)
+        val tp = llvmNextSSA(state)
+        val tptr = llvmNextSSA(state)
+        val tval = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tp, stringConcat(" = load i64, ptr %t", toString(ptrReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tptr, stringConcat(" = inttoptr i64 ", stringConcat(tp, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr ", tptr))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+    // __ptr_store(ptr, value): store i64 to pointer address
+    if (callName == "__ptr_store" && argc == 2) {
+        val ptrReg = llvmReadU16(bc, argStart)
+        val valReg = llvmReadU16(bc, argStart + 2)
+        val tp = llvmNextSSA(state)
+        val tptr = llvmNextSSA(state)
+        val tv = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tp, stringConcat(" = load i64, ptr %t", toString(ptrReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tptr, stringConcat(" = inttoptr i64 ", stringConcat(tp, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tv, stringConcat(" = load i64, ptr %t", toString(valReg)))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tv, stringConcat(", ptr ", tptr))))
+        llvmLine(buf, stringConcat("  store i64 3405691582, ptr %t", toString(dest)))
+        return
+    }
+    // __ptr_offset(ptr, n): GEP — advance by n * 8 bytes (i64-sized elements)
+    if (callName == "__ptr_offset" && argc == 2) {
+        val ptrReg = llvmReadU16(bc, argStart)
+        val offReg = llvmReadU16(bc, argStart + 2)
+        val tp = llvmNextSSA(state)
+        val tptr = llvmNextSSA(state)
+        val tn = llvmNextSSA(state)
+        val tgep = llvmNextSSA(state)
+        val tres = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tp, stringConcat(" = load i64, ptr %t", toString(ptrReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tptr, stringConcat(" = inttoptr i64 ", stringConcat(tp, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tn, stringConcat(" = load i64, ptr %t", toString(offReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i64, ptr ", stringConcat(tptr, stringConcat(", i64 ", tn))))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = ptrtoint ptr ", stringConcat(tgep, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+    // __ptr_cast(ptr): no-op (all pointers are ptr in LLVM)
+    if (callName == "__ptr_cast" && argc == 1) {
+        val ptrReg = llvmReadU16(bc, argStart)
+        val tp = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tp, stringConcat(" = load i64, ptr %t", toString(ptrReg)))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tp, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+    // __ptr_isNull(ptr): compare to 0
+    if (callName == "__ptr_isNull" && argc == 1) {
+        val ptrReg = llvmReadU16(bc, argStart)
+        val tp = llvmNextSSA(state)
+        val tcmp = llvmNextSSA(state)
+        val tres = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tp, stringConcat(" = load i64, ptr %t", toString(ptrReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(tp, ", 0")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+    // __ptr_toInt(ptr): already i64, just copy
+    if (callName == "__ptr_toInt" && argc == 1) {
+        val ptrReg = llvmReadU16(bc, argStart)
+        val tp = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tp, stringConcat(" = load i64, ptr %t", toString(ptrReg)))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tp, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+    // alloc(count): call malloc(count * 8)
+    if (callName == "alloc" && argc == 1) {
+        val cntReg = llvmReadU16(bc, argStart)
+        val tc = llvmNextSSA(state)
+        val tsz = llvmNextSSA(state)
+        val tptr = llvmNextSSA(state)
+        val tres = llvmNextSSA(state)
+        mapPut(usedExterns, "malloc", true)
+        llvmLine(buf, stringConcat("  ", stringConcat(tc, stringConcat(" = load i64, ptr %t", toString(cntReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tsz, stringConcat(" = mul i64 ", stringConcat(tc, ", 8")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tptr, stringConcat(" = call ptr @malloc(i64 ", stringConcat(tsz, ")")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = ptrtoint ptr ", stringConcat(tptr, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+    // free(ptr): call free
+    if (callName == "free" && argc == 1) {
+        val ptrReg = llvmReadU16(bc, argStart)
+        val tp = llvmNextSSA(state)
+        val tptr = llvmNextSSA(state)
+        mapPut(usedExterns, "free", true)
+        llvmLine(buf, stringConcat("  ", stringConcat(tp, stringConcat(" = load i64, ptr %t", toString(ptrReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tptr, stringConcat(" = inttoptr i64 ", stringConcat(tp, " to ptr")))))
+        llvmLine(buf, stringConcat("  call void @free(ptr ", stringConcat(tptr, ")")))
+        llvmLine(buf, stringConcat("  store i64 3405691582, ptr %t", toString(dest)))
+        return
+    }
+    // cstr(s): extract chars pointer from RockitString (offset 16)
+    if (callName == "cstr" && argc == 1) {
+        val sReg = llvmReadU16(bc, argStart)
+        val ts = llvmNextSSA(state)
+        val tsPtr = llvmNextSSA(state)
+        val tCharsAddr = llvmNextSSA(state)
+        val tChars = llvmNextSSA(state)
+        val tres = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(sReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tsPtr, stringConcat(" = inttoptr i64 ", stringConcat(ts, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tCharsAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(tsPtr, ", i64 16")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tChars, stringConcat(" = load ptr, ptr ", tCharsAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = ptrtoint ptr ", stringConcat(tChars, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+    // ── End pointer intrinsics ──────────────────────────────────────────
+
     // Check if println/print/toString arg is a double register
     if ((callName == "println" || callName == "print" || callName == "toString") && argc == 1) {
         val argReg = llvmReadU16(bc, argStart)
@@ -2171,6 +2295,28 @@ fun llvmEmitExterns(usedExterns: Map, sigTable: Map, definedFuncs: Map): String 
 }
 
 // ---------------------------------------------------------------------------
+// Convert Rockit AST type node to LLVM type string for extern signatures
+// ---------------------------------------------------------------------------
+
+fun llvmTypeFromRockit(typeNode: Map): String {
+    if (typeNode == null) { return "i64" }
+    val kind = toString(mapGet(typeNode, "kind"))
+    if (kind == "type") {
+        val name = toString(mapGet(typeNode, "name"))
+        if (name == "Int") { return "i64" }
+        if (name == "Float") { return "double" }
+        if (name == "Double") { return "double" }
+        if (name == "Bool") { return "i8" }
+        if (name == "Byte") { return "i8" }
+        if (name == "String") { return "ptr" }
+        if (name == "Unit") { return "void" }
+        if (name == "Ptr") { return "ptr" }
+        return "i64"
+    }
+    return "ptr"
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point: emitLLVM
 // ---------------------------------------------------------------------------
 
@@ -2179,6 +2325,48 @@ fun emitLLVM(compiler: Map, outputFile: String): Unit {
     val pool = mapGet(compiler, "pool")
     val functions = mapGet(compiler, "functions")
     val types = mapGet(compiler, "types")
+
+    // Register extern functions in the sig table so calls emit correctly
+    val externFuncs = mapGet(compiler, "externFuncs")
+    if (externFuncs != null) {
+        val extNames = mapKeys(externFuncs)
+        var ei: Int = 0
+        while (ei < listSize(extNames)) {
+            val extName = toString(listGet(extNames, ei))
+            val extInfo = mapGet(externFuncs, extName)
+            val extParams = mapGet(extInfo, "params")
+            val extRetType = mapGet(extInfo, "returnType")
+            // Convert return type
+            var retLLVM: String = "i64"
+            if (extRetType != null) {
+                val mapped = llvmTypeFromRockit(extRetType)
+                if (mapped == "void") {
+                    retLLVM = "void"
+                } else {
+                    retLLVM = mapped
+                }
+            }
+            // Convert param types
+            var paramLLVM: String = ""
+            if (extParams != null) {
+                var pi: Int = 0
+                while (pi < listSize(extParams)) {
+                    val param = listGet(extParams, pi)
+                    val paramType = mapGet(param, "type")
+                    if (pi > 0) { paramLLVM = stringConcat(paramLLVM, ",") }
+                    if (paramType != null) {
+                        paramLLVM = stringConcat(paramLLVM, llvmTypeFromRockit(paramType))
+                    } else {
+                        paramLLVM = stringConcat(paramLLVM, "i64")
+                    }
+                    pi = pi + 1
+                }
+            }
+            // Add to sig table: "retType|param1,param2,..."
+            mapPut(sigTable, extName, stringConcat(retLLVM, stringConcat("|", paramLLVM)))
+            ei = ei + 1
+        }
+    }
 
     val mainBuf = llvmBuf()
 
@@ -2253,18 +2441,10 @@ fun emitLLVM(compiler: Map, outputFile: String): Unit {
         }
         listAppend(mainBuf, funcIR)
 
-        // Collect externs from this function's state
-        // We need to re-emit to get the externs... or track globally
-        // For simplicity, re-scan the emitted IR for @name patterns
-        // Actually, let's modify emitLLVMFunction to return externs too
         fi = fi + 1
     }
 
-    // For extern tracking, we need a different approach.
-    // Re-emit with extern collection. Actually, let's do a two-pass approach
-    // or collect externs globally.
-
-    // Simpler: just declare ALL runtime functions we know about
+    // Declare all runtime + extern functions from the sig table
     llvmLine(mainBuf, "")
     llvmLine(mainBuf, "; Runtime declarations")
     val allKeys = mapKeys(sigTable)
@@ -2296,9 +2476,7 @@ fun emitLLVM(compiler: Map, outputFile: String): Unit {
     }
     llvmLine(mainBuf, "declare i32 @_setjmp(ptr) #0")
 
-    // Suspend function support: malloc/free/memset for coroutine frames
-    llvmLine(mainBuf, "declare ptr @malloc(i64)")
-    llvmLine(mainBuf, "declare void @free(ptr)")
+    // Suspend function support: memset for coroutine frames (malloc/free declared via sigTable)
     llvmLine(mainBuf, "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)")
     llvmLine(mainBuf, "")
     llvmLine(mainBuf, "attributes #0 = { returns_twice }")

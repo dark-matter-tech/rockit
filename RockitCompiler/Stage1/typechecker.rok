@@ -185,6 +185,18 @@ fun registerBuiltins(tc: Map): Unit {
     registerFn(fns, "isMap", 1, "Bool")
     registerFn(fns, "isList", 1, "Bool")
     registerFn(fns, "evalRockit", 1, "String")
+
+    // Unsafe / pointer operations
+    registerFn(fns, "alloc", 1, "Ptr")       // alloc<T>(count) → Ptr<T>
+    registerFn(fns, "free", 1, "Unit")        // free(ptr)
+    registerFn(fns, "cstr", 1, "Ptr")         // cstr(s) → Ptr<Byte>
+    registerFn(fns, "memcpy", 3, "Unit")      // memcpy(dst, src, len)
+    registerFn(fns, "memset", 3, "Unit")      // memset(dst, val, len)
+    registerFn(fns, "memmove", 3, "Unit")     // memmove(dst, src, len)
+    registerFn(fns, "sizeOf", 0, "Int")       // sizeOf<T>()
+    registerFn(fns, "offsetOf", 1, "Int")     // offsetOf<T>(field)
+    registerFn(fns, "bitcast", 1, "Any")      // bitcast<T>(val)
+    registerFn(fns, "addressOf", 1, "Ptr")    // addressOf(local) → Ptr<T>
 }
 
 fun registerFn(fns: Map, name: String, arity: Int, ret: String): Unit {
@@ -900,6 +912,14 @@ fun tcCheckStmt(tc: Map, stmt: Map): Unit {
             if (stmts != null) { tcCheckStmts(tc, stmts) }
             tcPopScope(tc)
         }
+    } else if (kind == "unsafeBlock") {
+        val body = mapGet(stmt, "body")
+        if (body != null) {
+            tcPushScope(tc)
+            val stmts = mapGet(body, "stmts")
+            if (stmts != null) { tcCheckStmts(tc, stmts) }
+            tcPopScope(tc)
+        }
     } else {
         // Bare expression statement
         tcInferExpr(tc, stmt)
@@ -1369,12 +1389,16 @@ fun tcTypesCompatible(expected: String, actual: String): Bool {
     if (expected == actual) { return true }
     if (expected == "Any" || actual == "Any") { return true }
     if (actual == "Null") {
-        // Null is compatible with nullable types
-        return endsWith(expected, "?")
+        // Null is compatible with nullable types and pointer types
+        if (endsWith(expected, "?")) { return true }
+        if (startsWith(expected, "Ptr<")) { return true }
+        return false
     }
     // Int and Float are somewhat compatible
     if (expected == "Float" && actual == "Int") { return true }
     if (expected == "Int" && actual == "Float") { return true }
+    // Ptr<T> is compatible with Ptr<Byte> (void pointer equivalent)
+    if (startsWith(expected, "Ptr<") && startsWith(actual, "Ptr<")) { return true }
     // Nullable compatibility
     if (endsWith(expected, "?")) {
         val base = substring(expected, 0, stringLength(expected) - 1)

@@ -48,6 +48,8 @@ fun buildKeywordMap(): Map {
     mapPut(kw, "route", "KW_ROUTE")
     mapPut(kw, "theme", "KW_THEME")
     mapPut(kw, "style", "KW_STYLE")
+    mapPut(kw, "unsafe", "KW_UNSAFE")
+    mapPut(kw, "extern", "KW_EXTERN")
     mapPut(kw, "suspend", "KW_SUSPEND")
     mapPut(kw, "async", "KW_ASYNC")
     mapPut(kw, "await", "KW_AWAIT")

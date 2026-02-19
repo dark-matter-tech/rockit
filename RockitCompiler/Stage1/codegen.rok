@@ -102,6 +102,7 @@ fun makeCompiler(): Map {
     mapPut(c, "varargFuncs", mapCreate())    // funcName -> vararg param index
     mapPut(c, "lambdaCounter", 0)
     mapPut(c, "errors", listCreate())
+    mapPut(c, "externFuncs", mapCreate())  // name -> {params, returnType} for extern fun declarations
     return c
 }
 
@@ -1189,6 +1190,20 @@ fun compileExpr(fs: Map, node: Map): Int {
                 return dest
             }
 
+            // Pointer method calls: .load(), .store(val), .offset(n), .cast(), .isNull(), .toInt()
+            if (methodName == "load" || methodName == "store" || methodName == "offset" || methodName == "cast" || methodName == "isNull" || methodName == "toInt") {
+                val ptrArgs = listCreate()
+                listAppend(ptrArgs, objReg)
+                var pa: Int = 0
+                while (pa < listSize(argRegs)) {
+                    listAppend(ptrArgs, toInt(listGet(argRegs, pa)))
+                    pa = pa + 1
+                }
+                val dest = allocReg(fs)
+                emitCall(fs, dest, stringConcat("__ptr_", methodName), ptrArgs)
+                return dest
+            }
+
             val dest = allocReg(fs)
             emitVcall(fs, dest, objReg, methodName, argRegs)
             return dest
@@ -1372,7 +1387,7 @@ fun collectFreeVarsStmt(node: Map, names: Map): Unit {
                 }
             }
         }
-    } else if (kind == "concurrent") {
+    } else if (kind == "concurrent" || kind == "unsafeBlock") {
         val body = mapGet(node, "body")
         if (body != null) {
             val stmts = mapGet(body, "stmts")
@@ -2403,6 +2418,12 @@ fun compileStmt(fs: Map, node: Map): Unit {
         if (fparams != null) {
             mapPut(mapGet(compiler, "funcSignatures"), mangledName, fparams)
         }
+        return
+    }
+
+    // unsafe block — just compile its body (no special bytecodes needed)
+    if (kind == "unsafeBlock") {
+        compileBlock(fs, mapGet(node, "body"))
         return
     }
 
@@ -3521,6 +3542,16 @@ fun compileProgram(ast: Map): Map {
             compileClassDecl(compiler, decl)
         }
         if (kind == "funDecl") {
+            // Skip extern functions — they have no body, just register for llvmgen
+            if (mapGet(decl, "isExtern") == true) {
+                val eName = toString(mapGet(decl, "name"))
+                val eInfo = mapCreate()
+                mapPut(eInfo, "params", mapGet(decl, "params"))
+                mapPut(eInfo, "returnType", mapGet(decl, "returnType"))
+                mapPut(mapGet(compiler, "externFuncs"), eName, eInfo)
+                i = i + 1
+                continue
+            }
             // Mangle overloaded function names
             val fnName = toString(mapGet(decl, "name"))
             val isOverloaded = mapGet(mapGet(compiler, "overloadedFuncs"), fnName)

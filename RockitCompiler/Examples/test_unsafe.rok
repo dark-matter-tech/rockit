@@ -1,0 +1,49 @@
+// test_unsafe.rok — Test extern fun, Ptr, unsafe blocks, and pointer ops
+
+extern fun puts(str: Ptr<Byte>): Int
+
+fun main() {
+    // Test 1: alloc/store/load/free
+    val p = alloc(1)
+    unsafe {
+        p.store(42)
+        val x = p.load()
+        println(x)
+    }
+    free(p)
+
+    // Test 2: pointer offset
+    val arr = alloc(3)
+    unsafe {
+        arr.store(10)
+        arr.offset(1).store(20)
+        arr.offset(2).store(30)
+        println(arr.load())
+        println(arr.offset(1).load())
+        println(arr.offset(2).load())
+    }
+    free(arr)
+
+    // Test 3: cstr + extern call
+    val msg = "Hello from unsafe Rockit!"
+    val cMsg = cstr(msg)
+    puts(cMsg)
+
+    // Test 4: isNull
+    val q = alloc(1)
+    unsafe {
+        val notNull = q.isNull()
+        println(notNull)
+    }
+    free(q)
+
+    // Test 5: toInt (pointer as integer)
+    val r = alloc(1)
+    unsafe {
+        val addr = r.toInt()
+        println(addr)
+    }
+    free(r)
+
+    println("All unsafe tests passed!")
+}
