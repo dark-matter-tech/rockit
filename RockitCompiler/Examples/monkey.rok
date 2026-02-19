@@ -1,0 +1,766 @@
+// monkey.rok — Monkey Language Interpreter in Rockit
+// ThePrimeagen's Degens Interpreter Competition (ts-rust-zig-deez)
+// Implements: Lexer + Pratt Parser from "Writing An Interpreter In Go"
+
+// ============================================================
+// Token Types
+// ============================================================
+
+val TOK_ILLEGAL: Int = 0
+val TOK_EOF: Int = 1
+val TOK_IDENT: Int = 2
+val TOK_INT: Int = 3
+val TOK_ASSIGN: Int = 4
+val TOK_PLUS: Int = 5
+val TOK_MINUS: Int = 6
+val TOK_BANG: Int = 7
+val TOK_SLASH: Int = 8
+val TOK_ASTERISK: Int = 9
+val TOK_LT: Int = 10
+val TOK_GT: Int = 11
+val TOK_EQ: Int = 12
+val TOK_NOT_EQ: Int = 13
+val TOK_COMMA: Int = 14
+val TOK_SEMICOLON: Int = 15
+val TOK_LPAREN: Int = 16
+val TOK_RPAREN: Int = 17
+val TOK_LBRACE: Int = 18
+val TOK_RBRACE: Int = 19
+val TOK_FUNCTION: Int = 20
+val TOK_LET: Int = 21
+val TOK_IF: Int = 22
+val TOK_ELSE: Int = 23
+val TOK_RETURN: Int = 24
+val TOK_TRUE: Int = 25
+val TOK_FALSE: Int = 26
+
+fun tokenName(t: Int): String {
+    if (t == 0) { return "ILLEGAL" }
+    if (t == 1) { return "EOF" }
+    if (t == 2) { return "IDENT" }
+    if (t == 3) { return "INT" }
+    if (t == 4) { return "ASSIGN" }
+    if (t == 5) { return "PLUS" }
+    if (t == 6) { return "MINUS" }
+    if (t == 7) { return "BANG" }
+    if (t == 8) { return "SLASH" }
+    if (t == 9) { return "ASTERISK" }
+    if (t == 10) { return "LT" }
+    if (t == 11) { return "GT" }
+    if (t == 12) { return "EQ" }
+    if (t == 13) { return "NOT_EQ" }
+    if (t == 14) { return "COMMA" }
+    if (t == 15) { return "SEMICOLON" }
+    if (t == 16) { return "LPAREN" }
+    if (t == 17) { return "RPAREN" }
+    if (t == 18) { return "LBRACE" }
+    if (t == 19) { return "RBRACE" }
+    if (t == 20) { return "FUNCTION" }
+    if (t == 21) { return "LET" }
+    if (t == 22) { return "IF" }
+    if (t == 23) { return "ELSE" }
+    if (t == 24) { return "RETURN" }
+    if (t == 25) { return "TRUE" }
+    if (t == 26) { return "FALSE" }
+    return "UNKNOWN"
+}
+
+// ============================================================
+// Lexer
+// ============================================================
+
+var lexInput: String = ""
+var lexPos: Int = 0
+var lexReadPos: Int = 0
+var lexCh: Int = 0
+
+var tokType: Int = 0
+var tokLiteral: String = ""
+
+fun lexInit(input: String): Unit {
+    lexInput = input
+    lexPos = 0
+    lexReadPos = 0
+    lexCh = 0
+    lexReadChar()
+}
+
+fun lexReadChar(): Unit {
+    if (lexReadPos >= stringLength(lexInput)) {
+        lexCh = 0
+    } else {
+        lexCh = charCodeAt(lexInput, lexReadPos)
+    }
+    lexPos = lexReadPos
+    lexReadPos = lexReadPos + 1
+}
+
+fun lexPeekChar(): Int {
+    if (lexReadPos >= stringLength(lexInput)) {
+        return 0
+    }
+    return charCodeAt(lexInput, lexReadPos)
+}
+
+fun lexSkipWhitespace(): Unit {
+    while (lexCh == 32 || lexCh == 9 || lexCh == 10 || lexCh == 13) {
+        lexReadChar()
+    }
+}
+
+fun isLetterChar(ch: Int): Bool {
+    return (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch == 95
+}
+
+fun isDigitChar(ch: Int): Bool {
+    return ch >= 48 && ch <= 57
+}
+
+fun lexReadIdentifier(): String {
+    val start: Int = lexPos
+    while (isLetterChar(lexCh)) {
+        lexReadChar()
+    }
+    return substring(lexInput, start, lexPos)
+}
+
+fun lexReadNumber(): String {
+    val start: Int = lexPos
+    while (isDigitChar(lexCh)) {
+        lexReadChar()
+    }
+    return substring(lexInput, start, lexPos)
+}
+
+fun lookupKeyword(ident: String): Int {
+    if (ident == "fn") { return TOK_FUNCTION }
+    if (ident == "let") { return TOK_LET }
+    if (ident == "if") { return TOK_IF }
+    if (ident == "else") { return TOK_ELSE }
+    if (ident == "return") { return TOK_RETURN }
+    if (ident == "true") { return TOK_TRUE }
+    if (ident == "false") { return TOK_FALSE }
+    return TOK_IDENT
+}
+
+fun nextToken(): Unit {
+    lexSkipWhitespace()
+
+    if (lexCh == 61) {
+        if (lexPeekChar() == 61) {
+            lexReadChar()
+            tokType = TOK_EQ
+            tokLiteral = "=="
+        } else {
+            tokType = TOK_ASSIGN
+            tokLiteral = "="
+        }
+    } else if (lexCh == 43) {
+        tokType = TOK_PLUS
+        tokLiteral = "+"
+    } else if (lexCh == 45) {
+        tokType = TOK_MINUS
+        tokLiteral = "-"
+    } else if (lexCh == 33) {
+        if (lexPeekChar() == 61) {
+            lexReadChar()
+            tokType = TOK_NOT_EQ
+            tokLiteral = "!="
+        } else {
+            tokType = TOK_BANG
+            tokLiteral = "!"
+        }
+    } else if (lexCh == 47) {
+        tokType = TOK_SLASH
+        tokLiteral = "/"
+    } else if (lexCh == 42) {
+        tokType = TOK_ASTERISK
+        tokLiteral = "*"
+    } else if (lexCh == 60) {
+        tokType = TOK_LT
+        tokLiteral = "<"
+    } else if (lexCh == 62) {
+        tokType = TOK_GT
+        tokLiteral = ">"
+    } else if (lexCh == 44) {
+        tokType = TOK_COMMA
+        tokLiteral = ","
+    } else if (lexCh == 59) {
+        tokType = TOK_SEMICOLON
+        tokLiteral = ";"
+    } else if (lexCh == 40) {
+        tokType = TOK_LPAREN
+        tokLiteral = "("
+    } else if (lexCh == 41) {
+        tokType = TOK_RPAREN
+        tokLiteral = ")"
+    } else if (lexCh == 123) {
+        tokType = TOK_LBRACE
+        tokLiteral = "{"
+    } else if (lexCh == 125) {
+        tokType = TOK_RBRACE
+        tokLiteral = "}"
+    } else if (lexCh == 0) {
+        tokType = TOK_EOF
+        tokLiteral = ""
+    } else if (isLetterChar(lexCh)) {
+        tokLiteral = lexReadIdentifier()
+        tokType = lookupKeyword(tokLiteral)
+        return
+    } else if (isDigitChar(lexCh)) {
+        tokLiteral = lexReadNumber()
+        tokType = TOK_INT
+        return
+    } else {
+        tokType = TOK_ILLEGAL
+        tokLiteral = charAt(lexInput, lexPos)
+    }
+
+    lexReadChar()
+}
+
+// ============================================================
+// Parser — Pratt / Top-Down Operator Precedence
+// ============================================================
+
+val PREC_LOWEST: Int = 1
+val PREC_EQUALS: Int = 2
+val PREC_LESSGREATER: Int = 3
+val PREC_SUM: Int = 4
+val PREC_PRODUCT: Int = 5
+val PREC_PREFIX: Int = 6
+val PREC_CALL: Int = 7
+
+var curType: Int = 0
+var curLiteral: String = ""
+var peekType: Int = 0
+var peekLiteral: String = ""
+
+fun parserInit(input: String): Unit {
+    lexInit(input)
+    curType = TOK_EOF
+    curLiteral = ""
+    peekType = TOK_EOF
+    peekLiteral = ""
+    parserAdvance()
+    parserAdvance()
+}
+
+fun parserAdvance(): Unit {
+    curType = peekType
+    curLiteral = peekLiteral
+    nextToken()
+    peekType = tokType
+    peekLiteral = tokLiteral
+}
+
+fun expectPeek(t: Int): Bool {
+    if (peekType == t) {
+        parserAdvance()
+        return true
+    }
+    return false
+}
+
+fun peekPrecedence(): Int {
+    if (peekType == TOK_EQ) { return PREC_EQUALS }
+    if (peekType == TOK_NOT_EQ) { return PREC_EQUALS }
+    if (peekType == TOK_LT) { return PREC_LESSGREATER }
+    if (peekType == TOK_GT) { return PREC_LESSGREATER }
+    if (peekType == TOK_PLUS) { return PREC_SUM }
+    if (peekType == TOK_MINUS) { return PREC_SUM }
+    if (peekType == TOK_SLASH) { return PREC_PRODUCT }
+    if (peekType == TOK_ASTERISK) { return PREC_PRODUCT }
+    if (peekType == TOK_LPAREN) { return PREC_CALL }
+    return PREC_LOWEST
+}
+
+fun curPrecedence(): Int {
+    if (curType == TOK_EQ) { return PREC_EQUALS }
+    if (curType == TOK_NOT_EQ) { return PREC_EQUALS }
+    if (curType == TOK_LT) { return PREC_LESSGREATER }
+    if (curType == TOK_GT) { return PREC_LESSGREATER }
+    if (curType == TOK_PLUS) { return PREC_SUM }
+    if (curType == TOK_MINUS) { return PREC_SUM }
+    if (curType == TOK_SLASH) { return PREC_PRODUCT }
+    if (curType == TOK_ASTERISK) { return PREC_PRODUCT }
+    if (curType == TOK_LPAREN) { return PREC_CALL }
+    return PREC_LOWEST
+}
+
+fun hasInfix(t: Int): Bool {
+    return t == TOK_PLUS || t == TOK_MINUS || t == TOK_SLASH ||
+           t == TOK_ASTERISK || t == TOK_EQ || t == TOK_NOT_EQ ||
+           t == TOK_LT || t == TOK_GT || t == TOK_LPAREN
+}
+
+// Forward-declaration workaround: parseExpression calls parseBlockStatement
+// and vice versa through if/function literals. Rockit supports mutual
+// recursion between top-level functions.
+
+fun parseExpression(precedence: Int): String {
+    // Prefix
+    var left: String = ""
+    if (curType == TOK_IDENT) {
+        left = curLiteral
+    } else if (curType == TOK_INT) {
+        left = curLiteral
+    } else if (curType == TOK_TRUE) {
+        left = "true"
+    } else if (curType == TOK_FALSE) {
+        left = "false"
+    } else if (curType == TOK_BANG || curType == TOK_MINUS) {
+        val op: String = curLiteral
+        parserAdvance()
+        val right: String = parseExpression(PREC_PREFIX)
+        left = "(" + op + right + ")"
+    } else if (curType == TOK_LPAREN) {
+        parserAdvance()
+        left = parseExpression(PREC_LOWEST)
+        if (peekType == TOK_RPAREN) {
+            parserAdvance()
+        }
+    } else if (curType == TOK_IF) {
+        left = parseIfExpression()
+    } else if (curType == TOK_FUNCTION) {
+        left = parseFunctionLiteral()
+    } else {
+        left = "[parse error: no prefix for " + tokenName(curType) + "]"
+    }
+
+    // Infix loop
+    while (peekType != TOK_SEMICOLON && precedence < peekPrecedence()) {
+        if (!hasInfix(peekType)) {
+            return left
+        }
+        parserAdvance()
+        if (curType == TOK_LPAREN) {
+            left = parseCallExpression(left)
+        } else {
+            val op: String = curLiteral
+            val prec: Int = curPrecedence()
+            parserAdvance()
+            val right: String = parseExpression(prec)
+            left = "(" + left + " " + op + " " + right + ")"
+        }
+    }
+
+    return left
+}
+
+fun parseIfExpression(): String {
+    var result: String = "if"
+    if (!expectPeek(TOK_LPAREN)) { return result }
+    parserAdvance()
+    val condition: String = parseExpression(PREC_LOWEST)
+    result = result + condition
+    if (!expectPeek(TOK_RPAREN)) { return result }
+    if (!expectPeek(TOK_LBRACE)) { return result }
+    val consequence: String = parseBlockStatement()
+    result = result + consequence
+    if (peekType == TOK_ELSE) {
+        parserAdvance()
+        if (!expectPeek(TOK_LBRACE)) { return result }
+        val alternative: String = parseBlockStatement()
+        result = result + "else" + alternative
+    }
+    return result
+}
+
+fun parseFunctionLiteral(): String {
+    var result: String = "fn"
+    if (!expectPeek(TOK_LPAREN)) { return result }
+    val params: String = parseFunctionParameters()
+    result = result + "(" + params + ")"
+    if (!expectPeek(TOK_LBRACE)) { return result }
+    val body: String = parseBlockStatement()
+    result = result + body
+    return result
+}
+
+fun parseFunctionParameters(): String {
+    var result: String = ""
+    if (peekType == TOK_RPAREN) {
+        parserAdvance()
+        return result
+    }
+    parserAdvance()
+    result = curLiteral
+    while (peekType == TOK_COMMA) {
+        parserAdvance()
+        parserAdvance()
+        result = result + ", " + curLiteral
+    }
+    if (!expectPeek(TOK_RPAREN)) { return result }
+    return result
+}
+
+fun parseCallExpression(function: String): String {
+    val args: String = parseCallArguments()
+    return function + "(" + args + ")"
+}
+
+fun parseCallArguments(): String {
+    var result: String = ""
+    if (peekType == TOK_RPAREN) {
+        parserAdvance()
+        return result
+    }
+    parserAdvance()
+    result = parseExpression(PREC_LOWEST)
+    while (peekType == TOK_COMMA) {
+        parserAdvance()
+        parserAdvance()
+        result = result + ", " + parseExpression(PREC_LOWEST)
+    }
+    if (!expectPeek(TOK_RPAREN)) { return result }
+    return result
+}
+
+fun parseBlockStatement(): String {
+    var result: String = ""
+    parserAdvance()
+    while (curType != TOK_RBRACE && curType != TOK_EOF) {
+        val stmt: String = parseStatement()
+        if (stringLength(stmt) > 0) {
+            result = result + stmt
+        }
+        parserAdvance()
+    }
+    return result
+}
+
+fun parseStatement(): String {
+    if (curType == TOK_LET) {
+        return parseLetStatement()
+    }
+    if (curType == TOK_RETURN) {
+        return parseReturnStatement()
+    }
+    return parseExpressionStatement()
+}
+
+fun parseLetStatement(): String {
+    if (!expectPeek(TOK_IDENT)) { return "" }
+    val name: String = curLiteral
+    if (!expectPeek(TOK_ASSIGN)) { return "" }
+    parserAdvance()
+    val value: String = parseExpression(PREC_LOWEST)
+    if (peekType == TOK_SEMICOLON) {
+        parserAdvance()
+    }
+    return "let " + name + " = " + value + ";"
+}
+
+fun parseReturnStatement(): String {
+    parserAdvance()
+    val value: String = parseExpression(PREC_LOWEST)
+    if (peekType == TOK_SEMICOLON) {
+        parserAdvance()
+    }
+    return "return " + value + ";"
+}
+
+fun parseExpressionStatement(): String {
+    val expr: String = parseExpression(PREC_LOWEST)
+    if (peekType == TOK_SEMICOLON) {
+        parserAdvance()
+    }
+    return expr
+}
+
+fun parseProgram(): String {
+    var result: String = ""
+    while (curType != TOK_EOF) {
+        val stmt: String = parseStatement()
+        if (stringLength(stmt) > 0) {
+            result = result + stmt
+        }
+        parserAdvance()
+    }
+    return result
+}
+
+// ============================================================
+// Test Helpers
+// ============================================================
+
+var testsPassed: Int = 0
+var testsFailed: Int = 0
+
+fun expectTok(expectedType: Int, expectedLiteral: String): Bool {
+    nextToken()
+    if (tokType != expectedType) {
+        println("  FAIL: expected " + tokenName(expectedType) + "('" + expectedLiteral + "') got " + tokenName(tokType) + "('" + tokLiteral + "')")
+        testsFailed = testsFailed + 1
+        return false
+    }
+    if (tokLiteral != expectedLiteral) {
+        println("  FAIL: expected literal '" + expectedLiteral + "' got '" + tokLiteral + "'")
+        testsFailed = testsFailed + 1
+        return false
+    }
+    testsPassed = testsPassed + 1
+    return true
+}
+
+fun expectParse(input: String, expected: String): Unit {
+    parserInit(input)
+    val result: String = parseProgram()
+    if (result == expected) {
+        testsPassed = testsPassed + 1
+    } else {
+        println("  FAIL: input='" + input + "'")
+        println("    expected: '" + expected + "'")
+        println("    got:      '" + result + "'")
+        testsFailed = testsFailed + 1
+    }
+}
+
+// ============================================================
+// Lexer Tests
+// ============================================================
+
+fun testLexer1(): Unit {
+    println("test: lexer simple tokens")
+    lexInit("=+(){},;")
+    expectTok(TOK_ASSIGN, "=")
+    expectTok(TOK_PLUS, "+")
+    expectTok(TOK_LPAREN, "(")
+    expectTok(TOK_RPAREN, ")")
+    expectTok(TOK_LBRACE, "{")
+    expectTok(TOK_RBRACE, "}")
+    expectTok(TOK_COMMA, ",")
+    expectTok(TOK_SEMICOLON, ";")
+    expectTok(TOK_EOF, "")
+}
+
+fun testLexer2(): Unit {
+    println("test: lexer full program")
+    lexInit("let five = 5;\nlet ten = 10;\n\nlet add = fn(x, y) {\n  x + y;\n};\n\nlet result = add(five, ten);\n!-/*5;\n5 < 10 > 5;\n\nif (5 < 10) {\n  return true;\n} else {\n  return false;\n}\n\n10 == 10;\n10 != 9;\n")
+
+    // let five = 5;
+    expectTok(TOK_LET, "let")
+    expectTok(TOK_IDENT, "five")
+    expectTok(TOK_ASSIGN, "=")
+    expectTok(TOK_INT, "5")
+    expectTok(TOK_SEMICOLON, ";")
+    // let ten = 10;
+    expectTok(TOK_LET, "let")
+    expectTok(TOK_IDENT, "ten")
+    expectTok(TOK_ASSIGN, "=")
+    expectTok(TOK_INT, "10")
+    expectTok(TOK_SEMICOLON, ";")
+    // let add = fn(x, y) { x + y; };
+    expectTok(TOK_LET, "let")
+    expectTok(TOK_IDENT, "add")
+    expectTok(TOK_ASSIGN, "=")
+    expectTok(TOK_FUNCTION, "fn")
+    expectTok(TOK_LPAREN, "(")
+    expectTok(TOK_IDENT, "x")
+    expectTok(TOK_COMMA, ",")
+    expectTok(TOK_IDENT, "y")
+    expectTok(TOK_RPAREN, ")")
+    expectTok(TOK_LBRACE, "{")
+    expectTok(TOK_IDENT, "x")
+    expectTok(TOK_PLUS, "+")
+    expectTok(TOK_IDENT, "y")
+    expectTok(TOK_SEMICOLON, ";")
+    expectTok(TOK_RBRACE, "}")
+    expectTok(TOK_SEMICOLON, ";")
+    // let result = add(five, ten);
+    expectTok(TOK_LET, "let")
+    expectTok(TOK_IDENT, "result")
+    expectTok(TOK_ASSIGN, "=")
+    expectTok(TOK_IDENT, "add")
+    expectTok(TOK_LPAREN, "(")
+    expectTok(TOK_IDENT, "five")
+    expectTok(TOK_COMMA, ",")
+    expectTok(TOK_IDENT, "ten")
+    expectTok(TOK_RPAREN, ")")
+    expectTok(TOK_SEMICOLON, ";")
+    // !-/*5;
+    expectTok(TOK_BANG, "!")
+    expectTok(TOK_MINUS, "-")
+    expectTok(TOK_SLASH, "/")
+    expectTok(TOK_ASTERISK, "*")
+    expectTok(TOK_INT, "5")
+    expectTok(TOK_SEMICOLON, ";")
+    // 5 < 10 > 5;
+    expectTok(TOK_INT, "5")
+    expectTok(TOK_LT, "<")
+    expectTok(TOK_INT, "10")
+    expectTok(TOK_GT, ">")
+    expectTok(TOK_INT, "5")
+    expectTok(TOK_SEMICOLON, ";")
+    // if (5 < 10) { return true; } else { return false; }
+    expectTok(TOK_IF, "if")
+    expectTok(TOK_LPAREN, "(")
+    expectTok(TOK_INT, "5")
+    expectTok(TOK_LT, "<")
+    expectTok(TOK_INT, "10")
+    expectTok(TOK_RPAREN, ")")
+    expectTok(TOK_LBRACE, "{")
+    expectTok(TOK_RETURN, "return")
+    expectTok(TOK_TRUE, "true")
+    expectTok(TOK_SEMICOLON, ";")
+    expectTok(TOK_RBRACE, "}")
+    expectTok(TOK_ELSE, "else")
+    expectTok(TOK_LBRACE, "{")
+    expectTok(TOK_RETURN, "return")
+    expectTok(TOK_FALSE, "false")
+    expectTok(TOK_SEMICOLON, ";")
+    expectTok(TOK_RBRACE, "}")
+    // 10 == 10;
+    expectTok(TOK_INT, "10")
+    expectTok(TOK_EQ, "==")
+    expectTok(TOK_INT, "10")
+    expectTok(TOK_SEMICOLON, ";")
+    // 10 != 9;
+    expectTok(TOK_INT, "10")
+    expectTok(TOK_NOT_EQ, "!=")
+    expectTok(TOK_INT, "9")
+    expectTok(TOK_SEMICOLON, ";")
+    // EOF
+    expectTok(TOK_EOF, "")
+}
+
+// ============================================================
+// Parser Tests
+// ============================================================
+
+fun testParserLetStatements(): Unit {
+    println("test: parser let statements")
+    expectParse("let x = 5;", "let x = 5;")
+    expectParse("let y = 10;", "let y = 10;")
+    expectParse("let foobar = 838383;", "let foobar = 838383;")
+}
+
+fun testParserReturnStatements(): Unit {
+    println("test: parser return statements")
+    expectParse("return 5;", "return 5;")
+    expectParse("return 10;", "return 10;")
+    expectParse("return 993322;", "return 993322;")
+}
+
+fun testParserIdentifierExpression(): Unit {
+    println("test: parser identifier expression")
+    expectParse("foobar;", "foobar")
+}
+
+fun testParserIntegerLiteral(): Unit {
+    println("test: parser integer literal")
+    expectParse("5;", "5")
+}
+
+fun testParserPrefixExpressions(): Unit {
+    println("test: parser prefix expressions")
+    expectParse("!5;", "(!5)")
+    expectParse("-15;", "(-15)")
+    expectParse("!true;", "(!true)")
+    expectParse("!false;", "(!false)")
+}
+
+fun testParserInfixExpressions(): Unit {
+    println("test: parser infix expressions")
+    expectParse("5 + 5;", "(5 + 5)")
+    expectParse("5 - 5;", "(5 - 5)")
+    expectParse("5 * 5;", "(5 * 5)")
+    expectParse("5 / 5;", "(5 / 5)")
+    expectParse("5 > 5;", "(5 > 5)")
+    expectParse("5 < 5;", "(5 < 5)")
+    expectParse("5 == 5;", "(5 == 5)")
+    expectParse("5 != 5;", "(5 != 5)")
+    expectParse("true == true;", "(true == true)")
+    expectParse("true != false;", "(true != false)")
+    expectParse("false == false;", "(false == false)")
+}
+
+fun testParserOperatorPrecedence(): Unit {
+    println("test: parser operator precedence")
+    expectParse("-a * b;", "((-a) * b)")
+    expectParse("!-a;", "(!(-a))")
+    expectParse("a + b + c;", "((a + b) + c)")
+    expectParse("a + b - c;", "((a + b) - c)")
+    expectParse("a * b * c;", "((a * b) * c)")
+    expectParse("a * b / c;", "((a * b) / c)")
+    expectParse("a + b / c;", "(a + (b / c))")
+    expectParse("a + b * c + d / e - f;", "(((a + (b * c)) + (d / e)) - f)")
+    expectParse("5 > 4 == 3 < 4;", "((5 > 4) == (3 < 4))")
+    expectParse("5 < 4 != 3 > 4;", "((5 < 4) != (3 > 4))")
+    expectParse("3 + 4 * 5 == 3 * 1 + 4 * 5;", "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))")
+}
+
+fun testParserBooleanExpression(): Unit {
+    println("test: parser boolean expressions")
+    expectParse("true;", "true")
+    expectParse("false;", "false")
+}
+
+fun testParserGroupedExpressions(): Unit {
+    println("test: parser grouped expressions")
+    expectParse("1 + (2 + 3) + 4;", "((1 + (2 + 3)) + 4)")
+    expectParse("(5 + 5) * 2;", "((5 + 5) * 2)")
+    expectParse("2 / (5 + 5);", "(2 / (5 + 5))")
+    expectParse("-(5 + 5);", "(-(5 + 5))")
+    expectParse("!(true == true);", "(!(true == true))")
+}
+
+fun testParserIfExpression(): Unit {
+    println("test: parser if expression")
+    expectParse("if (x < y) { x }", "if(x < y)x")
+}
+
+fun testParserIfElseExpression(): Unit {
+    println("test: parser if-else expression")
+    expectParse("if (x < y) { x } else { y }", "if(x < y)xelsey")
+}
+
+fun testParserFunctionLiteral(): Unit {
+    println("test: parser function literal")
+    expectParse("fn(x, y) { x + y; }", "fn(x, y)(x + y)")
+}
+
+fun testParserFunctionParameterParsing(): Unit {
+    println("test: parser function parameters")
+    expectParse("fn() { 1 }", "fn()1")
+    expectParse("fn(x) { x }", "fn(x)x")
+    expectParse("fn(x, y, z) { x }", "fn(x, y, z)x")
+}
+
+fun testParserCallExpression(): Unit {
+    println("test: parser call expression")
+    expectParse("add(1, 2 * 3, 4 + 5);", "add(1, (2 * 3), (4 + 5))")
+}
+
+// ============================================================
+// Main
+// ============================================================
+
+fun main(): Unit {
+    println("Monkey Language Interpreter — Rockit")
+    println("====================================")
+
+    // Lexer tests
+    testLexer1()
+    testLexer2()
+
+    // Parser tests
+    testParserLetStatements()
+    testParserReturnStatements()
+    testParserIdentifierExpression()
+    testParserIntegerLiteral()
+    testParserPrefixExpressions()
+    testParserInfixExpressions()
+    testParserOperatorPrecedence()
+    testParserBooleanExpression()
+    testParserGroupedExpressions()
+    testParserIfExpression()
+    testParserIfElseExpression()
+    testParserFunctionLiteral()
+    testParserFunctionParameterParsing()
+    testParserCallExpression()
+
+    println("====================================")
+    println(toString(testsPassed) + " passed, " + toString(testsFailed) + " failed")
+}

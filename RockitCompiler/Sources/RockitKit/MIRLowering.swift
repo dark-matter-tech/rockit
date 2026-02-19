@@ -712,6 +712,9 @@ public final class MIRLowering {
                         thisTemp = builder.emitLoad(src: "this")
                     }
                     builder.emit(.setField(object: thisTemp, fieldName: name, value: value))
+                } else {
+                    // Module-level global variable
+                    builder.emitStore(dest: "global.\(name)", src: value)
                 }
             } else if case .memberAccess(let obj, let member, _) = a.target {
                 let objTemp = lowerExpression(obj)

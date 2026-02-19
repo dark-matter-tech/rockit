@@ -697,11 +697,14 @@ public final class LLVMCodeGen {
             // Skip explicit 'this' in method parameters — already handled above
             if name == "this" && isMethod { continue }
             let lt: String
-            if let inferred = inferredParams[name] {
+            let formal = llvmType(type)
+            if formal != "void" {
+                // Trust the formal MIR type when available
+                lt = formal
+            } else if let inferred = inferredParams[name] {
                 lt = inferred
             } else {
-                let formal = llvmType(type)
-                lt = formal != "void" ? formal : "i64"
+                lt = "i64"
             }
             let paramLLVM = "%param.\(name)"
             paramMap[name] = paramLLVM
@@ -737,11 +740,13 @@ public final class LLVMCodeGen {
                 // Skip explicit 'this' — already handled above
                 if name == "this" && isMethod { continue }
                 let lt: String
-                if let inferred = inferredParams[name] {
+                let formal = llvmType(type)
+                if formal != "void" {
+                    lt = formal
+                } else if let inferred = inferredParams[name] {
                     lt = inferred
                 } else {
-                    let formal = llvmType(type)
-                    lt = formal != "void" ? formal : "i64"
+                    lt = "i64"
                 }
                 let allocaName = "%p.\(name)"
                 registerMap["param.\(name)"] = allocaName
@@ -924,7 +929,11 @@ public final class LLVMCodeGen {
                 case .eq(_, let l, let r, let t), .neq(_, let l, let r, let t),
                      .lt(_, let l, let r, let t), .lte(_, let l, let r, let t),
                      .gt(_, let l, let r, let t), .gte(_, let l, let r, let t):
-                    let lt = llvmArithType(t)
+                    let lt: String
+                    switch t {
+                    case .string, .reference, .nullable: lt = "ptr"
+                    default: lt = llvmArithType(t)
+                    }
                     inferParamFromOperand(l, type: lt, originMap: originMap, inferred: &inferred)
                     inferParamFromOperand(r, type: lt, originMap: originMap, inferred: &inferred)
                 case .stringConcat(_, let parts):
@@ -1067,12 +1076,18 @@ public final class LLVMCodeGen {
                         tempTypes[d] = globalType
                     } else if src.hasPrefix("param.") {
                         let paramName = String(src.dropFirst(6))
-                        // Use inferred type first, then formal type, then default
-                        if let inferred = inferredParams[paramName] {
-                            tempTypes[d] = inferred
-                        } else if let pt = function.parameters.first(where: { $0.0 == paramName }) {
+                        // Use formal type first, then inferred, then default
+                        if let pt = function.parameters.first(where: { $0.0 == paramName }) {
                             let lt = llvmType(pt.1)
-                            tempTypes[d] = lt != "void" ? lt : "i64"
+                            if lt != "void" {
+                                tempTypes[d] = lt
+                            } else if let inferred = inferredParams[paramName] {
+                                tempTypes[d] = inferred
+                            } else {
+                                tempTypes[d] = "i64"
+                            }
+                        } else if let inferred = inferredParams[paramName] {
+                            tempTypes[d] = inferred
                         } else {
                             tempTypes[d] = "i64"
                         }
@@ -1353,8 +1368,15 @@ public final class LLVMCodeGen {
                 let fieldName = String(src.dropFirst(7))  // "global.x" → "x"
                 return emitGetField(dest: dest, object: "this", fieldName: fieldName)
             } else if src.hasPrefix("param.") || src.hasPrefix("global.") || src == "this" || src == "super" {
-                let srcType = typeOf(dest)
+                let srcType = typeOf(src)
                 let tmp = nextSSA()
+                // Propagate type info from param/global to dest
+                if registerTypes[src] != nil {
+                    registerTypes[dest] = registerTypes[src]
+                }
+                if knownIntTemps.contains(src) {
+                    knownIntTemps.insert(dest)
+                }
                 return [
                     "\(tmp) = load \(srcType), ptr \(addrOf(src))",
                     "store \(srcType) \(tmp), ptr \(addrOf(dest))"
@@ -1794,6 +1816,10 @@ public final class LLVMCodeGen {
             guard seen.insert(allocaName).inserted else { continue }
             // Skip the return value — ownership transfers to caller
             if allocaName == returnTemp { continue }
+            // Skip globals — their values persist after function return.
+            // The function-local ARC flag tracks writes within this call,
+            // but releasing on exit would free values still referenced by the global.
+            if allocaName.hasPrefix("global.") { continue }
             // Skip temps without flags (shouldn't happen, but defensive)
             guard let flagName = arcFlags[allocaName] else { continue }
 
@@ -1986,7 +2012,12 @@ public final class LLVMCodeGen {
             }
             let hasKnownIntOperand = knownIntTemps.contains(lhs) || knownIntTemps.contains(rhs)
 
-            if isKnownIntType || hasKnownIntOperand {
+            // Check if operands are string (ptr) types — if so, must use string comparison
+            let lhsIsPtr = typeOf(lhs) == "ptr"
+            let rhsIsPtr = typeOf(rhs) == "ptr"
+            let hasStringOperand = lhsIsPtr || rhsIsPtr
+
+            if !hasStringOperand && (isKnownIntType || hasKnownIntOperand) {
                 // Direct integer comparison — no function call
                 let tmp1 = nextSSA()
                 let tmp2 = nextSSA()
