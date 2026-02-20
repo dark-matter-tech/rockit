@@ -18,7 +18,12 @@ curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompi
 iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
 ```
 
-The installer downloads a prebuilt binary if available, or builds from source as a fallback.
+The installer downloads a prebuilt binary if available, or builds from source as a fallback. The release includes:
+
+- `rockit` — compiler and build tool
+- `fuel` — package manager
+- Standard library (`rockit.json`, `rockit.core.*`, `rockit.io.*`)
+- C runtime (`rockit_runtime.c`)
 
 **Update:**
 ```bash

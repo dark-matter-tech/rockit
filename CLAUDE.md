@@ -20,16 +20,32 @@ From Stage 2 onward, each new version of `command` is compiled by the previous v
 
 ## Ecosystem
 
-| Tool | Name |
-|------|------|
-| Language | Rockit (.rok / .rokb) |
-| CLI / Build Tool | Command |
-| Package Manager | Fuel |
-| Test Framework | Probe |
-| Registry | Silo |
-| REPL | Launch |
-| Browser | Nova |
-| Rendering Engine | Supernova |
+| Tool | Name | Status |
+|------|------|--------|
+| Language | Rockit (.rok / .rokb) | Shipped |
+| CLI / Build Tool | Command | Shipped |
+| Package Manager | Fuel | Shipped (bundled with Rockit releases) |
+| Standard Library | stdlib (`rockit.*`) | Shipped (bundled with Rockit releases) |
+| Test Framework | Probe | Planned |
+| Registry | Silo | Planned |
+| REPL | Launch | Shipped |
+| Browser | Nova | Planned |
+| Rendering Engine | Supernova | Planned |
+
+### Distribution
+
+Rockit releases bundle the compiler, Fuel, stdlib, and C runtime into a single tarball. Fuel is built from the separate `fuel` repo (`Dark-Matter/fuel`) during the release workflow. The release structure:
+
+```
+rockit/
+  bin/
+    rockit              # Stage 1 compiler
+    fuel                # Package manager
+  share/rockit/
+    rockit_runtime.c    # C runtime
+    rockit_runtime.h
+    stdlib/rockit/      # Standard library modules
+```
 
 ## Nova Browser Architecture
 
