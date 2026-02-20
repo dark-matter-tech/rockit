@@ -147,6 +147,18 @@ public final class ASTNavigator {
             return NodeAtPosition(kind: .declaration(decl), enclosingDeclaration: enclosingDecl, enclosingClassName: enclosingClass)
 
         case .classDecl(let c):
+            // Check constructor params
+            for param in c.constructorParams {
+                if spanContains(param.span, position) {
+                    return NodeAtPosition(kind: .parameter(param), enclosingDeclaration: decl, enclosingClassName: c.name)
+                }
+            }
+            // Check supertypes
+            for st in c.superTypes {
+                if let result = findInTypeNode(st, at: position, enclosingDecl: decl, enclosingClass: c.name) {
+                    return result
+                }
+            }
             for member in c.members {
                 if let result = findInDeclaration(member, at: position, enclosingDecl: decl, enclosingClass: c.name) {
                     return result
@@ -155,6 +167,12 @@ public final class ASTNavigator {
             return NodeAtPosition(kind: .declaration(decl), enclosingDeclaration: enclosingDecl, enclosingClassName: enclosingClass)
 
         case .interfaceDecl(let i):
+            // Check supertypes
+            for st in i.superTypes {
+                if let result = findInTypeNode(st, at: position, enclosingDecl: decl, enclosingClass: i.name) {
+                    return result
+                }
+            }
             for member in i.members {
                 if let result = findInDeclaration(member, at: position, enclosingDecl: decl, enclosingClass: i.name) {
                     return result
@@ -203,6 +221,43 @@ public final class ASTNavigator {
         default:
             return NodeAtPosition(kind: .declaration(decl), enclosingDeclaration: enclosingDecl, enclosingClassName: enclosingClass)
         }
+    }
+
+    /// Check if position falls on a TypeNode (e.g. supertype reference) and return a synthetic identifier expression
+    private static func findInTypeNode(
+        _ typeNode: TypeNode,
+        at position: SourceLocation,
+        enclosingDecl: Declaration?,
+        enclosingClass: String?
+    ) -> NodeAtPosition? {
+        switch typeNode {
+        case .simple(let name, _, let span):
+            if spanContains(span, position) {
+                return NodeAtPosition(
+                    kind: .expression(.identifier(name, span)),
+                    enclosingDeclaration: enclosingDecl,
+                    enclosingClassName: enclosingClass
+                )
+            }
+        case .qualified(let base, let member, let span):
+            if spanContains(span, position) {
+                return NodeAtPosition(
+                    kind: .expression(.identifier(member, span)),
+                    enclosingDeclaration: enclosingDecl,
+                    enclosingClassName: enclosingClass
+                )
+            }
+            if let result = findInTypeNode(base, at: position, enclosingDecl: enclosingDecl, enclosingClass: enclosingClass) {
+                return result
+            }
+        case .nullable(let inner, _):
+            if let result = findInTypeNode(inner, at: position, enclosingDecl: enclosingDecl, enclosingClass: enclosingClass) {
+                return result
+            }
+        default:
+            break
+        }
+        return nil
     }
 
     private static func findInBlock(
