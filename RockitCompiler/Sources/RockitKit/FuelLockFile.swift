@@ -1,0 +1,163 @@
+// FuelLockFile.swift
+// RockitKit — Rockit Language Compiler
+// Copyright © 2026 Dark Matter Tech. All rights reserved.
+
+import Foundation
+
+/// A locked package entry in fuel.lock
+public struct LockedPackage: Equatable {
+    public let name: String
+    public let version: SemanticVersion
+    public let gitURL: String?
+    public let commitHash: String
+    public let dependencies: [String]
+
+    public init(name: String, version: SemanticVersion, gitURL: String?, commitHash: String, dependencies: [String]) {
+        self.name = name
+        self.version = version
+        self.gitURL = gitURL
+        self.commitHash = commitHash
+        self.dependencies = dependencies
+    }
+}
+
+/// Reads and writes fuel.lock for reproducible builds
+public struct FuelLockFile: Equatable {
+    public let packages: [LockedPackage]
+
+    public init(packages: [LockedPackage]) {
+        self.packages = packages
+    }
+
+    /// Read a lock file from disk
+    public static func read(from path: String) -> FuelLockFile? {
+        guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return nil
+        }
+        return parse(contents: contents)
+    }
+
+    /// Write the lock file to disk
+    public func write(to path: String) throws {
+        try serialize().write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    /// Look up a locked package by name
+    public func findPackage(named name: String) -> LockedPackage? {
+        packages.first { $0.name == name }
+    }
+
+    // MARK: - Parsing
+
+    /// Parse fuel.lock contents
+    public static func parse(contents: String) -> FuelLockFile? {
+        var packages: [LockedPackage] = []
+        var currentFields: [String: String] = [:]
+
+        for line in contents.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Skip empty lines and comments
+            if trimmed.isEmpty || trimmed.hasPrefix("#") {
+                continue
+            }
+
+            // New package block
+            if trimmed == "[[package]]" {
+                if let pkg = buildLockedPackage(from: currentFields) {
+                    packages.append(pkg)
+                }
+                currentFields = [:]
+                continue
+            }
+
+            // Key = value
+            guard let eqIdx = trimmed.firstIndex(of: "=") else { continue }
+            let key = String(trimmed[trimmed.startIndex..<eqIdx])
+                .trimmingCharacters(in: .whitespaces)
+            let rawValue = String(trimmed[trimmed.index(after: eqIdx)...])
+                .trimmingCharacters(in: .whitespaces)
+            currentFields[key] = rawValue
+        }
+
+        // Don't forget the last block
+        if let pkg = buildLockedPackage(from: currentFields) {
+            packages.append(pkg)
+        }
+
+        return FuelLockFile(packages: packages)
+    }
+
+    private static func buildLockedPackage(from fields: [String: String]) -> LockedPackage? {
+        guard let name = stripQuotes(fields["name"]),
+              let versionStr = stripQuotes(fields["version"]),
+              let version = SemanticVersion(parsing: versionStr) else {
+            return nil
+        }
+
+        let gitURL = stripQuotes(fields["git"])
+        let commitHash = stripQuotes(fields["commit"]) ?? ""
+        let deps = parseDependencyList(fields["dependencies"] ?? "[]")
+
+        return LockedPackage(
+            name: name,
+            version: version,
+            gitURL: gitURL,
+            commitHash: commitHash,
+            dependencies: deps
+        )
+    }
+
+    private static func parseDependencyList(_ value: String) -> [String] {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("[") && trimmed.hasSuffix("]") else { return [] }
+        let inner = String(trimmed.dropFirst().dropLast())
+            .trimmingCharacters(in: .whitespaces)
+        if inner.isEmpty { return [] }
+
+        return inner.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { s in
+                var v = s
+                if v.hasPrefix("\"") && v.hasSuffix("\"") && v.count >= 2 {
+                    v = String(v.dropFirst().dropLast())
+                }
+                return v
+            }
+            .filter { !$0.isEmpty }
+    }
+
+    private static func stripQuotes(_ value: String?) -> String? {
+        guard var v = value else { return nil }
+        v = v.trimmingCharacters(in: .whitespaces)
+        if v.hasPrefix("\"") && v.hasSuffix("\"") && v.count >= 2 {
+            v = String(v.dropFirst().dropLast())
+        }
+        return v.isEmpty ? nil : v
+    }
+
+    // MARK: - Serialization
+
+    /// Serialize to fuel.lock format
+    public func serialize() -> String {
+        var lines: [String] = []
+        lines.append("# fuel.lock — auto-generated by Fuel, do not edit")
+        lines.append("")
+
+        for (i, pkg) in packages.sorted(by: { $0.name < $1.name }).enumerated() {
+            if i > 0 { lines.append("") }
+            lines.append("[[package]]")
+            lines.append("name = \"\(pkg.name)\"")
+            lines.append("version = \"\(pkg.version)\"")
+            if let git = pkg.gitURL {
+                lines.append("git = \"\(git)\"")
+            }
+            lines.append("commit = \"\(pkg.commitHash)\"")
+            let depsStr = pkg.dependencies.map { "\"\($0)\"" }.joined(separator: ", ")
+            lines.append("dependencies = [\(depsStr)]")
+        }
+
+        lines.append("")
+        return lines.joined(separator: "\n")
+    }
+}

@@ -4372,6 +4372,7 @@ extension LLVMCodeGen {
         fileName: String,
         outputPath: String,
         runtimeDir: String,
+        libPaths: [String] = [],
         emitLLVM: Bool = false
     ) throws -> String {
         let diagnostics = DiagnosticEngine()
@@ -4386,7 +4387,7 @@ extension LLVMCodeGen {
 
         // Resolve imports
         let sourceDir = (fileName as NSString).deletingLastPathComponent
-        let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
+        let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: libPaths, diagnostics: diagnostics)
         let ast = importResolver.resolve(parsedAST)
         print(" done")
 
