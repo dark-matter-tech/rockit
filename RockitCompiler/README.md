@@ -241,29 +241,29 @@ Works with any LSP-compatible editor. IDE configs are provided in `ide/` for Jet
 
 | Feature | LSP Method | Status |
 |---------|-----------|--------|
-| Diagnostics | `textDocument/publishDiagnostics` | Done |
-| Hover | `textDocument/hover` | Done |
-| Completion | `textDocument/completion` | Done |
-| Go to Definition | `textDocument/definition` | Done |
-| Go to Type Definition | `textDocument/typeDefinition` | Done |
-| Go to Implementation | `textDocument/implementation` | Done |
-| Find References | `textDocument/references` | Done |
-| Document Symbols | `textDocument/documentSymbol` | Done |
-| Workspace Symbols | `workspace/symbol` | Done |
-| Signature Help | `textDocument/signatureHelp` | Done |
-| Rename Symbol | `textDocument/rename` | Done |
-| Call Hierarchy | `callHierarchy/incomingCalls`, `outgoingCalls` | Done |
-| Semantic Tokens | `textDocument/semanticTokens/full` | Done |
-| Document Formatting | `textDocument/formatting` | Done |
-| On Type Formatting | `textDocument/onTypeFormatting` | Done |
-| Inlay Hints | `textDocument/inlayHint` | Done |
-| Code Actions | `textDocument/codeAction` | Done |
-| Document Links | `textDocument/documentLink` | Done |
-| Folding Ranges | `textDocument/foldingRange` | Done |
-| Document Highlight | `textDocument/documentHighlight` | Done |
-| Selection Range | `textDocument/selectionRange` | Done |
-| Type Hierarchy | `typeHierarchy/supertypes`, `subtypes` | Done |
-| Range Formatting | `textDocument/rangeFormatting` | Done |
+| Diagnostics | `textDocument/publishDiagnostics` | Tested |
+| Hover | `textDocument/hover` | Tested |
+| Completion | `textDocument/completion` | Tested |
+| Go to Definition | `textDocument/definition` | Tested |
+| Go to Type Definition | `textDocument/typeDefinition` | Tested |
+| Go to Implementation | `textDocument/implementation` | Tested |
+| Find References | `textDocument/references` | Tested |
+| Document Symbols | `textDocument/documentSymbol` | Tested |
+| Workspace Symbols | `workspace/symbol` | Tested |
+| Signature Help | `textDocument/signatureHelp` | Tested |
+| Rename Symbol | `textDocument/rename` | Tested |
+| Call Hierarchy | `callHierarchy/incomingCalls`, `outgoingCalls` | TODO: test |
+| Semantic Tokens | `textDocument/semanticTokens/full` | Tested |
+| Document Formatting | `textDocument/formatting` | Tested |
+| On Type Formatting | `textDocument/onTypeFormatting` | TODO: test |
+| Inlay Hints | `textDocument/inlayHint` | Tested |
+| Code Actions | `textDocument/codeAction` | TODO: test |
+| Document Links | `textDocument/documentLink` | Tested |
+| Folding Ranges | `textDocument/foldingRange` | Tested |
+| Document Highlight | `textDocument/documentHighlight` | Tested |
+| Selection Range | `textDocument/selectionRange` | TODO: test |
+| Type Hierarchy | `typeHierarchy/supertypes`, `subtypes` | Tested |
+| Range Formatting | `textDocument/rangeFormatting` | TODO: test |
 | Incremental Sync | `textDocument/didChange` (mode 2) | Done |
 
 ### Editor Setup
