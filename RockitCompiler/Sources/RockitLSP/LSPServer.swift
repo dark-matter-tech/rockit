@@ -11,6 +11,7 @@ public final class LSPServer {
     private let analysisEngine: AnalysisEngine
     private let input: FileHandle
     private let output: FileHandle
+    private var workspaceRoot: String?
 
     public init() {
         self.analysisEngine = AnalysisEngine(documentManager: documentManager)
@@ -68,6 +69,22 @@ public final class LSPServer {
             handleDocumentSymbol(msg)
         case "textDocument/signatureHelp":
             handleSignatureHelp(msg)
+        case "textDocument/references":
+            handleReferences(msg)
+        case "textDocument/prepareRename":
+            handlePrepareRename(msg)
+        case "textDocument/rename":
+            handleRename(msg)
+        case "textDocument/semanticTokens/full":
+            handleSemanticTokensFull(msg)
+        case "textDocument/formatting":
+            handleFormatting(msg)
+        case "textDocument/inlayHint":
+            handleInlayHint(msg)
+        case "workspace/symbol":
+            handleWorkspaceSymbol(msg)
+        case "textDocument/codeAction":
+            handleCodeAction(msg)
 
         default:
             if let id = msg.id {
@@ -81,10 +98,19 @@ public final class LSPServer {
     private func handleInitialize(_ msg: JSONRPCMessage) {
         guard let id = msg.id else { return }
 
+        // Extract workspace root from initialize params
+        if let params = msg.params {
+            if let rootUri = params["rootUri"] as? String {
+                workspaceRoot = uriToPath(rootUri)
+            } else if let rootPath = params["rootPath"] as? String {
+                workspaceRoot = rootPath
+            }
+        }
+
         let capabilities: [String: Any] = [
             "textDocumentSync": [
                 "openClose": true,
-                "change": 1  // Full sync
+                "change": 2  // Incremental sync
             ] as [String: Any],
             "hoverProvider": true,
             "completionProvider": [
@@ -95,6 +121,23 @@ public final class LSPServer {
             "documentSymbolProvider": true,
             "signatureHelpProvider": [
                 "triggerCharacters": ["(", ","]
+            ] as [String: Any],
+            "referencesProvider": true,
+            "renameProvider": [
+                "prepareProvider": true
+            ] as [String: Any],
+            "semanticTokensProvider": [
+                "legend": [
+                    "tokenTypes": LSPSemanticTokenType.legend,
+                    "tokenModifiers": LSPSemanticTokenModifier.legend
+                ] as [String: Any],
+                "full": true
+            ] as [String: Any],
+            "documentFormattingProvider": true,
+            "inlayHintProvider": true,
+            "workspaceSymbolProvider": true,
+            "codeActionProvider": [
+                "codeActionKinds": ["quickfix", "refactor"]
             ] as [String: Any]
         ]
 
@@ -102,12 +145,12 @@ public final class LSPServer {
             "capabilities": capabilities,
             "serverInfo": [
                 "name": "rockit-lsp",
-                "version": "0.1.0"
+                "version": "0.2.0"
             ] as [String: Any]
         ]
 
         sendResult(id: id, result: result)
-        log("Initialized with capabilities")
+        log("Initialized with capabilities (workspace: \(workspaceRoot ?? "none"))")
     }
 
     private func handleShutdown(_ msg: JSONRPCMessage) {
@@ -134,12 +177,23 @@ public final class LSPServer {
         guard let params = msg.params,
               let textDocument = params["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
-              let changes = params["contentChanges"] as? [[String: Any]],
-              let firstChange = changes.first,
-              let text = firstChange["text"] as? String else { return }
+              let changes = params["contentChanges"] as? [[String: Any]] else { return }
 
         let version = textDocument["version"] as? Int ?? 0
-        documentManager.update(uri: uri, text: text, version: version)
+
+        for change in changes {
+            guard let text = change["text"] as? String else { continue }
+
+            if let rangeJSON = change["range"] as? [String: Any],
+               let range = LSPRange(json: rangeJSON) {
+                // Incremental change
+                documentManager.applyIncrementalChange(uri: uri, version: version, range: range, text: text)
+            } else {
+                // Full content replacement (fallback)
+                documentManager.update(uri: uri, text: text, version: version)
+            }
+        }
+
         analyzeAndPublishDiagnostics(uri: uri)
     }
 
@@ -252,6 +306,184 @@ public final class LSPServer {
         } else {
             sendResult(id: id, result: NSNull())
         }
+    }
+
+    // MARK: - Find References
+
+    private func handleReferences(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let includeDecl = (msg.params?["context"] as? [String: Any])?["includeDeclaration"] as? Bool ?? true
+        let locations = ReferencesProvider.references(
+            at: position, uri: uri,
+            analysisResult: result,
+            includeDeclaration: includeDecl
+        )
+        sendResult(id: id, result: locations.map { $0.toJSON() })
+    }
+
+    // MARK: - Rename
+
+    private func handlePrepareRename(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: NSNull()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: NSNull())
+            return
+        }
+
+        if let range = RenameProvider.prepareRename(at: position, uri: uri, analysisResult: result) {
+            sendResult(id: id, result: range.toJSON())
+        } else {
+            sendResult(id: id, result: NSNull())
+        }
+    }
+
+    private func handleRename(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params),
+              let newName = msg.params?["newName"] as? String else {
+            if let id = msg.id { sendResult(id: id, result: NSNull()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: NSNull())
+            return
+        }
+
+        if let edit = RenameProvider.rename(at: position, uri: uri, newName: newName, analysisResult: result) {
+            sendResult(id: id, result: edit.toJSON())
+        } else {
+            sendResult(id: id, result: NSNull())
+        }
+    }
+
+    // MARK: - Semantic Tokens
+
+    private func handleSemanticTokensFull(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: ["data": [Int]()]) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: ["data": [Int]()])
+            return
+        }
+
+        let data = SemanticTokensProvider.semanticTokens(for: result)
+        sendResult(id: id, result: ["data": data])
+    }
+
+    // MARK: - Formatting
+
+    private func handleFormatting(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let text = documentManager.getText(uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let options = msg.params?["options"] as? [String: Any]
+        let tabSize = options?["tabSize"] as? Int ?? 4
+        let insertSpaces = options?["insertSpaces"] as? Bool ?? true
+
+        let edits = FormattingProvider.format(text: text, tabSize: tabSize, insertSpaces: insertSpaces)
+        sendResult(id: id, result: edits.map { $0.toJSON() })
+    }
+
+    // MARK: - Inlay Hints
+
+    private func handleInlayHint(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let range: LSPRange?
+        if let rangeJSON = msg.params?["range"] as? [String: Any] {
+            range = LSPRange(json: rangeJSON)
+        } else {
+            range = nil
+        }
+
+        let hints = InlayHintsProvider.inlayHints(for: result, uri: uri, range: range)
+        sendResult(id: id, result: hints.map { $0.toJSON() })
+    }
+
+    // MARK: - Workspace Symbols
+
+    private func handleWorkspaceSymbol(_ msg: JSONRPCMessage) {
+        guard let id = msg.id else { return }
+
+        let query = msg.params?["query"] as? String ?? ""
+        let symbols = WorkspaceSymbolProvider.symbols(
+            query: query,
+            workspaceRoot: workspaceRoot,
+            analysisEngine: analysisEngine,
+            documentManager: documentManager
+        )
+        sendResult(id: id, result: symbols.map { $0.toJSON() })
+    }
+
+    // MARK: - Code Actions
+
+    private func handleCodeAction(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri),
+              let text = documentManager.getText(uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let range: LSPRange?
+        if let rangeJSON = msg.params?["range"] as? [String: Any] {
+            range = LSPRange(json: rangeJSON)
+        } else {
+            range = nil
+        }
+
+        let diagnostics = (msg.params?["context"] as? [String: Any])?["diagnostics"] as? [[String: Any]] ?? []
+
+        let actions = CodeActionProvider.codeActions(
+            uri: uri,
+            range: range,
+            diagnostics: diagnostics,
+            analysisResult: result,
+            documentText: text
+        )
+        sendResult(id: id, result: actions.map { $0.toJSON() })
     }
 
     // MARK: - Helpers

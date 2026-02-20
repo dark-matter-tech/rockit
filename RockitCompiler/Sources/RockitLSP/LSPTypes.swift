@@ -224,6 +224,163 @@ public enum LSPCompletionItemKind {
     public static let typeParameter = 25
 }
 
+// MARK: - LSP Text Edit
+
+public struct LSPTextEdit {
+    public let range: LSPRange
+    public let newText: String
+
+    func toJSON() -> [String: Any] {
+        return ["range": range.toJSON(), "newText": newText]
+    }
+}
+
+// MARK: - LSP Workspace Edit
+
+public struct LSPWorkspaceEdit {
+    public let changes: [String: [LSPTextEdit]]
+
+    func toJSON() -> [String: Any] {
+        var changesJSON: [String: Any] = [:]
+        for (uri, edits) in changes {
+            changesJSON[uri] = edits.map { $0.toJSON() }
+        }
+        return ["changes": changesJSON]
+    }
+}
+
+// MARK: - LSP Inlay Hint
+
+public struct LSPInlayHint {
+    public let position: LSPPosition
+    public let label: String
+    public let kind: Int  // 1 = Type, 2 = Parameter
+    public let paddingLeft: Bool
+    public let paddingRight: Bool
+
+    func toJSON() -> [String: Any] {
+        return [
+            "position": position.toJSON(),
+            "label": label,
+            "kind": kind,
+            "paddingLeft": paddingLeft,
+            "paddingRight": paddingRight
+        ]
+    }
+}
+
+// MARK: - LSP Symbol Information (flat, for workspace symbols)
+
+public struct LSPSymbolInformation {
+    public let name: String
+    public let kind: Int
+    public let location: LSPLocation
+    public let containerName: String?
+
+    func toJSON() -> [String: Any] {
+        var json: [String: Any] = [
+            "name": name,
+            "kind": kind,
+            "location": location.toJSON()
+        ]
+        if let container = containerName { json["containerName"] = container }
+        return json
+    }
+}
+
+// MARK: - LSP Code Action
+
+public struct LSPCodeAction {
+    public let title: String
+    public let kind: String
+    public let diagnostics: [LSPDiagnostic]?
+    public let edit: LSPWorkspaceEdit?
+
+    func toJSON() -> [String: Any] {
+        var json: [String: Any] = [
+            "title": title,
+            "kind": kind
+        ]
+        if let diagnostics = diagnostics {
+            json["diagnostics"] = diagnostics.map { $0.toJSON() }
+        }
+        if let edit = edit {
+            json["edit"] = edit.toJSON()
+        }
+        return json
+    }
+}
+
+// MARK: - LSP Semantic Token Types
+
+public enum LSPSemanticTokenType: Int, CaseIterable {
+    case namespace = 0
+    case type = 1
+    case class_ = 2
+    case enum_ = 3
+    case interface_ = 4
+    case struct_ = 5
+    case typeParameter = 6
+    case parameter = 7
+    case variable = 8
+    case property = 9
+    case enumMember = 10
+    case function_ = 11
+    case method = 12
+    case keyword = 13
+    case comment = 14
+    case string = 15
+    case number = 16
+    case operator_ = 17
+
+    public static var legend: [String] {
+        return allCases.map { $0.tokenName }
+    }
+
+    public var tokenName: String {
+        switch self {
+        case .namespace: return "namespace"
+        case .type: return "type"
+        case .class_: return "class"
+        case .enum_: return "enum"
+        case .interface_: return "interface"
+        case .struct_: return "struct"
+        case .typeParameter: return "typeParameter"
+        case .parameter: return "parameter"
+        case .variable: return "variable"
+        case .property: return "property"
+        case .enumMember: return "enumMember"
+        case .function_: return "function"
+        case .method: return "method"
+        case .keyword: return "keyword"
+        case .comment: return "comment"
+        case .string: return "string"
+        case .number: return "number"
+        case .operator_: return "operator"
+        }
+    }
+}
+
+public enum LSPSemanticTokenModifier: Int, CaseIterable {
+    case declaration = 0
+    case definition = 1
+    case readonly = 2
+    case static_ = 3
+
+    public static var legend: [String] {
+        return allCases.map { $0.modifierName }
+    }
+
+    public var modifierName: String {
+        switch self {
+        case .declaration: return "declaration"
+        case .definition: return "definition"
+        case .readonly: return "readonly"
+        case .static_: return "static"
+        }
+    }
+}
+
 // MARK: - Position Conversion
 
 /// Convert LSP position (0-indexed line, 0-indexed character) to Rockit SourceLocation (1-indexed line, 0-indexed column)
