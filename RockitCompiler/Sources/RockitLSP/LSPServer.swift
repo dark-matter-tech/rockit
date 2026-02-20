@@ -91,6 +91,8 @@ public final class LSPServer {
             handleDocumentHighlight(msg)
         case "textDocument/selectionRange":
             handleSelectionRange(msg)
+        case "textDocument/implementation":
+            handleImplementation(msg)
 
         default:
             if let id = msg.id {
@@ -147,7 +149,8 @@ public final class LSPServer {
             ] as [String: Any],
             "foldingRangeProvider": true,
             "documentHighlightProvider": true,
-            "selectionRangeProvider": true
+            "selectionRangeProvider": true,
+            "implementationProvider": true
         ]
 
         let result: [String: Any] = [
@@ -555,6 +558,24 @@ public final class LSPServer {
 
         let ranges = SelectionRangeProvider.selectionRanges(positions: positions, uri: uri, analysisResult: result)
         sendResult(id: id, result: ranges.map { $0.toJSON() })
+    }
+
+    // MARK: - Go to Implementation
+
+    private func handleImplementation(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let locations = ImplementationProvider.implementations(at: position, uri: uri, analysisResult: result)
+        sendResult(id: id, result: locations.map { $0.toJSON() })
     }
 
     // MARK: - Helpers
