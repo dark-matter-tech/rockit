@@ -4816,6 +4816,7 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "evalRockit", "i64|ptr")
     mapPut(t, "stringToBytes", "i64|ptr")
     mapPut(t, "systemExec", "i64|ptr")
+    mapPut(t, "processExit", "void|i64")
 
     // Boolean-returning functions (C returns int8_t = i8)
     mapPut(t, "isMap", "i8|i64")

@@ -3,6 +3,7 @@
 
 extern fun getenv(name: Int): Int
 extern fun system(cmd: Int): Int
+extern fun exit(code: Int): Unit
 extern fun uname(buf: Int): Int
 
 var s_argc: Int = 0
@@ -68,6 +69,12 @@ fun platformOS(): Int {
             return rockit_string_new(cstr("linux"))
         }
         return rockit_string_new(cstr("linux"))
+    }
+}
+
+fun processExit(code: Int): Unit {
+    unsafe {
+        exit(code)
     }
 }
 

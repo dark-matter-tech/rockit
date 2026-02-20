@@ -511,6 +511,7 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i64 @getEnv(ptr)")
         externalDecls.insert("declare i64 @executablePath()")
         externalDecls.insert("declare i64 @platformOS()")
+        externalDecls.insert("declare void @processExit(i64)")
         // Meta
         externalDecls.insert("declare i64 @evalRockit(ptr)")
         externalDecls.insert("declare i64 @systemExec(ptr)")

@@ -1227,6 +1227,12 @@ int64_t evalRockit(RockitString* source) {
     return 0;
 }
 
+// -- Process exit --
+
+void processExit(int64_t code) {
+    exit((int)code);
+}
+
 // -- Shell execution (used by Stage 1 build-native) --
 
 int64_t systemExec(RockitString* cmd) {
