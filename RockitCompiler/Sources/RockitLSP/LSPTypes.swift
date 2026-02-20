@@ -503,6 +503,49 @@ public struct LSPCallHierarchyOutgoingCall {
     }
 }
 
+// MARK: - LSP Type Hierarchy
+
+public struct LSPTypeHierarchyItem {
+    public let name: String
+    public let kind: Int
+    public let uri: String
+    public let range: LSPRange
+    public let selectionRange: LSPRange
+
+    func toJSON() -> [String: Any] {
+        return [
+            "name": name,
+            "kind": kind,
+            "uri": uri,
+            "range": range.toJSON(),
+            "selectionRange": selectionRange.toJSON()
+        ]
+    }
+
+    init(name: String, kind: Int, uri: String, range: LSPRange, selectionRange: LSPRange) {
+        self.name = name
+        self.kind = kind
+        self.uri = uri
+        self.range = range
+        self.selectionRange = selectionRange
+    }
+
+    init?(json: [String: Any]) {
+        guard let name = json["name"] as? String,
+              let kind = json["kind"] as? Int,
+              let uri = json["uri"] as? String,
+              let rangeJSON = json["range"] as? [String: Any],
+              let range = LSPRange(json: rangeJSON),
+              let selRangeJSON = json["selectionRange"] as? [String: Any],
+              let selRange = LSPRange(json: selRangeJSON) else { return nil }
+        self.name = name
+        self.kind = kind
+        self.uri = uri
+        self.range = range
+        self.selectionRange = selRange
+    }
+}
+
 // MARK: - LSP Document Link
 
 public struct LSPDocumentLink {

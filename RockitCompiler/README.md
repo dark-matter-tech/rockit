@@ -262,6 +262,8 @@ Works with any LSP-compatible editor. IDE configs are provided in `ide/` for Jet
 | Folding Ranges | `textDocument/foldingRange` | Done |
 | Document Highlight | `textDocument/documentHighlight` | Done |
 | Selection Range | `textDocument/selectionRange` | Done |
+| Type Hierarchy | `typeHierarchy/supertypes`, `subtypes` | Done |
+| Range Formatting | `textDocument/rangeFormatting` | Done |
 | Incremental Sync | `textDocument/didChange` (mode 2) | Done |
 
 ### Editor Setup

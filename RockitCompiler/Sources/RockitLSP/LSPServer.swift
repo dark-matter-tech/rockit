@@ -105,6 +105,14 @@ public final class LSPServer {
             handleCallHierarchyOutgoing(msg)
         case "textDocument/prepareCallHierarchy":
             handlePrepareCallHierarchy(msg)
+        case "textDocument/prepareTypeHierarchy":
+            handlePrepareTypeHierarchy(msg)
+        case "typeHierarchy/supertypes":
+            handleTypeHierarchySupertypes(msg)
+        case "typeHierarchy/subtypes":
+            handleTypeHierarchySubtypes(msg)
+        case "textDocument/rangeFormatting":
+            handleRangeFormatting(msg)
 
         default:
             if let id = msg.id {
@@ -171,14 +179,16 @@ public final class LSPServer {
                 "firstTriggerCharacter": "\n",
                 "moreTriggerCharacter": ["}", "{"]
             ] as [String: Any],
-            "callHierarchyProvider": true
+            "callHierarchyProvider": true,
+            "typeHierarchyProvider": true,
+            "documentRangeFormattingProvider": true
         ]
 
         let result: [String: Any] = [
             "capabilities": capabilities,
             "serverInfo": [
                 "name": "rockit-lsp",
-                "version": "0.2.0"
+                "version": "0.3.0"
             ] as [String: Any]
         ]
 
@@ -718,6 +728,86 @@ public final class LSPServer {
 
         let calls = CallHierarchyProvider.outgoingCalls(item: item, uri: item.uri, analysisResult: result)
         sendResult(id: id, result: calls.map { $0.toJSON() })
+    }
+
+    // MARK: - Type Hierarchy
+
+    private func handlePrepareTypeHierarchy(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let items = TypeHierarchyProvider.prepare(at: position, uri: uri, analysisResult: result)
+        sendResult(id: id, result: items.map { $0.toJSON() })
+    }
+
+    private func handleTypeHierarchySupertypes(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let params = msg.params,
+              let itemJSON = params["item"] as? [String: Any],
+              let item = LSPTypeHierarchyItem(json: itemJSON) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: item.uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let supertypes = TypeHierarchyProvider.supertypes(item: item, uri: item.uri, analysisResult: result)
+        sendResult(id: id, result: supertypes.map { $0.toJSON() })
+    }
+
+    private func handleTypeHierarchySubtypes(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let params = msg.params,
+              let itemJSON = params["item"] as? [String: Any],
+              let item = LSPTypeHierarchyItem(json: itemJSON) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: item.uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let subtypes = TypeHierarchyProvider.subtypes(item: item, uri: item.uri, analysisResult: result)
+        sendResult(id: id, result: subtypes.map { $0.toJSON() })
+    }
+
+    // MARK: - Range Formatting
+
+    private func handleRangeFormatting(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let text = documentManager.getText(uri),
+              let rangeJSON = msg.params?["range"] as? [String: Any],
+              let range = LSPRange(json: rangeJSON) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        let options = msg.params?["options"] as? [String: Any]
+        let tabSize = options?["tabSize"] as? Int ?? 4
+        let insertSpaces = options?["insertSpaces"] as? Bool ?? true
+
+        let edits = RangeFormattingProvider.formatRange(
+            text: text, range: range, tabSize: tabSize, insertSpaces: insertSpaces
+        )
+        sendResult(id: id, result: edits.map { $0.toJSON() })
     }
 
     // MARK: - Helpers
