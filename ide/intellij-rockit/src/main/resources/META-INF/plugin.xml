@@ -5,7 +5,7 @@
     <vendor email="support@darkmatter.tech" url="https://github.com/Dark-Matter/moon">Dark Matter Tech</vendor>
 
     <description><![CDATA[
-    Syntax highlighting, brace matching, and commenting for the
+    Syntax highlighting, brace matching, commenting, and Language Server Protocol support for the
     <b>Rockit</b> programming language (<code>.rok</code> files).
 
     <h3>Features</h3>
@@ -17,10 +17,19 @@
         <li>Line and block comment toggling (Cmd+/ / Ctrl+/)</li>
         <li>Auto-close quotes</li>
         <li>Configurable color scheme (Settings &gt; Editor &gt; Color Scheme &gt; Rockit)</li>
+        <li>Error diagnostics (red squiggly lines) via LSP</li>
+        <li>Code completion via LSP</li>
+        <li>Hover information via LSP</li>
+        <li>Go-to-definition via LSP</li>
+        <li>Signature help via LSP</li>
+        <li>Document symbols via LSP</li>
     </ul>
+
+    <p>LSP features require the <code>rockit</code> CLI to be installed and on your PATH.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends optional="true" config-file="lsp.xml">com.intellij.modules.lsp</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <fileType
