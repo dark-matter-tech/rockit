@@ -204,7 +204,7 @@ jobs:
           for f in Examples/test_*.rok; do
             name=$(basename "$f" .rok)
             # Skip Stage 1-only tests (compiled with Stage 1 binary after bootstrap)
-            case "$name" in test_unsafe*|test_crepr*|test_funptr*|test_freestanding*|test_byte_ops*|test_json*) echo "  ┌──────────────────────────────────────────────"; printf "  │ ⏭️  %-42s" "$name"; echo "⏭️  SKIP (Stage 1 only)"; echo "  └──────────────────────────────────────────────"; continue;; esac
+            case "$name" in test_unsafe*|test_crepr*|test_funptr*|test_freestanding*|test_byte_ops*|test_stdlib_*) echo "  ┌──────────────────────────────────────────────"; printf "  │ ⏭️  %-42s" "$name"; echo "⏭️  SKIP (Stage 1 only)"; echo "  └──────────────────────────────────────────────"; continue;; esac
             TOTAL=$((TOTAL + 1))
             echo "  ┌──────────────────────────────────────────────"
             printf "  │ 🚀 %-42s" "$name"
@@ -473,7 +473,7 @@ jobs:
           echo "  ╚═══════════════════════════════════════════╝"
           SL_PASS=0; SL_FAIL=0; SL_TOTAL=0
           SL_FAILED=""
-          for f in Examples/test_json*.rok; do
+          for f in Examples/test_stdlib_*.rok; do
             [ -f "$f" ] || continue
             SL_TOTAL=$((SL_TOTAL + 1))
             name=$(basename "$f" .rok)
