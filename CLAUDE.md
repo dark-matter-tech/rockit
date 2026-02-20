@@ -16,7 +16,7 @@ The compiler follows a standard self-hosting bootstrap:
 
 From Stage 2 onward, each new version of `command` is compiled by the previous version. Self-hosted.
 
-**Current status:** Self-hosting achieved. All compiler phases complete. 539 unit tests passing.
+**Current status:** Self-hosting achieved. All compiler phases complete. 542 unit tests passing. Runtime rewritten in modular Rockit.
 
 ## Ecosystem
 
@@ -120,10 +120,13 @@ AST → MIR intermediate representation.
 - **Runtime**: Frame alloc/free, task scheduling, event loop (C runtime for native; Scheduler/Coroutine/ActorRuntime Swift classes for VM)
 
 ### Phase 6: Codegen ✅
-MIR → bytecode (Stage 0 CodeGen.swift) and direct AST → bytecode (Stage 1 codegen.rok). Native codegen via LLVM IR (Stage 0 LLVMCodeGen.swift, Stage 1 llvmgen.rok).
+MIR → bytecode (Stage 0 CodeGen.swift) and direct AST → bytecode (Stage 1 codegen.rok). Native codegen via LLVM IR (Stage 0 LLVMCodeGen.swift, Stage 1 llvmgen.rok). Supports global variables (OP_LOAD_GLOBAL/OP_STORE_GLOBAL opcodes 83/84).
 
 ### Phase 7: Runtime ✅
 ARC with cycle detector, coroutine scheduler, actor message dispatch, platform capability bridge.
+
+### Phase 8: Freestanding Mode (`--no-runtime`) ✅
+Compiles Rockit programs without the standard runtime. Enables low-level systems programming with `Ptr<T>`, `alloc`/`free`, `bitcast`, `cstr`, `unsafe` blocks, `loadByte`/`storeByte`, `extern` C functions, `@CRepr` structs. The runtime itself (`Runtime/rockit/`) is written in Rockit using this mode.
 
 ## Project Structure
 
@@ -149,8 +152,8 @@ RockitCompiler/
 │   └── RockitCLI/                   # CLI entry point
 │       └── main.swift               # command tool
 ├── Tests/
-│   └── RockitKitTests/              # 14+ test files, 539 tests
-├── Stage1/                          # Self-hosting compiler in Rockit
+│   └── RockitKitTests/              # 14+ test files, 542 tests
+├── Stage1/                          # Self-hosting compiler in Rockit (~12K lines)
 │   ├── lexer.rok                    # Stage 1 lexer
 │   ├── parser.rok                   # Stage 1 parser
 │   ├── typechecker.rok              # Stage 1 type checker
@@ -161,9 +164,23 @@ RockitCompiler/
 │   ├── command                      # Stage 1 native binary
 │   └── stdlib/rockit/               # Standard library modules
 ├── Runtime/
-│   └── rockit_runtime.c             # C runtime (ARC, task scheduler, event loop, actor wrappers)
+│   ├── rockit_runtime.c             # C runtime (ARC, task scheduler, event loop, actor wrappers)
+│   └── rockit/                      # Modular Rockit runtime (freestanding)
+│       ├── memory.rok               # malloc/free wrappers, ARC retain/release
+│       ├── string.rok               # RockitString @CRepr struct, new, eq, neq, concat, length
+│       ├── string_ops.rok           # charAt, indexOf, substring, split, trim, etc.
+│       ├── object.rok               # RockitObject alloc, field get/set, type checking
+│       ├── list.rok                 # RockitList, create/append/get/set/remove/size
+│       ├── map.rok                  # RockitMap hash table, create/put/get/keys/remove
+│       ├── io.rok                   # println, print (int, float, string, any)
+│       ├── exception.rok            # setjmp/longjmp exception stack
+│       ├── file.rok                 # fileRead, fileWrite, fileExists, fileDelete
+│       ├── process.rok              # processArgs, getEnv, platformOS, systemExec
+│       ├── math.rok                 # sqrt, sin, cos, tan, floor, ceil, round, etc.
+│       ├── concurrency.rok          # Task scheduler, frame alloc/free, event loop
+│       └── build.sh                 # Concatenates and compiles all modules
 └── Examples/
-    └── test_f*.rok                  # 35+ feature test files
+    └── test_*.rok                   # 48 feature test files
 ```
 
 RockitKit is a standalone library so it can be imported by other tools (editor plugins, LSP server, Fuel) without the CLI.

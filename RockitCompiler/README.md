@@ -2,7 +2,7 @@
 
 The Rockit language compiler. Self-hosting — Rockit compiles itself.
 
-> **Status:** All phases complete. 539+ tests passing. Self-hosting bootstrap verified (Stage 2 == Stage 3).
+> **Status:** All phases complete. 542 tests passing. Self-hosting bootstrap verified (Stage 2 == Stage 3). Runtime rewritten in Rockit.
 
 ---
 
@@ -53,6 +53,9 @@ rockit build-native Examples/hello.rok
 # Compile to native and run
 rockit run-native Examples/hello.rok
 
+# Compile without the standard runtime (freestanding mode)
+rockit build-native Examples/test_freestanding.rok --no-runtime
+
 # Parse and dump AST
 rockit parse Examples/hello.rok --dump-ast
 
@@ -87,7 +90,7 @@ rockit version
 swift test
 ```
 
-539+ test cases covering the full compiler pipeline: lexer, parser, type checker, MIR, optimizer, codegen, VM, collections, strings, ARC, coroutines, actors, structured concurrency, file I/O, and bytecode serialization.
+542 test cases covering the full compiler pipeline: lexer, parser, type checker, MIR, optimizer, codegen, VM, collections, strings, ARC, coroutines, actors, structured concurrency, file I/O, and bytecode serialization.
 
 ---
 
@@ -169,16 +172,60 @@ RockitCompiler/
 │   │   ├── Coroutine.swift # Coroutine state machine
 │   │   └── ...             # 37+ files total
 │   └── RockitCLI/          # CLI entry point
-├── Tests/                  # 539+ tests
-├── Runtime/                # C runtime (ARC, actors, coroutines)
-├── Stage1/                 # Self-hosting compiler in Rockit
+├── Tests/                  # 542 tests
+├── Runtime/
+│   ├── rockit_runtime.c    # C runtime (ARC, actors, coroutines)
+│   └── rockit/             # Modular Rockit runtime (freestanding)
+│       ├── memory.rok      # malloc/free, ARC retain/release
+│       ├── string.rok      # String struct, new, eq, neq, concat, length
+│       ├── string_ops.rok  # charAt, indexOf, substring, split, trim
+│       ├── object.rok      # Object alloc, field access, type checking
+│       ├── list.rok        # List create/append/get/set/remove/size
+│       ├── map.rok         # Map create/put/get/keys/remove
+│       ├── io.rok          # println, print (int, float, string, any)
+│       ├── exception.rok   # setjmp/longjmp exception stack
+│       ├── file.rok        # fileRead, fileWrite, fileExists, fileDelete
+│       ├── process.rok     # processArgs, getEnv, platformOS, systemExec
+│       ├── math.rok        # sqrt, sin, cos, tan, floor, ceil, round, etc.
+│       ├── concurrency.rok # Task scheduler, frame alloc/free, event loop
+│       └── build.sh        # Concatenates and compiles all modules
+├── Stage1/                 # Self-hosting compiler in Rockit (~12K lines)
+│   ├── lexer.rok           # Stage 1 lexer
+│   ├── parser.rok          # Stage 1 parser
+│   ├── typechecker.rok     # Stage 1 type checker
+│   ├── optimizer.rok       # Stage 1 optimizer
+│   ├── codegen.rok         # Stage 1 bytecode codegen
+│   ├── llvmgen.rok         # Stage 1 LLVM native codegen
 │   ├── command.rok         # Concatenated compiler source
 │   ├── command             # Stage 1 native binary
 │   └── stdlib/             # Standard library modules
-└── Examples/
+└── Examples/               # 48 example/test .rok files
 ```
 
 RockitKit is a standalone library so it can be imported by other tools (editor plugins, LSP server, Fuel) without the CLI.
+
+### Freestanding Mode (`--no-runtime`)
+
+The `--no-runtime` flag compiles Rockit programs without linking the standard runtime. This enables low-level systems programming with direct memory control:
+
+```kotlin
+extern fun malloc(size: Int): Ptr<Int>
+extern fun free(ptr: Ptr<Int>): Unit
+extern fun puts(s: Int): Int
+
+fun main(): Unit {
+    unsafe {
+        val buf = alloc(64)
+        storeByte(buf, 0, 72)  // 'H'
+        storeByte(buf, 1, 105) // 'i'
+        storeByte(buf, 2, 0)   // null terminator
+        puts(buf)
+        free(bitcast(buf))
+    }
+}
+```
+
+Stage 1 features available in freestanding mode: `Ptr<T>`, `alloc`/`free`, `bitcast`, `cstr`, `unsafe` blocks, `loadByte`/`storeByte`, `extern` C functions, `@CRepr` structs, global variables.
 
 ## Compiler Pipeline
 

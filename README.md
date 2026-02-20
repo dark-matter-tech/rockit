@@ -8,7 +8,7 @@ Built by [Dark Matter Tech](https://github.com/Dark-Matter).
 
 ## Status
 
-The compiler is **self-hosting** — Rockit compiles itself. All compiler phases are complete and 539+ tests pass across the full pipeline.
+The compiler is **self-hosting** — Rockit compiles itself. All compiler phases are complete and 542 tests pass across the full pipeline.
 
 | Component | Status |
 |-----------|--------|
@@ -19,6 +19,9 @@ The compiler is **self-hosting** — Rockit compiles itself. All compiler phases
 | Optimizer | Complete |
 | Codegen (bytecode + native) | Complete |
 | Runtime (ARC, actors, coroutines) | Complete |
+| Runtime rewrite (Rockit, freestanding) | Complete |
+| Freestanding mode (`--no-runtime`) | Complete |
+| Global variables | Complete |
 | Structured concurrency (VM) | Complete |
 | Self-hosting bootstrap | Complete |
 | Editor support | VS Code, JetBrains, Vim/Neovim |
@@ -266,10 +269,12 @@ moon/
 ├── RockitCompiler/
 │   ├── Sources/RockitKit/       # Core compiler library (37+ files)
 │   ├── Sources/RockitCLI/       # CLI entry point
-│   ├── Tests/                   # 539+ tests
-│   ├── Runtime/                 # C runtime (ARC, actors, coroutines)
-│   ├── Stage1/                  # Self-hosting compiler in Rockit
-│   └── Examples/                # Example .rok files
+│   ├── Tests/                   # 542 tests
+│   ├── Runtime/
+│   │   ├── rockit_runtime.c     # C runtime (ARC, actors, coroutines)
+│   │   └── rockit/              # Modular Rockit runtime (12 freestanding .rok files)
+│   ├── Stage1/                  # Self-hosting compiler in Rockit (~12K lines)
+│   └── Examples/                # 48 example/test .rok files
 ├── ide/
 │   ├── shared/                  # Canonical syntax definition + generator
 │   ├── vscode/                  # VS Code extension
