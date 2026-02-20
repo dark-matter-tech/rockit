@@ -147,8 +147,7 @@ func checkCommand(file: String, dumpTypes: Bool) {
     let parsedAST = parser.parse()
 
     let sourceDir = (file as NSString).deletingLastPathComponent
-    let libPaths = resolveFuelDependencies()
-    let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: libPaths, diagnostics: diagnostics)
+    let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
     let ast = importResolver.resolve(parsedAST)
 
     let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
@@ -249,8 +248,7 @@ func buildCommand(file: String, dumpBytecode: Bool) {
     let parsedAST = parser.parse()
 
     let sourceDir = (file as NSString).deletingLastPathComponent
-    let libPaths = resolveFuelDependencies()
-    let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: libPaths, diagnostics: diagnostics)
+    let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
     let ast = importResolver.resolve(parsedAST)
 
     let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
@@ -330,8 +328,7 @@ func runCommand(file: String, trace: Bool, gcStats: Bool) {
         let parsedAST = parser.parse()
 
         let sourceDir = (file as NSString).deletingLastPathComponent
-        let libPaths = resolveFuelDependencies()
-        let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: libPaths, diagnostics: diagnostics)
+        let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
         let ast = importResolver.resolve(parsedAST)
 
         let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
@@ -1128,13 +1125,11 @@ func buildNativeCommand(file: String, dumpLLVM: Bool) {
     let runtimeDir = findRuntimeDir()
 
     do {
-        let nativeLibPaths = resolveFuelDependencies()
         let result = try LLVMCodeGen.compileToNative(
             source: source,
             fileName: file,
             outputPath: outputPath,
             runtimeDir: runtimeDir,
-            libPaths: nativeLibPaths,
             emitLLVM: false
         )
         print("\(file) \u{2192} \(result)")
@@ -1170,8 +1165,7 @@ func emitLLVMCommand(file: String) {
     let parsedAST = parser.parse()
 
     let sourceDir = (file as NSString).deletingLastPathComponent
-    let libPaths = resolveFuelDependencies()
-    let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: libPaths, diagnostics: diagnostics)
+    let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
     let ast = importResolver.resolve(parsedAST)
 
     let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
@@ -1208,13 +1202,11 @@ func runNativeCommand(file: String) {
     let runtimeDir = findRuntimeDir()
 
     do {
-        let nativeLibPaths = resolveFuelDependencies()
         let binary = try LLVMCodeGen.compileToNative(
             source: source,
             fileName: file,
             outputPath: outputPath,
             runtimeDir: runtimeDir,
-            libPaths: nativeLibPaths,
             emitLLVM: false
         )
 
@@ -1389,32 +1381,6 @@ case "lsp":
 
 case "setup-editors":
     setupEditorsCommand()
-
-case "fuel":
-    guard args.count >= 3 else {
-        print("usage: rockit fuel <install|add|remove>")
-        exit(1)
-    }
-    switch args[2] {
-    case "install":
-        fuelInstallCommand()
-    case "add":
-        fuelAddCommand(args: Array(args.dropFirst(3)))
-    case "remove":
-        fuelRemoveCommand(args: Array(args.dropFirst(3)))
-    case "clean":
-        do {
-            try PackageCache().clean()
-            print("Package cache cleared.")
-        } catch {
-            print("error: \(error)")
-            exit(1)
-        }
-    default:
-        print("error: unknown fuel command '\(args[2])'")
-        print("usage: rockit fuel <install|add|remove|clean>")
-        exit(1)
-    }
 
 case "version":
     print("rockit \(version)")
