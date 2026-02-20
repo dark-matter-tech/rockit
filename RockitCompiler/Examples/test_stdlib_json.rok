@@ -257,6 +257,166 @@ fun main(): Unit {
     assert(stringIndexOf(pretty, "\n") >= 0, "pretty print has newlines")
     assert(stringIndexOf(pretty, "  ") >= 0, "pretty print has indentation")
 
+    // ── Array Set ──────────────────────────────────────────────────────
+
+    val setArr = jsonArray()
+    jsonArrayAppend(setArr, jsonNumber(10))
+    jsonArrayAppend(setArr, jsonNumber(20))
+    jsonArrayAppend(setArr, jsonNumber(30))
+    assert(jsonArraySet(setArr, 1, jsonNumber(99)), "arraySet returns true for valid index")
+    assert(jsonGetInt(jsonArrayGet(setArr, 1)) == 99, "arraySet updates value")
+    assert(jsonGetInt(jsonArrayGet(setArr, 0)) == 10, "arraySet doesn't affect other elements")
+    assert(jsonGetInt(jsonArrayGet(setArr, 2)) == 30, "arraySet doesn't affect other elements (2)")
+    assert(!jsonArraySet(setArr, -1, jsonNumber(0)), "arraySet returns false for negative index")
+    assert(!jsonArraySet(setArr, 100, jsonNumber(0)), "arraySet returns false for out-of-bounds")
+
+    // ── Array RemoveAt ─────────────────────────────────────────────────
+
+    val rmArr = jsonArray()
+    jsonArrayAppend(rmArr, jsonString("a"))
+    jsonArrayAppend(rmArr, jsonString("b"))
+    jsonArrayAppend(rmArr, jsonString("c"))
+    assert(jsonArrayRemoveAt(rmArr, 1), "arrayRemoveAt returns true")
+    assert(jsonArraySize(rmArr) == 2, "arrayRemoveAt reduces size")
+    assert(jsonGetString(jsonArrayGet(rmArr, 0)) == "a", "arrayRemoveAt preserves before")
+    assert(jsonGetString(jsonArrayGet(rmArr, 1)) == "c", "arrayRemoveAt shifts elements")
+    assert(!jsonArrayRemoveAt(rmArr, -1), "arrayRemoveAt returns false for negative")
+    assert(!jsonArrayRemoveAt(rmArr, 99), "arrayRemoveAt returns false for out-of-bounds")
+
+    // ── Object Remove ──────────────────────────────────────────────────
+
+    val rmObj = jsonObject()
+    jsonObjectPut(rmObj, "a", jsonNumber(1))
+    jsonObjectPut(rmObj, "b", jsonNumber(2))
+    jsonObjectPut(rmObj, "c", jsonNumber(3))
+    assert(jsonObjectRemove(rmObj, "b"), "objectRemove returns true for existing key")
+    assert(!jsonObjectHas(rmObj, "b"), "objectRemove removes the key")
+    assert(jsonObjectHas(rmObj, "a"), "objectRemove preserves other keys")
+    assert(jsonObjectHas(rmObj, "c"), "objectRemove preserves other keys (2)")
+    assert(jsonObjectSize(rmObj) == 2, "objectRemove reduces size")
+    assert(!jsonObjectRemove(rmObj, "missing"), "objectRemove returns false for missing key")
+
+    // ── Object Size ────────────────────────────────────────────────────
+
+    val sizeObj = jsonObject()
+    assert(jsonObjectSize(sizeObj) == 0, "empty object size is 0")
+    jsonObjectPut(sizeObj, "x", jsonNumber(1))
+    assert(jsonObjectSize(sizeObj) == 1, "object size after one put")
+    jsonObjectPut(sizeObj, "y", jsonNumber(2))
+    assert(jsonObjectSize(sizeObj) == 2, "object size after two puts")
+
+    // ── Deep Equality ──────────────────────────────────────────────────
+
+    // Null equality
+    assert(jsonEquals(jsonNull(), jsonNull()), "null == null")
+
+    // Bool equality
+    assert(jsonEquals(jsonBool(true), jsonBool(true)), "true == true")
+    assert(jsonEquals(jsonBool(false), jsonBool(false)), "false == false")
+    assert(!jsonEquals(jsonBool(true), jsonBool(false)), "true != false")
+
+    // Number equality
+    assert(jsonEquals(jsonNumber(42), jsonNumber(42)), "42 == 42")
+    assert(!jsonEquals(jsonNumber(42), jsonNumber(43)), "42 != 43")
+    assert(jsonEquals(jsonNumberFromString("3.14"), jsonNumberFromString("3.14")), "3.14 == 3.14")
+
+    // String equality
+    assert(jsonEquals(jsonString("hello"), jsonString("hello")), "hello == hello")
+    assert(!jsonEquals(jsonString("hello"), jsonString("world")), "hello != world")
+
+    // Type mismatch
+    assert(!jsonEquals(jsonNumber(1), jsonString("1")), "number != string")
+    assert(!jsonEquals(jsonNull(), jsonBool(false)), "null != false")
+
+    // Array equality
+    val eqArr1 = jsonArray()
+    jsonArrayAppend(eqArr1, jsonNumber(1))
+    jsonArrayAppend(eqArr1, jsonNumber(2))
+    val eqArr2 = jsonArray()
+    jsonArrayAppend(eqArr2, jsonNumber(1))
+    jsonArrayAppend(eqArr2, jsonNumber(2))
+    assert(jsonEquals(eqArr1, eqArr2), "equal arrays")
+
+    val eqArr3 = jsonArray()
+    jsonArrayAppend(eqArr3, jsonNumber(2))
+    jsonArrayAppend(eqArr3, jsonNumber(1))
+    assert(!jsonEquals(eqArr1, eqArr3), "array order matters")
+
+    val eqArr4 = jsonArray()
+    jsonArrayAppend(eqArr4, jsonNumber(1))
+    assert(!jsonEquals(eqArr1, eqArr4), "different size arrays not equal")
+
+    // Object equality
+    val eqObj1 = jsonObject()
+    jsonObjectPut(eqObj1, "a", jsonNumber(1))
+    jsonObjectPut(eqObj1, "b", jsonString("hi"))
+    val eqObj2 = jsonObject()
+    jsonObjectPut(eqObj2, "a", jsonNumber(1))
+    jsonObjectPut(eqObj2, "b", jsonString("hi"))
+    assert(jsonEquals(eqObj1, eqObj2), "equal objects")
+
+    val eqObj3 = jsonObject()
+    jsonObjectPut(eqObj3, "a", jsonNumber(1))
+    jsonObjectPut(eqObj3, "b", jsonString("bye"))
+    assert(!jsonEquals(eqObj1, eqObj3), "objects with different values")
+
+    val eqObj4 = jsonObject()
+    jsonObjectPut(eqObj4, "a", jsonNumber(1))
+    assert(!jsonEquals(eqObj1, eqObj4), "objects with different key counts")
+
+    // Nested equality
+    val eqNest1 = jsonParse("{\"a\":[1,2],\"b\":{\"c\":true}}")
+    val eqNest2 = jsonParse("{\"a\":[1,2],\"b\":{\"c\":true}}")
+    assert(jsonEquals(eqNest1, eqNest2), "nested structure equality")
+
+    val eqNest3 = jsonParse("{\"a\":[1,3],\"b\":{\"c\":true}}")
+    assert(!jsonEquals(eqNest1, eqNest3), "nested structure inequality")
+
+    // Roundtrip equality
+    val rtJson = "{\"name\":\"Rockit\",\"version\":1,\"tags\":[\"fast\",\"safe\"]}"
+    val rtParsed1 = jsonParse(rtJson)
+    val rtParsed2 = jsonParse(jsonStringify(rtParsed1))
+    assert(jsonEquals(rtParsed1, rtParsed2), "roundtrip parse-stringify-parse preserves equality")
+
+    // ── Depth Limit ────────────────────────────────────────────────────
+
+    // Build a deeply nested array: [[[...]]] 200 levels deep
+    var deepInput: String = ""
+    var di: Int = 0
+    while (di < 200) {
+        deepInput = stringConcat(deepInput, "[")
+        di = di + 1
+    }
+    deepInput = stringConcat(deepInput, "1")
+    di = 0
+    while (di < 200) {
+        deepInput = stringConcat(deepInput, "]")
+        di = di + 1
+    }
+    val deepResult = jsonParse(deepInput)
+    assert(jsonIsError(deepResult), "deeply nested input returns error")
+    assert(stringIndexOf(jsonGetString(deepResult), "depth") >= 0, "depth error mentions depth")
+
+    // Normal nesting within limit should work
+    val okNest = jsonParse("[[[[1]]]]")
+    assert(!jsonIsError(okNest), "reasonable nesting works fine")
+
+    // Deeply nested objects
+    var deepObjInput: String = ""
+    di = 0
+    while (di < 200) {
+        deepObjInput = stringConcat(deepObjInput, "{\"x\":")
+        di = di + 1
+    }
+    deepObjInput = stringConcat(deepObjInput, "1")
+    di = 0
+    while (di < 200) {
+        deepObjInput = stringConcat(deepObjInput, "}")
+        di = di + 1
+    }
+    val deepObjResult = jsonParse(deepObjInput)
+    assert(jsonIsError(deepObjResult), "deeply nested objects return error")
+
     // ── Summary ────────────────────────────────────────────────────────
 
     println("")

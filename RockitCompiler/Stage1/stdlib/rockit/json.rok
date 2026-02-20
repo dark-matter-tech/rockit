@@ -145,6 +145,24 @@ fun jsonArrayGet(arr: Map, index: Int): Map {
     return listGet(list, index)
 }
 
+fun jsonArraySet(arr: Map, index: Int, item: Map): Bool {
+    val list = mapGet(arr, "value")
+    if (index < 0 || index >= listSize(list)) {
+        return false
+    }
+    listSet(list, index, item)
+    return true
+}
+
+fun jsonArrayRemoveAt(arr: Map, index: Int): Bool {
+    val list = mapGet(arr, "value")
+    if (index < 0 || index >= listSize(list)) {
+        return false
+    }
+    listRemoveAt(list, index)
+    return true
+}
+
 fun jsonArraySize(arr: Map): Int {
     val list = mapGet(arr, "value")
     return listSize(list)
@@ -166,14 +184,103 @@ fun jsonObjectGet(obj: Map, key: String): Map {
     return result
 }
 
+fun jsonObjectRemove(obj: Map, key: String): Bool {
+    val inner = mapGet(obj, "value")
+    if (mapGet(inner, key) == null) {
+        return false
+    }
+    val keys = mapKeys(inner)
+    val newInner = mapCreate()
+    var i: Int = 0
+    while (i < listSize(keys)) {
+        val k = toString(listGet(keys, i))
+        if (k != key) {
+            mapPut(newInner, k, mapGet(inner, k))
+        }
+        i = i + 1
+    }
+    mapPut(obj, "value", newInner)
+    return true
+}
+
 fun jsonObjectKeys(obj: Map): List {
     val inner = mapGet(obj, "value")
     return mapKeys(inner)
 }
 
+fun jsonObjectSize(obj: Map): Int {
+    val inner = mapGet(obj, "value")
+    return listSize(mapKeys(inner))
+}
+
 fun jsonObjectHas(obj: Map, key: String): Bool {
     val inner = mapGet(obj, "value")
     return mapGet(inner, key) != null
+}
+
+// ── Deep Equality ──────────────────────────────────────────────────────
+
+fun jsonEquals(a: Map, b: Map): Bool {
+    val ta = jsonType(a)
+    val tb = jsonType(b)
+    if (ta != tb) {
+        return false
+    }
+
+    if (ta == JSON_NULL()) {
+        return true
+    }
+
+    if (ta == JSON_BOOL()) {
+        return jsonGetBool(a) == jsonGetBool(b)
+    }
+
+    if (ta == JSON_NUMBER()) {
+        return jsonGetNumberString(a) == jsonGetNumberString(b)
+    }
+
+    if (ta == JSON_STRING()) {
+        return jsonGetString(a) == jsonGetString(b)
+    }
+
+    if (ta == JSON_ARRAY()) {
+        val sizeA = jsonArraySize(a)
+        val sizeB = jsonArraySize(b)
+        if (sizeA != sizeB) {
+            return false
+        }
+        var i: Int = 0
+        while (i < sizeA) {
+            if (!jsonEquals(jsonArrayGet(a, i), jsonArrayGet(b, i))) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    if (ta == JSON_OBJECT()) {
+        val keysA = jsonObjectKeys(a)
+        val keysB = jsonObjectKeys(b)
+        if (listSize(keysA) != listSize(keysB)) {
+            return false
+        }
+        // Check every key in A exists in B with equal value
+        var i: Int = 0
+        while (i < listSize(keysA)) {
+            val key = toString(listGet(keysA, i))
+            if (!jsonObjectHas(b, key)) {
+                return false
+            }
+            if (!jsonEquals(jsonObjectGet(a, key), jsonObjectGet(b, key))) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    return false
 }
 
 // ── Parser Internals ────────────────────────────────────────────────────
@@ -449,6 +556,14 @@ fun parseJsonValue(state: Map): Map {
 // ── Parse Array ─────────────────────────────────────────────────────────
 
 fun parseJsonArray(state: Map): Map {
+    // Check depth limit
+    val depth = toInt(mapGet(state, "depth"))
+    val maxDepth = toInt(mapGet(state, "maxDepth"))
+    if (depth >= maxDepth) {
+        return parserErrorAt(state, "Maximum nesting depth exceeded")
+    }
+    mapPut(state, "depth", depth + 1)
+
     parserAdvance(state) // consume '['
     parserSkipWhitespace(state)
 
@@ -457,6 +572,7 @@ fun parseJsonArray(state: Map): Map {
     // Empty array
     if (parserPeek(state) == "]") {
         parserAdvance(state)
+        mapPut(state, "depth", depth)
         return arr
     }
 
@@ -480,12 +596,21 @@ fun parseJsonArray(state: Map): Map {
         }
     }
 
+    mapPut(state, "depth", depth)
     return arr
 }
 
 // ── Parse Object ────────────────────────────────────────────────────────
 
 fun parseJsonObject(state: Map): Map {
+    // Check depth limit
+    val depth = toInt(mapGet(state, "depth"))
+    val maxDepth = toInt(mapGet(state, "maxDepth"))
+    if (depth >= maxDepth) {
+        return parserErrorAt(state, "Maximum nesting depth exceeded")
+    }
+    mapPut(state, "depth", depth + 1)
+
     parserAdvance(state) // consume '{'
     parserSkipWhitespace(state)
 
@@ -494,6 +619,7 @@ fun parseJsonObject(state: Map): Map {
     // Empty object
     if (parserPeek(state) == "}") {
         parserAdvance(state)
+        mapPut(state, "depth", depth)
         return obj
     }
 
@@ -537,6 +663,7 @@ fun parseJsonObject(state: Map): Map {
         }
     }
 
+    mapPut(state, "depth", depth)
     return obj
 }
 
@@ -547,6 +674,8 @@ fun jsonParse(input: String): Map {
     mapPut(state, "input", input)
     mapPut(state, "pos", 0)
     mapPut(state, "len", stringLength(input))
+    mapPut(state, "depth", 0)
+    mapPut(state, "maxDepth", 128)
 
     val result = parseJsonValue(state)
     if (jsonIsError(result)) {
