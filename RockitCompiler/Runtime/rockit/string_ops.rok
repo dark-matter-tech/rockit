@@ -40,6 +40,23 @@ fun charCodeAt(s: Int, index: Int): Int {
     }
 }
 
+fun intToChar(code: Int): Int {
+    if (code < 0) { return rockit_string_new(0) }
+    if (code > 127) { return rockit_string_new(0) }
+    unsafe {
+        val result = string_pool_alloc(1)
+        val rp = bitcast<Ptr<Int>>(result)
+        rp.offset(0).store(1)          // refCount
+        rp.offset(1).store(1)          // length
+        rp.offset(3).store(0)          // base = NULL
+        val dataPtr = result + STR_HEADER
+        storeByte(dataPtr, 0, code)
+        storeByte(dataPtr, 1, 0)       // null terminator
+        rp.offset(2).store(dataPtr)    // chars
+        return result
+    }
+}
+
 // ── Prefix / suffix ──────────────────────────────────────────────────────
 
 fun startsWith(s: Int, prefix: Int): Int {
