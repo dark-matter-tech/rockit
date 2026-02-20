@@ -5292,8 +5292,11 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
         psi = psi + 1
     }
     if (isMain) {
-        mapPut(usedExterns, "rockit_set_args", true)
-        llvmLine(buf, "  call void @rockit_set_args(i32 %argc, ptr %argv)")
+        val noRuntime = mapGet(compiler, "noRuntime") == true
+        if (noRuntime == false) {
+            mapPut(usedExterns, "rockit_set_args", true)
+            llvmLine(buf, "  call void @rockit_set_args(i32 %argc, ptr %argv)")
+        }
     }
     llvmLine(buf, "  br label %entry")
 
@@ -5501,14 +5504,25 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val tres = llvmNextSSA(state)
             llvmLine(buf, stringConcat("  ", stringConcat(tl, stringConcat(" = load i64, ptr %t", toString(left)))))
             llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
-            if (op == 48) {
-                mapPut(usedExterns, "rockit_string_eq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+            val eqNoRuntime = mapGet(compiler, "noRuntime") == true
+            if (eqNoRuntime) {
+                // Freestanding: integer comparison only (no runtime)
+                if (op == 48) {
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+                } else {
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp ne i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+                }
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
             } else {
-                mapPut(usedExterns, "rockit_string_neq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                if (op == 48) {
+                    mapPut(usedExterns, "rockit_string_eq", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                } else {
+                    mapPut(usedExterns, "rockit_string_neq", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                }
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             }
-            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7
         } else if (op >= 50 && op <= 53) {
@@ -6384,14 +6398,24 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             val tres = llvmNextSSA(rState)
             llvmLine(buf, stringConcat("  ", stringConcat(tl, stringConcat(" = load i64, ptr %t", toString(left)))))
             llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
-            if (op == 48) {
-                mapPut(rExterns, "rockit_string_eq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+            val eqNoRuntime2 = mapGet(compiler, "noRuntime") == true
+            if (eqNoRuntime2) {
+                if (op == 48) {
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+                } else {
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp ne i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+                }
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
             } else {
-                mapPut(rExterns, "rockit_string_neq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                if (op == 48) {
+                    mapPut(rExterns, "rockit_string_eq", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                } else {
+                    mapPut(rExterns, "rockit_string_neq", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                }
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             }
-            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7
         } else if (op >= 50 && op <= 53) {
@@ -7561,6 +7585,7 @@ fun makeCompiler(): Map {
     mapPut(c, "errors", listCreate())
     mapPut(c, "externFuncs", mapCreate())  // name -> {params, returnType} for extern fun declarations
     mapPut(c, "creprTypes", mapCreate())  // typeName -> layout {fields, totalSize, alignment}
+    mapPut(c, "noRuntime", false)        // freestanding mode: no runtime linked
     return c
 }
 
@@ -11506,6 +11531,7 @@ fun main(): Unit {
     // Parse remaining args
     var ai: Int = 2
     var noCheck: Bool = false
+    var noRuntime: Bool = false
     var doOptimize: Bool = false
     var emitLlvm: Bool = false
     val isBuildNative: Bool = command == "build-native"
@@ -11532,6 +11558,8 @@ fun main(): Unit {
             doOptimize = true
         } else if (arg == "--emit-llvm") {
             emitLlvm = true
+        } else if (arg == "--no-runtime") {
+            noRuntime = true
         } else if (arg == "--target-triple") {
             if (ai + 1 < listSize(args)) {
                 ai = ai + 1
@@ -11620,6 +11648,9 @@ fun main(): Unit {
 
     // Compile
     val compiler = compileProgram(ast)
+    if (noRuntime) {
+        mapPut(compiler, "noRuntime", true)
+    }
 
     // Dead function elimination (always on — safe and reduces output size)
     eliminateDeadFunctions(compiler)
@@ -11633,16 +11664,6 @@ fun main(): Unit {
         println(stringConcat(sourceFile, stringConcat(" -> ", stringConcat(outputFile, " (native)"))))
         println(stringConcat("  ", stringConcat(toString(funcCount), " function(s)")))
 
-        // Find runtime path
-        if (stringLength(runtimePath) == 0) {
-            runtimePath = findRuntimePath(sourceDir)
-            if (stringLength(runtimePath) == 0) {
-                println("error: cannot find rockit_runtime.c")
-                println("Set ROCKIT_HOME or use --runtime-path")
-                return
-            }
-        }
-
         // Add .exe extension on Windows
         if (toString(platformOS()) == "windows") {
             if (endsWith(outputFile, ".exe") == false) {
@@ -11650,12 +11671,30 @@ fun main(): Unit {
             }
         }
 
-        // Invoke clang (with -I for the runtime header directory)
-        val runtimeDir = dirName(runtimePath)
-        var clangCmd: String = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
-        // Linux needs -lm for math; Windows and macOS don't
-        if (toString(platformOS()) == "linux") {
-            clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+        var clangCmd: String = ""
+        if (noRuntime) {
+            // Freestanding: compile LLVM IR without runtime
+            clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" -o ", outputFile)))
+            if (toString(platformOS()) == "linux") {
+                clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
+            }
+        } else {
+            // Find runtime path
+            if (stringLength(runtimePath) == 0) {
+                runtimePath = findRuntimePath(sourceDir)
+                if (stringLength(runtimePath) == 0) {
+                    println("error: cannot find rockit_runtime.c")
+                    println("Set ROCKIT_HOME or use --runtime-path")
+                    return
+                }
+            }
+            // Invoke clang (with -I for the runtime header directory)
+            val runtimeDir = dirName(runtimePath)
+            clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
+            // Linux needs -lm for math; Windows and macOS don't
+            if (toString(platformOS()) == "linux") {
+                clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+            }
         }
         val exitCode = systemExec(clangCmd)
         // Clean up temp .ll file

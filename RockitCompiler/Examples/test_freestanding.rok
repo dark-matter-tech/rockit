@@ -1,0 +1,26 @@
+// test_freestanding.rok — Verify --no-runtime freestanding compilation mode
+// This program uses only extern C calls and unsafe features (no Rockit runtime).
+
+extern fun puts(str: Ptr<Int>): Int
+
+fun main(): Unit {
+    unsafe {
+        val msg = cstr("Hello from freestanding Rockit!")
+        puts(msg)
+
+        // Test pointer operations
+        val p = alloc(3)
+        p.store(10)
+        p.offset(1).store(20)
+        p.offset(2).store(30)
+
+        val sum = p.load() + p.offset(1).load() + p.offset(2).load()
+        if (sum == 60) {
+            puts(cstr("Pointer arithmetic: OK"))
+        }
+
+        free(p)
+
+        puts(cstr("Freestanding mode works!"))
+    }
+}

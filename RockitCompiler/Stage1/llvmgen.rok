@@ -564,8 +564,11 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
         psi = psi + 1
     }
     if (isMain) {
-        mapPut(usedExterns, "rockit_set_args", true)
-        llvmLine(buf, "  call void @rockit_set_args(i32 %argc, ptr %argv)")
+        val noRuntime = mapGet(compiler, "noRuntime") == true
+        if (noRuntime == false) {
+            mapPut(usedExterns, "rockit_set_args", true)
+            llvmLine(buf, "  call void @rockit_set_args(i32 %argc, ptr %argv)")
+        }
     }
     llvmLine(buf, "  br label %entry")
 
@@ -773,14 +776,25 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val tres = llvmNextSSA(state)
             llvmLine(buf, stringConcat("  ", stringConcat(tl, stringConcat(" = load i64, ptr %t", toString(left)))))
             llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
-            if (op == 48) {
-                mapPut(usedExterns, "rockit_string_eq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+            val eqNoRuntime = mapGet(compiler, "noRuntime") == true
+            if (eqNoRuntime) {
+                // Freestanding: integer comparison only (no runtime)
+                if (op == 48) {
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+                } else {
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp ne i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+                }
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
             } else {
-                mapPut(usedExterns, "rockit_string_neq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                if (op == 48) {
+                    mapPut(usedExterns, "rockit_string_eq", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                } else {
+                    mapPut(usedExterns, "rockit_string_neq", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                }
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             }
-            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7
         } else if (op >= 50 && op <= 53) {
@@ -1656,14 +1670,24 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             val tres = llvmNextSSA(rState)
             llvmLine(buf, stringConcat("  ", stringConcat(tl, stringConcat(" = load i64, ptr %t", toString(left)))))
             llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
-            if (op == 48) {
-                mapPut(rExterns, "rockit_string_eq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+            val eqNoRuntime2 = mapGet(compiler, "noRuntime") == true
+            if (eqNoRuntime2) {
+                if (op == 48) {
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+                } else {
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp ne i64 ", stringConcat(tl, stringConcat(", ", tr))))))
+                }
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
             } else {
-                mapPut(rExterns, "rockit_string_neq", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                if (op == 48) {
+                    mapPut(rExterns, "rockit_string_eq", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_eq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                } else {
+                    mapPut(rExterns, "rockit_string_neq", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = call i8 @rockit_string_neq(i64 ", stringConcat(tl, stringConcat(", i64 ", stringConcat(tr, ")")))))))
+                }
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             }
-            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7
         } else if (op >= 50 && op <= 53) {

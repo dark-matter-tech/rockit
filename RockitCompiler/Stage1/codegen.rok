@@ -104,6 +104,7 @@ fun makeCompiler(): Map {
     mapPut(c, "errors", listCreate())
     mapPut(c, "externFuncs", mapCreate())  // name -> {params, returnType} for extern fun declarations
     mapPut(c, "creprTypes", mapCreate())  // typeName -> layout {fields, totalSize, alignment}
+    mapPut(c, "noRuntime", false)        // freestanding mode: no runtime linked
     return c
 }
 
@@ -4049,6 +4050,7 @@ fun main(): Unit {
     // Parse remaining args
     var ai: Int = 2
     var noCheck: Bool = false
+    var noRuntime: Bool = false
     var doOptimize: Bool = false
     var emitLlvm: Bool = false
     val isBuildNative: Bool = command == "build-native"
@@ -4075,6 +4077,8 @@ fun main(): Unit {
             doOptimize = true
         } else if (arg == "--emit-llvm") {
             emitLlvm = true
+        } else if (arg == "--no-runtime") {
+            noRuntime = true
         } else if (arg == "--target-triple") {
             if (ai + 1 < listSize(args)) {
                 ai = ai + 1
@@ -4163,6 +4167,9 @@ fun main(): Unit {
 
     // Compile
     val compiler = compileProgram(ast)
+    if (noRuntime) {
+        mapPut(compiler, "noRuntime", true)
+    }
 
     // Dead function elimination (always on — safe and reduces output size)
     eliminateDeadFunctions(compiler)
@@ -4176,16 +4183,6 @@ fun main(): Unit {
         println(stringConcat(sourceFile, stringConcat(" -> ", stringConcat(outputFile, " (native)"))))
         println(stringConcat("  ", stringConcat(toString(funcCount), " function(s)")))
 
-        // Find runtime path
-        if (stringLength(runtimePath) == 0) {
-            runtimePath = findRuntimePath(sourceDir)
-            if (stringLength(runtimePath) == 0) {
-                println("error: cannot find rockit_runtime.c")
-                println("Set ROCKIT_HOME or use --runtime-path")
-                return
-            }
-        }
-
         // Add .exe extension on Windows
         if (toString(platformOS()) == "windows") {
             if (endsWith(outputFile, ".exe") == false) {
@@ -4193,12 +4190,30 @@ fun main(): Unit {
             }
         }
 
-        // Invoke clang (with -I for the runtime header directory)
-        val runtimeDir = dirName(runtimePath)
-        var clangCmd: String = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
-        // Linux needs -lm for math; Windows and macOS don't
-        if (toString(platformOS()) == "linux") {
-            clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+        var clangCmd: String = ""
+        if (noRuntime) {
+            // Freestanding: compile LLVM IR without runtime
+            clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" -o ", outputFile)))
+            if (toString(platformOS()) == "linux") {
+                clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
+            }
+        } else {
+            // Find runtime path
+            if (stringLength(runtimePath) == 0) {
+                runtimePath = findRuntimePath(sourceDir)
+                if (stringLength(runtimePath) == 0) {
+                    println("error: cannot find rockit_runtime.c")
+                    println("Set ROCKIT_HOME or use --runtime-path")
+                    return
+                }
+            }
+            // Invoke clang (with -I for the runtime header directory)
+            val runtimeDir = dirName(runtimePath)
+            clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
+            // Linux needs -lm for math; Windows and macOS don't
+            if (toString(platformOS()) == "linux") {
+                clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+            }
         }
         val exitCode = systemExec(clangCmd)
         // Clean up temp .ll file
