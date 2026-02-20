@@ -3,6 +3,18 @@
 // so that Stage 1 can produce native binaries via clang.
 
 // ---------------------------------------------------------------------------
+// Integer-to-string helper — avoids toString() which converts ROCKIT_NULL
+// (3405691582) to "null" instead of its numeric representation
+// ---------------------------------------------------------------------------
+
+fun llvmFormatI64(v: Int): String {
+    if (v < 0) { return stringConcat("-", llvmFormatI64(0 - v)) }
+    val digits = "0123456789"
+    if (v < 10) { return substring(digits, v, v + 1) }
+    return stringConcat(llvmFormatI64(v / 10), substring(digits, v % 10, v % 10 + 1))
+}
+
+// ---------------------------------------------------------------------------
 // String buffer helpers — build IR incrementally as a list of lines
 // ---------------------------------------------------------------------------
 
@@ -253,13 +265,10 @@ fun llvmReadU32(bc: List, offset: Int): Int {
 fun llvmReadI64(bc: List, offset: Int): Int {
     val hi = llvmReadU32(bc, offset)
     val lo = llvmReadU32(bc, offset + 4)
-    if (hi == 0) { return lo }
-    if (hi == 4294967295) {
-        // Negative: lo is the two's complement low word
-        return lo - 4294967296
-    }
-    // Large positive — return lo for now (simplified)
-    return lo
+    // Reconstruct full 64-bit value: hi * 2^32 + lo
+    // NOTE: Must compute 2^32 from smaller literals for bootstrap compatibility
+    val TWO_32 = 256 * 256 * 256 * 256
+    return hi * TWO_32 + lo
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +365,8 @@ fun llvmInstrSize(op: Int, bc: List, ip: Int): Int {
         val argc = llvmReadU16(bc, ip + 5)
         return 7 + argc * 2
     }
+    if (op == 83) { return 5 }     // LOAD_GLOBAL: op + dest(2) + nameIdx(2)
+    if (op == 84) { return 5 }     // STORE_GLOBAL: op + nameIdx(2) + src(2)
     if (op == 96) { return 7 }     // GET_FIELD: op + dest(2) + obj(2) + fieldIdx(2)
     if (op == 97) { return 7 }     // SET_FIELD: op + obj(2) + fieldIdx(2) + val(2)
     if (op == 112) {                // NEW_OBJECT: op + dest(2) + typeIdx(2) + argc(2) + args(2*N)
@@ -596,7 +607,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             // OP_CONST_INT: dest(u16) + value(i64)
             val dest = llvmReadU16(bc, ip + 1)
             val value = llvmReadI64(bc, ip + 3)
-            llvmLine(buf, stringConcat("  store i64 ", stringConcat(toString(value), stringConcat(", ptr %t", toString(dest)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(llvmFormatI64(value), stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 11
         } else if (op == 2) {
             // OP_CONST_FLOAT: dest(u16) + poolIdx(u16)
@@ -1272,6 +1283,24 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 ", stringConcat(tfnPtr, stringConcat("(", stringConcat(argVals, ")")))))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7 + argc * 2
+        } else if (op == 83) {
+            // OP_LOAD_GLOBAL: dest(u16) + nameIdx(u16)
+            val dest = llvmReadU16(bc, ip + 1)
+            val nameIdx = llvmReadU16(bc, ip + 3)
+            val globalName = llvmPoolString(compiler, nameIdx)
+            val tval = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr @", globalName))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 5
+        } else if (op == 84) {
+            // OP_STORE_GLOBAL: nameIdx(u16) + src(u16)
+            val nameIdx = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val globalName = llvmPoolString(compiler, nameIdx)
+            val tval = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr @", globalName))))
+            ip = ip + 5
         } else if (op == 144) {
             // OP_TYPE_CHECK: dest(u16) + src(u16) + typeIdx(u16)
             val dest = llvmReadU16(bc, ip + 1)
@@ -1524,7 +1553,7 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             // OP_CONST_INT: dest(u16) + value(i64)
             val dest = llvmReadU16(bc, ip + 1)
             val value = llvmReadI64(bc, ip + 3)
-            llvmLine(buf, stringConcat("  store i64 ", stringConcat(toString(value), stringConcat(", ptr %t", toString(dest)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(llvmFormatI64(value), stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 11
         } else if (op == 2) {
             // OP_CONST_FLOAT: dest(u16) + poolIdx(u16)
@@ -1791,6 +1820,24 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 ", stringConcat(tfnPtr, stringConcat("(", stringConcat(argVals, ")")))))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7 + argc * 2
+        } else if (op == 83) {
+            // OP_LOAD_GLOBAL: dest(u16) + nameIdx(u16)
+            val dest = llvmReadU16(bc, ip + 1)
+            val nameIdx = llvmReadU16(bc, ip + 3)
+            val globalName = llvmPoolString(compiler, nameIdx)
+            val tval = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr @", globalName))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 5
+        } else if (op == 84) {
+            // OP_STORE_GLOBAL: nameIdx(u16) + src(u16)
+            val nameIdx = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val globalName = llvmPoolString(compiler, nameIdx)
+            val tval = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr @", globalName))))
+            ip = ip + 5
         } else if (op == 96) {
             // OP_GET_FIELD
             val dest = llvmReadU16(bc, ip + 1)
@@ -2235,6 +2282,26 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         llvmLine(buf, stringConcat("  store i64 0, ptr %t", toString(dest)))
         return
     }
+    // callResumeFn(fn_ptr, frame, result): indirect call for coroutine resume
+    if (callName == "callResumeFn" && argc == 3) {
+        val fnReg = llvmReadU16(bc, argStart)
+        val frameReg = llvmReadU16(bc, argStart + 2)
+        val resReg = llvmReadU16(bc, argStart + 4)
+        val tfn = llvmNextSSA(state)
+        val tframe = llvmNextSSA(state)
+        val tres2 = llvmNextSSA(state)
+        val tfnptr = llvmNextSSA(state)
+        val tframeptr = llvmNextSSA(state)
+        val tret = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tfn, stringConcat(" = load i64, ptr %t", toString(fnReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tframe, stringConcat(" = load i64, ptr %t", toString(frameReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tres2, stringConcat(" = load i64, ptr %t", toString(resReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tfnptr, stringConcat(" = inttoptr i64 ", stringConcat(tfn, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tframeptr, stringConcat(" = inttoptr i64 ", stringConcat(tframe, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tret, stringConcat(" = call i64 ", stringConcat(tfnptr, stringConcat("(ptr ", stringConcat(tframeptr, stringConcat(", i64 ", stringConcat(tres2, ")")))))))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tret, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
     // alloc(count): call malloc(count * 8)
     if (callName == "alloc" && argc == 1) {
         val cntReg = llvmReadU16(bc, argStart)
@@ -2328,6 +2395,14 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         }
     }
 
+    // __bitcast_Ptr(i64): no-op (Ptr<T> is just i64 in Rockit's type system)
+    if (callName == "__bitcast_Ptr" && argc == 1) {
+        val argReg = llvmReadU16(bc, argStart)
+        val targ = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(targ, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(targ, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
     // __bitcast_Float(i64): reinterpret i64 bits as double
     if (callName == "__bitcast_Float" && argc == 1) {
         val argReg = llvmReadU16(bc, argStart)
@@ -2706,6 +2781,28 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
             val byteLen = stringLength(tyName) + 1
             llvmLine(mainBuf, stringConcat("@.typename.", stringConcat(toString(tyNameIdx), stringConcat(" = private unnamed_addr constant [", stringConcat(toString(byteLen), stringConcat(" x i8] c\"", stringConcat(escaped, "\\00\"")))))))
             ti = ti + 1
+        }
+        llvmLine(mainBuf, "")
+    }
+
+    // Emit mutable global variable declarations
+    val globals = mapGet(compiler, "globals")
+    if (globals != null) {
+        val globalNames = mapKeys(globals)
+        var gi: Int = 0
+        while (gi < listSize(globalNames)) {
+            val gName = toString(listGet(globalNames, gi))
+            val gInfo = mapGet(globals, gName)
+            val gMutable = mapGet(gInfo, "mutable") == true
+            if (gMutable) {
+                val gInitKind = toString(mapGet(gInfo, "initKind"))
+                var gInitStr: String = "0"
+                if (gInitKind == "int") {
+                    gInitStr = llvmFormatI64(mapGet(gInfo, "initValue"))
+                }
+                llvmLine(mainBuf, stringConcat("@", stringConcat(gName, stringConcat(" = global i64 ", gInitStr))))
+            }
+            gi = gi + 1
         }
         llvmLine(mainBuf, "")
     }

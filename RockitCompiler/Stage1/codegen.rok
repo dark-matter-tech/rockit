@@ -61,6 +61,8 @@ fun OP_FGTE(): Int { return 58 }
 fun OP_AWAIT_CALL(): Int { return 192 }
 fun OP_CONCURRENT_BEGIN(): Int { return 193 }
 fun OP_CONCURRENT_END(): Int { return 194 }
+fun OP_LOAD_GLOBAL(): Int { return 83 }
+fun OP_STORE_GLOBAL(): Int { return 84 }
 
 // Constant pool kind tags
 fun CK_STRING(): Int { return 1 }
@@ -105,6 +107,7 @@ fun makeCompiler(): Map {
     mapPut(c, "externFuncs", mapCreate())  // name -> {params, returnType} for extern fun declarations
     mapPut(c, "creprTypes", mapCreate())  // typeName -> layout {fields, totalSize, alignment}
     mapPut(c, "noRuntime", false)        // freestanding mode: no runtime linked
+    mapPut(c, "globals", mapCreate())    // top-level val/var: name -> {initValue, mutable}
     return c
 }
 
@@ -248,15 +251,23 @@ fun emitU32At(fs: Map, offset: Int, v: Int): Unit {
 }
 
 fun emitI64(fs: Map, v: Int): Unit {
-    // Big-endian Int64 — for simplicity handle positive values
-    // For negative: two's complement
+    // Big-endian Int64 — proper 64-bit split into high/low 32-bit words
+    // NOTE: Must compute 2^32 from smaller literals for bootstrap compatibility
+    // (the old compiler's emitI64 can't encode literals >= 2^32)
+    val TWO_32 = 256 * 256 * 256 * 256
     if (v >= 0) {
-        emitU32(fs, 0)
-        emitU32(fs, v)
+        val high = v / TWO_32
+        val low = v - high * TWO_32
+        emitU32(fs, high)
+        emitU32(fs, low)
     } else {
-        // Negative: all 1s in high word, value in low word (simplified)
-        emitU32(fs, 4294967295)
-        emitU32(fs, 4294967296 + v)
+        // Negative: bitwise complement approach for two's complement
+        val nv = 0 - v - 1
+        val nHigh = nv / TWO_32
+        val nLow = nv - nHigh * TWO_32
+        val MAX_U32 = TWO_32 - 1
+        emitU32(fs, MAX_U32 - nHigh)
+        emitU32(fs, MAX_U32 - nLow)
     }
 }
 
@@ -322,6 +333,18 @@ fun emitLoadParam(fs: Map, dest: Int, paramIdx: Int): Unit {
     emitByte(fs, OP_LOAD_PARAM())
     emitU16(fs, dest)
     emitU16(fs, paramIdx)
+}
+
+fun emitLoadGlobal(fs: Map, dest: Int, nameIdx: Int): Unit {
+    emitByte(fs, OP_LOAD_GLOBAL())
+    emitU16(fs, dest)
+    emitU16(fs, nameIdx)
+}
+
+fun emitStoreGlobal(fs: Map, nameIdx: Int, src: Int): Unit {
+    emitByte(fs, OP_STORE_GLOBAL())
+    emitU16(fs, nameIdx)
+    emitU16(fs, src)
 }
 
 fun emitCall(fs: Map, dest: Int, funcName: String, args: List): Unit {
@@ -691,6 +714,39 @@ fun compileExpr(fs: Map, node: Map): Int {
                 val dest = allocReg(fs)
                 emitGetField(fs, dest, thisReg, name)
                 return dest
+            }
+        }
+        // Check if it's a top-level global val/var
+        val globalsMap = mapGet(mapGet(fs, "compiler"), "globals")
+        val globalInfo = mapGet(globalsMap, name)
+        if (globalInfo != null) {
+            val gMutable = mapGet(globalInfo, "mutable") == true
+            if (gMutable) {
+                // Mutable global: emit OP_LOAD_GLOBAL
+                val dest = allocReg(fs)
+                val gNameIdx = addFuncName(mapGet(fs, "compiler"), name)
+                emitLoadGlobal(fs, dest, gNameIdx)
+                return dest
+            } else {
+                // Immutable global: inline the constant value
+                val gInitKind = toString(mapGet(globalInfo, "initKind"))
+                if (gInitKind == "int") {
+                    val dest = allocReg(fs)
+                    // initValue is already an integer — do NOT call toInt() which
+                    // would convert ROCKIT_NULL (3405691582) to 0 via C runtime
+                    emitConstInt(fs, dest, mapGet(globalInfo, "initValue"))
+                    return dest
+                }
+                if (gInitKind == "float") {
+                    val dest = allocReg(fs)
+                    emitConstFloat(fs, dest, toString(mapGet(globalInfo, "initValue")))
+                    return dest
+                }
+                if (gInitKind == "string") {
+                    val dest = allocReg(fs)
+                    emitConstString(fs, dest, toString(mapGet(globalInfo, "initValue")))
+                    return dest
+                }
             }
         }
         // Unknown identifier — might be a function reference
@@ -1973,6 +2029,16 @@ fun compileStmt(fs: Map, node: Map): Unit {
                         emitSetField(fs, thisReg, name, valueReg)
                     }
                 }
+                // Check if it's a mutable global variable
+                val aGlobals = mapGet(mapGet(fs, "compiler"), "globals")
+                val aGlobalInfo = mapGet(aGlobals, name)
+                if (aGlobalInfo != null) {
+                    if (mapGet(aGlobalInfo, "mutable") == true) {
+                        val valueReg = compileExpr(fs, mapGet(node, "value"))
+                        val gNameIdx = addFuncName(mapGet(fs, "compiler"), name)
+                        emitStoreGlobal(fs, gNameIdx, valueReg)
+                    }
+                }
             }
         }
         if (targetKind == "member") {
@@ -2017,6 +2083,28 @@ fun compileStmt(fs: Map, node: Map): Unit {
                 val resultReg = allocReg(fs)
                 emitBinaryOp(fs, actualOp, resultReg, currentReg, valueReg)
                 emitStore(fs, slotInt, resultReg)
+            } else {
+                // Check if it's a mutable global variable
+                val caGlobals = mapGet(mapGet(fs, "compiler"), "globals")
+                val caGlobalInfo = mapGet(caGlobals, name)
+                if (caGlobalInfo != null) {
+                    if (mapGet(caGlobalInfo, "mutable") == true) {
+                        val gNameIdx = addFuncName(mapGet(fs, "compiler"), name)
+                        val currentReg = allocReg(fs)
+                        emitLoadGlobal(fs, currentReg, gNameIdx)
+                        val valueReg = compileExpr(fs, mapGet(node, "value"))
+                        val op = toString(mapGet(node, "op"))
+                        var actualOp: String = "+"
+                        if (op == "+=") { actualOp = "+" }
+                        if (op == "-=") { actualOp = "-" }
+                        if (op == "*=") { actualOp = "*" }
+                        if (op == "/=") { actualOp = "/" }
+                        if (op == "%=") { actualOp = "%" }
+                        val resultReg = allocReg(fs)
+                        emitBinaryOp(fs, actualOp, resultReg, currentReg, valueReg)
+                        emitStoreGlobal(fs, gNameIdx, resultReg)
+                    }
+                }
             }
         } else if (targetKind == "member") {
             val objReg = compileExpr(fs, mapGet(target, "object"))
@@ -3675,6 +3763,40 @@ fun compileProgram(ast: Map): Map {
         i = i + 1
     }
 
+    // Pass 1.5: Collect top-level val/var declarations as globals
+    i = 0
+    while (i < listSize(decls)) {
+        val decl = listGet(decls, i)
+        val kind = toString(mapGet(decl, "kind"))
+        if (kind == "valDecl" || kind == "varDecl") {
+            val gName = toString(mapGet(decl, "name"))
+            val gInit = mapGet(decl, "init")
+            val gInfo = mapCreate()
+            mapPut(gInfo, "mutable", kind == "varDecl")
+            if (gInit != null) {
+                val gInitKind = toString(mapGet(gInit, "kind"))
+                if (gInitKind == "intLit") {
+                    mapPut(gInfo, "initKind", "int")
+                    mapPut(gInfo, "initValue", toInt(mapGet(gInit, "value")))
+                } else if (gInitKind == "floatLit") {
+                    mapPut(gInfo, "initKind", "float")
+                    mapPut(gInfo, "initValue", toString(mapGet(gInit, "value")))
+                } else if (gInitKind == "stringLit") {
+                    mapPut(gInfo, "initKind", "string")
+                    mapPut(gInfo, "initValue", toString(mapGet(gInit, "value")))
+                } else {
+                    mapPut(gInfo, "initKind", "int")
+                    mapPut(gInfo, "initValue", 0)
+                }
+            } else {
+                mapPut(gInfo, "initKind", "int")
+                mapPut(gInfo, "initValue", 0)
+            }
+            mapPut(mapGet(compiler, "globals"), gName, gInfo)
+        }
+        i = i + 1
+    }
+
     // Pass 2: Compile classes and functions
     i = 0
     while (i < listSize(decls)) {
@@ -4171,8 +4293,10 @@ fun main(): Unit {
         mapPut(compiler, "noRuntime", true)
     }
 
-    // Dead function elimination (always on — safe and reduces output size)
-    eliminateDeadFunctions(compiler)
+    // Dead function elimination (skip in --no-runtime mode to preserve all functions)
+    if (noRuntime == false) {
+        eliminateDeadFunctions(compiler)
+    }
 
     val funcCount = listSize(mapGet(compiler, "functions"))
 
