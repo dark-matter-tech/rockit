@@ -466,10 +466,22 @@ public final class ASTNavigator {
         switch decl {
         case .function(let f):
             if f.name == name { return f.span }
+            // Search parameters
+            for p in f.parameters {
+                if p.name == name { return p.span }
+            }
+            // Search function body for local declarations
+            if let body = f.body {
+                if let span = findNameInFunctionBody(name, body: body) { return span }
+            }
         case .property(let p):
             if p.name == name { return p.span }
         case .classDecl(let c):
             if c.name == name { return c.span }
+            // Search constructor params
+            for p in c.constructorParams {
+                if p.name == name { return p.span }
+            }
             for member in c.members {
                 if let span = findDeclByName(name, in: member) { return span }
             }
@@ -504,6 +516,81 @@ public final class ASTNavigator {
             if t.name == name { return t.span }
         case .typeAlias(let ta):
             if ta.name == name { return ta.span }
+        }
+        return nil
+    }
+
+    private static func findNameInFunctionBody(_ name: String, body: FunctionBody) -> SourceSpan? {
+        switch body {
+        case .block(let block):
+            return findNameInStatements(name, stmts: block.statements)
+        case .expression:
+            return nil
+        }
+    }
+
+    private static func findNameInStatements(_ name: String, stmts: [RStatement]) -> SourceSpan? {
+        for stmt in stmts {
+            if let span = findNameInStatement(name, stmt: stmt) { return span }
+        }
+        return nil
+    }
+
+    private static func findNameInStatement(_ name: String, stmt: RStatement) -> SourceSpan? {
+        switch stmt {
+        case .propertyDecl(let p):
+            if p.name == name { return p.span }
+        case .declaration(let d):
+            if let span = findDeclByName(name, in: d) { return span }
+        case .forLoop(let f):
+            if f.variable == name { return f.span }
+            if let span = findNameInStatements(name, stmts: f.body.statements) { return span }
+        case .whileLoop(let w):
+            if let span = findNameInStatements(name, stmts: w.body.statements) { return span }
+        case .doWhileLoop(let d):
+            if let span = findNameInStatements(name, stmts: d.body.statements) { return span }
+        case .tryCatch(let tc):
+            if let span = findNameInStatements(name, stmts: tc.tryBody.statements) { return span }
+            if let span = findNameInStatements(name, stmts: tc.catchBody.statements) { return span }
+            if let fb = tc.finallyBody {
+                if let span = findNameInStatements(name, stmts: fb.statements) { return span }
+            }
+        case .expression(let e):
+            if let span = findNameInExpression(name, expr: e) { return span }
+        default:
+            break
+        }
+        return nil
+    }
+
+    private static func findNameInExpression(_ name: String, expr: RExpression) -> SourceSpan? {
+        switch expr {
+        case .ifExpr(let ie):
+            if let span = findNameInStatements(name, stmts: ie.thenBranch.statements) { return span }
+            if let eb = ie.elseBranch {
+                switch eb {
+                case .elseBlock(let block):
+                    if let span = findNameInStatements(name, stmts: block.statements) { return span }
+                case .elseIf(let nested):
+                    if let span = findNameInExpression(name, expr: .ifExpr(nested)) { return span }
+                }
+            }
+        case .whenExpr(let we):
+            for entry in we.entries {
+                switch entry.body {
+                case .block(let block):
+                    if let span = findNameInStatements(name, stmts: block.statements) { return span }
+                case .expression:
+                    break
+                }
+            }
+        case .lambda(let le):
+            for p in le.parameters {
+                if p.name == name { return p.span }
+            }
+            if let span = findNameInStatements(name, stmts: le.body) { return span }
+        default:
+            break
         }
         return nil
     }
