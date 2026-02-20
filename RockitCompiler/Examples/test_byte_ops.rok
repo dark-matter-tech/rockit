@@ -1,0 +1,42 @@
+// test_byte_ops.rok — Test loadByte/storeByte intrinsics
+
+extern fun puts(s: Ptr<Int>): Int
+extern fun malloc(size: Int): Int
+extern fun free(ptr: Int): Unit
+
+fun main(): Unit {
+    unsafe {
+        // Allocate 16 bytes
+        val buf = malloc(16)
+
+        // Store individual bytes
+        storeByte(buf, 0, 72)   // 'H'
+        storeByte(buf, 1, 101)  // 'e'
+        storeByte(buf, 2, 108)  // 'l'
+        storeByte(buf, 3, 108)  // 'l'
+        storeByte(buf, 4, 111)  // 'o'
+        storeByte(buf, 5, 0)    // null terminator
+
+        // Print it as a C string (buf is already a pointer)
+        puts(buf)
+
+        // Read back individual bytes
+        val h = loadByte(buf, 0)
+        val e = loadByte(buf, 1)
+        if (h == 72) {
+            puts(cstr("loadByte 0: OK"))
+        }
+        if (e == 101) {
+            puts(cstr("loadByte 1: OK"))
+        }
+
+        // Test byte arithmetic
+        val sum = h + e
+        if (sum == 173) {
+            puts(cstr("byte arithmetic: OK"))
+        }
+
+        free(buf)
+        puts(cstr("byte ops test complete"))
+    }
+}

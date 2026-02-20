@@ -2195,6 +2195,46 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         llvmLine(buf, stringConcat("  store i64 ", stringConcat(tp, stringConcat(", ptr %t", toString(dest)))))
         return
     }
+    // loadByte(ptr, offset): load single byte from ptr + offset, zero-extend to i64
+    if (callName == "loadByte" && argc == 2) {
+        val ptrReg = llvmReadU16(bc, argStart)
+        val offReg = llvmReadU16(bc, argStart + 2)
+        val tp = llvmNextSSA(state)
+        val toff = llvmNextSSA(state)
+        val tbase = llvmNextSSA(state)
+        val taddr = llvmNextSSA(state)
+        val tbyte = llvmNextSSA(state)
+        val tres = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tp, stringConcat(" = load i64, ptr %t", toString(ptrReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(toff, stringConcat(" = load i64, ptr %t", toString(offReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tbase, stringConcat(" = inttoptr i64 ", stringConcat(tp, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(taddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(tbase, stringConcat(", i64 ", toff))))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tbyte, stringConcat(" = load i8, ptr ", taddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tbyte, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+    // storeByte(ptr, offset, value): truncate i64 to i8, store at ptr + offset
+    if (callName == "storeByte" && argc == 3) {
+        val ptrReg = llvmReadU16(bc, argStart)
+        val offReg = llvmReadU16(bc, argStart + 2)
+        val valReg = llvmReadU16(bc, argStart + 4)
+        val tp = llvmNextSSA(state)
+        val toff = llvmNextSSA(state)
+        val tv = llvmNextSSA(state)
+        val tbase = llvmNextSSA(state)
+        val taddr = llvmNextSSA(state)
+        val tbyte = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tp, stringConcat(" = load i64, ptr %t", toString(ptrReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(toff, stringConcat(" = load i64, ptr %t", toString(offReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tv, stringConcat(" = load i64, ptr %t", toString(valReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tbase, stringConcat(" = inttoptr i64 ", stringConcat(tp, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(taddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(tbase, stringConcat(", i64 ", toff))))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tbyte, stringConcat(" = trunc i64 ", stringConcat(tv, " to i8")))))
+        llvmLine(buf, stringConcat("  store i8 ", stringConcat(tbyte, stringConcat(", ptr ", taddr))))
+        llvmLine(buf, stringConcat("  store i64 0, ptr %t", toString(dest)))
+        return
+    }
     // alloc(count): call malloc(count * 8)
     if (callName == "alloc" && argc == 1) {
         val cntReg = llvmReadU16(bc, argStart)
