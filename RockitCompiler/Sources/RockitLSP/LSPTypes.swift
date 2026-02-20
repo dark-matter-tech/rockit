@@ -436,6 +436,86 @@ public class LSPSelectionRange {
     }
 }
 
+// MARK: - LSP Call Hierarchy
+
+public struct LSPCallHierarchyItem {
+    public let name: String
+    public let kind: Int
+    public let uri: String
+    public let range: LSPRange
+    public let selectionRange: LSPRange
+
+    func toJSON() -> [String: Any] {
+        return [
+            "name": name,
+            "kind": kind,
+            "uri": uri,
+            "range": range.toJSON(),
+            "selectionRange": selectionRange.toJSON()
+        ]
+    }
+
+    init(name: String, kind: Int, uri: String, range: LSPRange, selectionRange: LSPRange) {
+        self.name = name
+        self.kind = kind
+        self.uri = uri
+        self.range = range
+        self.selectionRange = selectionRange
+    }
+
+    init?(json: [String: Any]) {
+        guard let name = json["name"] as? String,
+              let kind = json["kind"] as? Int,
+              let uri = json["uri"] as? String,
+              let rangeJSON = json["range"] as? [String: Any],
+              let range = LSPRange(json: rangeJSON),
+              let selRangeJSON = json["selectionRange"] as? [String: Any],
+              let selRange = LSPRange(json: selRangeJSON) else { return nil }
+        self.name = name
+        self.kind = kind
+        self.uri = uri
+        self.range = range
+        self.selectionRange = selRange
+    }
+}
+
+public struct LSPCallHierarchyIncomingCall {
+    public let from: LSPCallHierarchyItem
+    public let fromRanges: [LSPRange]
+
+    func toJSON() -> [String: Any] {
+        return [
+            "from": from.toJSON(),
+            "fromRanges": fromRanges.map { $0.toJSON() }
+        ]
+    }
+}
+
+public struct LSPCallHierarchyOutgoingCall {
+    public let to: LSPCallHierarchyItem
+    public let fromRanges: [LSPRange]
+
+    func toJSON() -> [String: Any] {
+        return [
+            "to": to.toJSON(),
+            "fromRanges": fromRanges.map { $0.toJSON() }
+        ]
+    }
+}
+
+// MARK: - LSP Document Link
+
+public struct LSPDocumentLink {
+    public let range: LSPRange
+    public let target: String?
+
+    func toJSON() -> [String: Any] {
+        var json: [String: Any] = ["range": range.toJSON()]
+        if let target = target { json["target"] = target }
+        return json
+    }
+}
+
 // MARK: - Position Conversion
 
 /// Convert LSP position (0-indexed line, 0-indexed character) to Rockit SourceLocation (1-indexed line, 0-indexed column)

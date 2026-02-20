@@ -93,6 +93,18 @@ public final class LSPServer {
             handleSelectionRange(msg)
         case "textDocument/implementation":
             handleImplementation(msg)
+        case "textDocument/typeDefinition":
+            handleTypeDefinition(msg)
+        case "textDocument/documentLink":
+            handleDocumentLink(msg)
+        case "textDocument/onTypeFormatting":
+            handleOnTypeFormatting(msg)
+        case "callHierarchy/incomingCalls":
+            handleCallHierarchyIncoming(msg)
+        case "callHierarchy/outgoingCalls":
+            handleCallHierarchyOutgoing(msg)
+        case "textDocument/prepareCallHierarchy":
+            handlePrepareCallHierarchy(msg)
 
         default:
             if let id = msg.id {
@@ -150,7 +162,16 @@ public final class LSPServer {
             "foldingRangeProvider": true,
             "documentHighlightProvider": true,
             "selectionRangeProvider": true,
-            "implementationProvider": true
+            "implementationProvider": true,
+            "typeDefinitionProvider": true,
+            "documentLinkProvider": [
+                "resolveProvider": false
+            ] as [String: Any],
+            "documentOnTypeFormattingProvider": [
+                "firstTriggerCharacter": "\n",
+                "moreTriggerCharacter": ["}", "{"]
+            ] as [String: Any],
+            "callHierarchyProvider": true
         ]
 
         let result: [String: Any] = [
@@ -576,6 +597,127 @@ public final class LSPServer {
 
         let locations = ImplementationProvider.implementations(at: position, uri: uri, analysisResult: result)
         sendResult(id: id, result: locations.map { $0.toJSON() })
+    }
+
+    // MARK: - Go to Type Definition
+
+    private func handleTypeDefinition(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: NSNull()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: NSNull())
+            return
+        }
+
+        if let location = TypeDefinitionProvider.typeDefinition(at: position, uri: uri, analysisResult: result) {
+            sendResult(id: id, result: location.toJSON())
+        } else {
+            sendResult(id: id, result: NSNull())
+        }
+    }
+
+    // MARK: - Document Links
+
+    private func handleDocumentLink(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let text = documentManager.getText(uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let links = DocumentLinkProvider.documentLinks(
+            documentText: text, uri: uri, workspaceRoot: workspaceRoot
+        )
+        sendResult(id: id, result: links.map { $0.toJSON() })
+    }
+
+    // MARK: - On Type Formatting
+
+    private func handleOnTypeFormatting(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params),
+              let ch = msg.params?["ch"] as? String else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let text = documentManager.getText(uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let options = msg.params?["options"] as? [String: Any]
+        let tabSize = options?["tabSize"] as? Int ?? 4
+        let insertSpaces = options?["insertSpaces"] as? Bool ?? true
+
+        let edits = OnTypeFormattingProvider.onTypeFormatting(
+            uri: uri, position: position, character: ch,
+            documentText: text, tabSize: tabSize, insertSpaces: insertSpaces
+        )
+        sendResult(id: id, result: edits.map { $0.toJSON() })
+    }
+
+    // MARK: - Call Hierarchy
+
+    private func handlePrepareCallHierarchy(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let items = CallHierarchyProvider.prepare(at: position, uri: uri, analysisResult: result)
+        sendResult(id: id, result: items.map { $0.toJSON() })
+    }
+
+    private func handleCallHierarchyIncoming(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let params = msg.params,
+              let itemJSON = params["item"] as? [String: Any],
+              let item = LSPCallHierarchyItem(json: itemJSON) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: item.uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let calls = CallHierarchyProvider.incomingCalls(item: item, uri: item.uri, analysisResult: result)
+        sendResult(id: id, result: calls.map { $0.toJSON() })
+    }
+
+    private func handleCallHierarchyOutgoing(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let params = msg.params,
+              let itemJSON = params["item"] as? [String: Any],
+              let item = LSPCallHierarchyItem(json: itemJSON) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: item.uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let calls = CallHierarchyProvider.outgoingCalls(item: item, uri: item.uri, analysisResult: result)
+        sendResult(id: id, result: calls.map { $0.toJSON() })
     }
 
     // MARK: - Helpers
