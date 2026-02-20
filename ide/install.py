@@ -4,7 +4,7 @@ Rockit Editor Support — Universal Installer with Cinematic Moon Mission
 Dark Matter Tech
 
 Usage:
-    curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.py | python3
+    curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/ide/install.py | python3
     python3 ide/install.py
 """
 

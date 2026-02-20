@@ -26,10 +26,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/.build/release/rockit /usr/local/bin/rockit
-COPY --from=builder /build/Runtime/ /usr/local/lib/rockit/runtime/
-COPY Examples/ /usr/local/lib/rockit/examples/
+COPY --from=builder /build/Runtime/ /usr/local/share/rockit/
+COPY Examples/ /usr/local/share/rockit/examples/
 
-ENV ROCKIT_RUNTIME_DIR=/usr/local/lib/rockit/runtime
+ENV ROCKIT_RUNTIME_DIR=/usr/local/share/rockit
 
 WORKDIR /code
 

@@ -10,12 +10,12 @@ The Rockit language compiler. Self-hosting — Rockit compiles itself.
 
 **macOS / Linux (one-liner):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
 ```
 
 The installer downloads a prebuilt binary if available, or builds from source as a fallback.

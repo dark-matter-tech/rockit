@@ -2,7 +2,7 @@
 # Dark Matter Tech
 #
 # Usage:
-#   iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.ps1 | iex
+#   iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/ide/install.ps1 | iex
 #
 # Or run locally:
 #   powershell -ExecutionPolicy Bypass -File ide\install.ps1

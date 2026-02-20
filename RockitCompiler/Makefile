@@ -21,15 +21,18 @@ install: release
 	@echo "Installing rockit to $(PREFIX)/bin..."
 	@mkdir -p $(PREFIX)/bin
 	@cp .build/release/rockit $(PREFIX)/bin/rockit
-	@mkdir -p $(PREFIX)/lib/rockit/runtime
-	@cp $(RUNTIME_DIR)/rockit_runtime.c $(PREFIX)/lib/rockit/runtime/
-	@cp $(RUNTIME_DIR)/rockit_runtime.h $(PREFIX)/lib/rockit/runtime/
+	@mkdir -p $(PREFIX)/share/rockit
+	@cp $(RUNTIME_DIR)/rockit_runtime.c $(PREFIX)/share/rockit/
+	@cp $(RUNTIME_DIR)/rockit_runtime.h $(PREFIX)/share/rockit/
+	@mkdir -p $(PREFIX)/share/rockit/rockit
+	@cp $(RUNTIME_DIR)/rockit/*.rok $(PREFIX)/share/rockit/rockit/ 2>/dev/null || true
+	@cp $(RUNTIME_DIR)/rockit/build.sh $(PREFIX)/share/rockit/rockit/ 2>/dev/null || true
 	@mkdir -p $(PREFIX)/lib/rockit/editors/vscode
 	@mkdir -p $(PREFIX)/lib/rockit/editors/vim
 	@cp -r ../ide/vscode/* $(PREFIX)/lib/rockit/editors/vscode/ 2>/dev/null || true
 	@cp -r ../ide/vim/* $(PREFIX)/lib/rockit/editors/vim/ 2>/dev/null || true
 	@echo "Installed: $(PREFIX)/bin/rockit"
-	@echo "Runtime:   $(PREFIX)/lib/rockit/runtime/"
+	@echo "Runtime:   $(PREFIX)/share/rockit/"
 	@echo "Editors:   $(PREFIX)/lib/rockit/editors/"
 	@echo ""
 	@$(PREFIX)/bin/rockit setup-editors 2>/dev/null || true
@@ -42,6 +45,7 @@ setup-editors:
 uninstall:
 	@rm -f $(PREFIX)/bin/rockit
 	@rm -rf $(PREFIX)/lib/rockit
+	@rm -rf $(PREFIX)/share/rockit
 	@echo "Uninstalled rockit"
 
 docker:

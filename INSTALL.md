@@ -9,15 +9,15 @@ Rockit is a compiled programming language by Dark Matter Tech. This guide covers
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
 ```
 
-This installs the `rockit` binary to `/usr/local/bin` and the runtime to `/usr/local/lib/rockit/runtime/`.
+This installs the `rockit` binary to `/usr/local/bin` and the runtime to `/usr/local/share/rockit/`.
 
 ### Windows (PowerShell)
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
 ```
 
 This installs to `%LOCALAPPDATA%\Rockit\bin` and adds it to your user PATH.
@@ -48,7 +48,7 @@ For native compilation (`rockit run-native`), Clang must be on your PATH.
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Dark-Matter/moon.git
+git clone https://rustygits.com/Dark-Matter/moon.git
 cd moon/RockitCompiler
 ```
 
@@ -88,13 +88,13 @@ Set `ROCKIT_PREFIX` before running the install script:
 ```bash
 # macOS / Linux
 export ROCKIT_PREFIX=$HOME/.rockit
-curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
 ```
 
 ```powershell
 # Windows
 $env:ROCKIT_PREFIX = "$env:USERPROFILE\.rockit"
-iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
 ```
 
 If the runtime is in a non-standard location, set:
@@ -186,7 +186,7 @@ Any JetBrains IDE based on IntelliJ Platform 2023.3+:
 make uninstall
 # or manually:
 rm /usr/local/bin/rockit
-rm -rf /usr/local/lib/rockit
+rm -rf /usr/local/share/rockit
 ```
 
 ### Windows
@@ -220,7 +220,7 @@ Settings > Plugins > Installed > find "Rockit Language Support" > Uninstall
 **`error: runtime not found`**
 - Set `ROCKIT_RUNTIME_DIR` to the directory containing `rockit_runtime.c`:
   ```bash
-  export ROCKIT_RUNTIME_DIR=/usr/local/lib/rockit/runtime
+  export ROCKIT_RUNTIME_DIR=/usr/local/share/rockit
   ```
 
 **Docker build fails**

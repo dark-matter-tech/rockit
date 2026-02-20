@@ -2,7 +2,7 @@
 
 A statically-typed, compiled, memory-safe programming language designed to replace JavaScript, HTML, CSS, and the DOM as the foundational technology of the web platform.
 
-Built by [Dark Matter Tech](https://github.com/Dark-Matter).
+Built by [Dark Matter Tech](https://rustygits.com/Dark-Matter).
 
 ---
 
@@ -34,19 +34,19 @@ The compiler is **self-hosting** — Rockit compiles itself. All compiler phases
 
 **macOS / Linux (one-liner):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/RockitCompiler/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
 ```
 
 The installer downloads a prebuilt binary if available, or builds from source as a fallback.
 
 **Or build manually:**
 ```bash
-git clone https://github.com/Dark-Matter/moon.git
+git clone https://rustygits.com/Dark-Matter/moon.git
 cd moon/RockitCompiler
 make release && sudo make install
 ```
@@ -157,12 +157,12 @@ Auto-detects and installs Rockit support for every editor on your system:
 
 **macOS / Linux / Windows (WSL, Git Bash):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/ide/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/ide/install.ps1 | iex
 ```
 
 ### VS Code

@@ -28,12 +28,12 @@ Installs Rockit support to all detected editors (VS Code, Vim, Neovim, JetBrains
 
 **macOS / Linux / Windows (WSL, Git Bash):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/ide/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-iwr -useb https://raw.githubusercontent.com/Dark-Matter/moon/master/ide/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/ide/install.ps1 | iex
 ```
 
 ### From disk
