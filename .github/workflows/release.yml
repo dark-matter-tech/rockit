@@ -63,6 +63,12 @@ jobs:
           chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
           cp RockitCompiler/Runtime/rockit_runtime.c dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
           cp RockitCompiler/Runtime/rockit_runtime.h dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
+          # Standard library
+          mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/stdlib/rockit/core
+          mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/stdlib/rockit/io
+          cp RockitCompiler/Stage1/stdlib/rockit/*.rok dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/stdlib/rockit/
+          cp RockitCompiler/Stage1/stdlib/rockit/core/*.rok dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/stdlib/rockit/core/
+          cp RockitCompiler/Stage1/stdlib/rockit/io/*.rok dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/stdlib/rockit/io/
           cd dist && tar -czf "${ARCHIVE}" "rockit-${VERSION}-linux-x86_64"
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
           ls -la "${ARCHIVE}"
