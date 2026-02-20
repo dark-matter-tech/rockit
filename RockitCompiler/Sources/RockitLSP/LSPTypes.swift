@@ -381,6 +381,61 @@ public enum LSPSemanticTokenModifier: Int, CaseIterable {
     }
 }
 
+// MARK: - LSP Folding Range
+
+public struct LSPFoldingRange {
+    public let startLine: Int
+    public let startCharacter: Int?
+    public let endLine: Int
+    public let endCharacter: Int?
+    public let kind: String?  // "comment", "imports", "region"
+
+    func toJSON() -> [String: Any] {
+        var json: [String: Any] = [
+            "startLine": startLine,
+            "endLine": endLine
+        ]
+        if let sc = startCharacter { json["startCharacter"] = sc }
+        if let ec = endCharacter { json["endCharacter"] = ec }
+        if let kind = kind { json["kind"] = kind }
+        return json
+    }
+}
+
+// MARK: - LSP Document Highlight
+
+public struct LSPDocumentHighlight {
+    public let range: LSPRange
+    public let kind: Int  // 1 = Text, 2 = Read, 3 = Write
+
+    func toJSON() -> [String: Any] {
+        return [
+            "range": range.toJSON(),
+            "kind": kind
+        ]
+    }
+}
+
+// MARK: - LSP Selection Range
+
+public class LSPSelectionRange {
+    public let range: LSPRange
+    public let parent: LSPSelectionRange?
+
+    public init(range: LSPRange, parent: LSPSelectionRange?) {
+        self.range = range
+        self.parent = parent
+    }
+
+    func toJSON() -> [String: Any] {
+        var json: [String: Any] = ["range": range.toJSON()]
+        if let parent = parent {
+            json["parent"] = parent.toJSON()
+        }
+        return json
+    }
+}
+
 // MARK: - Position Conversion
 
 /// Convert LSP position (0-indexed line, 0-indexed character) to Rockit SourceLocation (1-indexed line, 0-indexed column)

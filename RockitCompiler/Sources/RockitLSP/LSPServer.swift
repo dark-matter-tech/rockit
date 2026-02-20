@@ -85,6 +85,12 @@ public final class LSPServer {
             handleWorkspaceSymbol(msg)
         case "textDocument/codeAction":
             handleCodeAction(msg)
+        case "textDocument/foldingRange":
+            handleFoldingRange(msg)
+        case "textDocument/documentHighlight":
+            handleDocumentHighlight(msg)
+        case "textDocument/selectionRange":
+            handleSelectionRange(msg)
 
         default:
             if let id = msg.id {
@@ -138,7 +144,10 @@ public final class LSPServer {
             "workspaceSymbolProvider": true,
             "codeActionProvider": [
                 "codeActionKinds": ["quickfix", "refactor"]
-            ] as [String: Any]
+            ] as [String: Any],
+            "foldingRangeProvider": true,
+            "documentHighlightProvider": true,
+            "selectionRangeProvider": true
         ]
 
         let result: [String: Any] = [
@@ -484,6 +493,68 @@ public final class LSPServer {
             documentText: text
         )
         sendResult(id: id, result: actions.map { $0.toJSON() })
+    }
+
+    // MARK: - Folding Ranges
+
+    private func handleFoldingRange(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri),
+              let text = documentManager.getText(uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let ranges = FoldingRangeProvider.foldingRanges(for: result, documentText: text)
+        sendResult(id: id, result: ranges.map { $0.toJSON() })
+    }
+
+    // MARK: - Document Highlight
+
+    private func handleDocumentHighlight(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let (uri, position) = extractTextDocumentPosition(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let highlights = DocumentHighlightProvider.highlights(at: position, uri: uri, analysisResult: result)
+        sendResult(id: id, result: highlights.map { $0.toJSON() })
+    }
+
+    // MARK: - Selection Range
+
+    private func handleSelectionRange(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let positions: [LSPPosition]
+        if let positionsJSON = msg.params?["positions"] as? [[String: Any]] {
+            positions = positionsJSON.compactMap { LSPPosition(json: $0) }
+        } else {
+            positions = []
+        }
+
+        let ranges = SelectionRangeProvider.selectionRanges(positions: positions, uri: uri, analysisResult: result)
+        sendResult(id: id, result: ranges.map { $0.toJSON() })
     }
 
     // MARK: - Helpers
