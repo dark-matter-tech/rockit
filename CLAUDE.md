@@ -163,6 +163,12 @@ RockitCompiler/
 │   ├── command.rok                  # Concatenated compiler (auto-gen via build.sh)
 │   ├── command                      # Stage 1 native binary
 │   └── stdlib/rockit/               # Standard library modules
+│       ├── core/collections.rok     # List map/filter/fold/sort/zip/flatten
+│       ├── core/math.rok            # clamp, lerp, isPrime, gcd, lcm
+│       ├── core/strings.rok         # pad, repeat, join, reversed, truncate
+│       ├── core/result.rok          # Result type (Success/Failure)
+│       ├── io/file.rok              # File I/O wrappers
+│       └── json.rok                 # JSON encoder/decoder (parse, stringify, pretty-print)
 ├── Runtime/
 │   ├── rockit_runtime.c             # C runtime (ARC, task scheduler, event loop, actor wrappers)
 │   └── rockit/                      # Modular Rockit runtime (freestanding)
@@ -184,6 +190,19 @@ RockitCompiler/
 ```
 
 RockitKit is a standalone library so it can be imported by other tools (editor plugins, LSP server, Fuel) without the CLI.
+
+## Standard Library
+
+Stdlib modules live in `Stage1/stdlib/rockit/` and are compiled with `--lib-path Stage1/stdlib`. Import via dot-separated paths: `import rockit.json`, `import rockit.core.collections`.
+
+### Key constraints for stdlib development
+
+- Only Stage 1 builtins are available (registered in `Stage1/typechecker.rok` lines 105-199)
+- **NOT available in native codegen**: `toFloat`, `formatFloat`, `stringContains`, `stringSubstring` (use `substring`), `intToString` (use `toString`), `mapContainsKey` (use `mapGet` + null check)
+- **Available**: `toString`, `toInt`, `charAt`, `charCodeAt`, `intToChar`, `substring`, `stringLength`, `stringConcat`, `stringIndexOf`, `mapGet`, `mapPut`, `mapKeys`, `listCreate`, `listAppend`, `listGet`, `listSet`, `listSize`, `fileRead`, `fileWriteBytes`, `processArgs`, `getEnv`, `typeOf`, `isMap`, `isList`
+- No `continue` in loops — use if/else chains
+- `mapGet` returns `null` for missing keys — always check before `toString`
+- Tests follow the `test_stdlib_*.rok` naming convention in `Examples/`
 
 ## Coding Standards
 

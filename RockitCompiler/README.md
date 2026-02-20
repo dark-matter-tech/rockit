@@ -178,6 +178,51 @@ fun main() {
 
 ---
 
+## Standard Library
+
+The standard library ships under `Stage1/stdlib/rockit/` and is imported with `import rockit.<module>`. Programs using stdlib modules are compiled with `--lib-path`:
+
+```bash
+rockit build-native myapp.rok --lib-path Stage1/stdlib
+```
+
+### Modules
+
+| Module | Import | Description |
+|--------|--------|-------------|
+| `core/collections` | `import rockit.core.collections` | List utilities — map, filter, fold, sort, zip, flatten |
+| `core/math` | `import rockit.core.math` | Integer and floating-point math — clamp, lerp, isPrime |
+| `core/strings` | `import rockit.core.strings` | String utilities — pad, repeat, join, reversed, truncate |
+| `core/result` | `import rockit.core.result` | Result type — Success/Failure with map, orElse |
+| `io/file` | `import rockit.io.file` | File I/O wrappers — readFile, writeFile, appendFile |
+| `json` | `import rockit.json` | JSON encoder/decoder — parse, stringify, pretty-print |
+
+### JSON Example
+
+```kotlin
+import rockit.json
+
+fun main(): Unit {
+    val input = "{\"name\": \"Rockit\", \"version\": 1, \"features\": [\"fast\", \"safe\"]}"
+    val obj = jsonParse(input)
+
+    // Read values
+    println(jsonGetString(jsonObjectGet(obj, "name")))  // Rockit
+    println(jsonGetInt(jsonObjectGet(obj, "version")))   // 1
+
+    // Modify
+    jsonObjectPut(obj, "stable", jsonBool(true))
+
+    // Serialize
+    println(jsonStringify(obj))
+    println(jsonStringifyPretty(obj, 0))
+}
+```
+
+See `Examples/json_tool.rok` for a complete file-based JSON tool (pretty-print, compact, info modes).
+
+---
+
 ## Test
 
 ```bash
@@ -292,8 +337,16 @@ RockitCompiler/
 │   ├── llvmgen.rok         # Stage 1 LLVM native codegen
 │   ├── command.rok         # Concatenated compiler source
 │   ├── command             # Stage 1 native binary
-│   └── stdlib/             # Standard library modules
-└── Examples/               # 48 example/test .rok files
+│   └── stdlib/rockit/      # Standard library modules
+│       ├── core/
+│       │   ├── collections.rok  # List map/filter/fold/sort/zip
+│       │   ├── math.rok         # clamp, lerp, isPrime, gcd
+│       │   ├── strings.rok      # pad, repeat, join, reversed
+│       │   └── result.rok       # Result type (Success/Failure)
+│       ├── io/
+│       │   └── file.rok         # File I/O wrappers
+│       └── json.rok             # JSON parser and serializer
+└── Examples/               # 48+ example/test .rok files
 ```
 
 RockitKit is a standalone library so it can be imported by other tools (editor plugins, LSP server, Fuel) without the CLI.
