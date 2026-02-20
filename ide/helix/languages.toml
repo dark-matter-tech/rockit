@@ -1,0 +1,17 @@
+# Rockit language configuration for Helix
+#
+# Add this to ~/.config/helix/languages.toml
+
+[[language]]
+name = "rockit"
+scope = "source.rockit"
+file-types = ["rok"]
+comment-token = "//"
+block-comment-tokens = { start = "/*", end = "*/" }
+indent = { tab-width = 4, unit = "    " }
+language-servers = ["rockit-lsp"]
+roots = ["fuel.toml"]
+
+[language-server.rockit-lsp]
+command = "rockit"
+args = ["lsp"]

@@ -1,0 +1,10 @@
+{
+  "clients": {
+    "rockit": {
+      "enabled": true,
+      "command": ["rockit", "lsp"],
+      "selector": "source.rockit",
+      "schemes": ["file"]
+    }
+  }
+}

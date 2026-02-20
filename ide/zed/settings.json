@@ -1,0 +1,18 @@
+{
+  "lsp": {
+    "rockit-lsp": {
+      "binary": {
+        "path": "rockit",
+        "arguments": ["lsp"]
+      }
+    }
+  },
+  "languages": {
+    "Rockit": {
+      "language_servers": ["rockit-lsp"]
+    }
+  },
+  "file_types": {
+    "Rockit": ["rok"]
+  }
+}

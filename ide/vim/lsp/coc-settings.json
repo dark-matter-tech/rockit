@@ -1,0 +1,10 @@
+{
+  "languageserver": {
+    "rockit": {
+      "command": "rockit",
+      "args": ["lsp"],
+      "filetypes": ["rockit"],
+      "rootPatterns": ["fuel.toml", ".git"]
+    }
+  }
+}
