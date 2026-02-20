@@ -58,9 +58,17 @@
                 language="Rockit"
                 implementationClass="com.darkmatter.rockit.RockitQuoteHandler"/>
 
+        <lang.parserDefinition
+                language="Rockit"
+                implementationClass="com.darkmatter.rockit.RockitParserDefinition"/>
+
         <lang.foldingBuilder
                 language="Rockit"
                 implementationClass="com.darkmatter.rockit.RockitFoldingBuilder"/>
+
+        <lang.psiStructureViewFactory
+                language="Rockit"
+                implementationClass="com.darkmatter.rockit.RockitStructureViewFactory"/>
 
         <!-- Color scheme addons — provide distinct default colors per theme -->
         <additionalTextAttributesScheme scheme="Darcula" file="colorSchemes/RockitDarcula.xml"/>
