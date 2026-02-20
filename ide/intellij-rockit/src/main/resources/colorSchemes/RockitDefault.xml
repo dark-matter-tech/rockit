@@ -146,6 +146,13 @@
         </value>
     </option>
 
+    <!-- Local variables / identifiers — dark blue -->
+    <option name="ROCKIT_IDENTIFIER">
+        <value>
+            <option name="FOREGROUND" value="001080"/>
+        </value>
+    </option>
+
     <!-- Operators — dark gray -->
     <option name="ROCKIT_OPERATOR">
         <value>

@@ -220,11 +220,12 @@ class RockitSyntaxHighlighter : SyntaxHighlighterBase() {
             attrs(JBColor(Color(0xBB, 0xB5, 0x29), Color(0xFF, 0xA1, 0x4F)))
         )
 
-        // Identifier — keep theme default
+        // Identifier / local variable — light blue (dark), dark blue (light)
         @JvmField
+        @Suppress("DEPRECATION")
         val IDENTIFIER = createTextAttributesKey(
             "ROCKIT_IDENTIFIER",
-            DefaultLanguageHighlighterColors.IDENTIFIER
+            attrs(JBColor(Color(0x00, 0x10, 0x80), Color(0x9C, 0xDC, 0xFE)))
         )
 
         // Bad character
