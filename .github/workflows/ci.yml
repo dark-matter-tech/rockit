@@ -465,6 +465,56 @@ jobs:
           fi
 
           # ============================================================
+          # Rockit Runtime Verification
+          # ============================================================
+          echo ""
+          echo "  ╔═══════════════════════════════════════════╗"
+          echo "  ║  ⚙️  Rockit Runtime Build Verification     ║"
+          echo "  ╚═══════════════════════════════════════════╝"
+          echo "  Rebuilding freestanding runtime from source modules..."
+          # Concatenate modules in dependency order
+          cat \
+              Runtime/rockit/math.rok \
+              Runtime/rockit/memory.rok \
+              Runtime/rockit/string.rok \
+              Runtime/rockit/string_ops.rok \
+              Runtime/rockit/object.rok \
+              Runtime/rockit/list.rok \
+              Runtime/rockit/map.rok \
+              Runtime/rockit/io.rok \
+              Runtime/rockit/exception.rok \
+              Runtime/rockit/file.rok \
+              Runtime/rockit/process.rok \
+              Runtime/rockit/concurrency.rok \
+              > /tmp/rockit_runtime_verify.rok
+          # Compile with --no-runtime (link will fail — no main — but compilation must succeed)
+          if $STAGE1_CMD build-native /tmp/rockit_runtime_verify.rok --no-runtime -o /tmp/rockit_runtime_verify --target-triple $TRIPLE > /tmp/rt_build_log 2>&1; then
+            echo "  ✅ Rockit runtime compiles successfully"
+          else
+            # Link failure due to missing main is expected; check if it's just that
+            if grep -q "undefined.*_main" /tmp/rt_build_log && ! grep -q "error:.*\.ll:" /tmp/rt_build_log; then
+              echo "  ✅ Rockit runtime compiles successfully (link skipped — no main)"
+            else
+              echo "  ❌ Rockit runtime compilation FAILED"
+              cat /tmp/rt_build_log
+              exit 1
+            fi
+          fi
+
+          # Verify command.rok matches concatenated Stage 1 modules
+          echo "  Verifying Stage 1 command.rok consistency..."
+          cp Stage1/command.rok /tmp/command_before.rok
+          bash Stage1/build.sh > /dev/null 2>&1
+          if diff /tmp/command_before.rok Stage1/command.rok > /dev/null 2>&1; then
+            echo "  ✅ command.rok matches source modules"
+          else
+            echo "  ❌ command.rok is out of sync with Stage 1 modules!"
+            echo "     Run: bash Stage1/build.sh"
+            exit 1
+          fi
+          echo ""
+
+          # ============================================================
           # Standard Library Tests (require --lib-path)
           # ============================================================
           echo ""
