@@ -227,6 +227,67 @@ fun main(): Unit {
 
 Stage 1 features available in freestanding mode: `Ptr<T>`, `alloc`/`free`, `bitcast`, `cstr`, `unsafe` blocks, `loadByte`/`storeByte`, `extern` C functions, `@CRepr` structs, global variables.
 
+## Language Server (LSP)
+
+Rockit ships a built-in language server. Start it with:
+
+```bash
+rockit lsp
+```
+
+Works with any LSP-compatible editor. IDE configs are provided in `ide/` for JetBrains, VS Code, Vim/Neovim, Sublime Text, Emacs, Helix, and Zed.
+
+### Capabilities
+
+| Feature | LSP Method | Status |
+|---------|-----------|--------|
+| Diagnostics | `textDocument/publishDiagnostics` | Done |
+| Hover | `textDocument/hover` | Done |
+| Completion | `textDocument/completion` | Done |
+| Go to Definition | `textDocument/definition` | Done |
+| Go to Implementation | `textDocument/implementation` | Done |
+| Find References | `textDocument/references` | Done |
+| Document Symbols | `textDocument/documentSymbol` | Done |
+| Workspace Symbols | `workspace/symbol` | Done |
+| Signature Help | `textDocument/signatureHelp` | Done |
+| Rename Symbol | `textDocument/rename` | Done |
+| Semantic Tokens | `textDocument/semanticTokens/full` | Done |
+| Document Formatting | `textDocument/formatting` | Done |
+| Inlay Hints | `textDocument/inlayHint` | Done |
+| Code Actions | `textDocument/codeAction` | Done |
+| Folding Ranges | `textDocument/foldingRange` | Done |
+| Document Highlight | `textDocument/documentHighlight` | Done |
+| Selection Range | `textDocument/selectionRange` | Done |
+| Incremental Sync | `textDocument/didChange` (mode 2) | Done |
+
+### Editor Setup
+
+**JetBrains (IntelliJ / Fleet):** Install the plugin from `ide/intellij-rockit/build/distributions/intellij-rockit-*.zip` via Settings > Plugins > Install Plugin from Disk.
+
+**VS Code:** Open `ide/vscode/` and run `npm install && npm run compile`. Install via Extensions > Install from VSIX or symlink into `~/.vscode/extensions/`.
+
+**Neovim (nvim-lspconfig):**
+```lua
+require('lspconfig.configs').rockit = {
+  default_config = {
+    cmd = { 'rockit', 'lsp' },
+    filetypes = { 'rockit' },
+    root_dir = require('lspconfig.util').root_pattern('fuel.toml', '.git'),
+  },
+}
+require('lspconfig').rockit.setup({})
+```
+
+**Sublime Text:** Copy `ide/sublime/LSP-rockit.sublime-settings` into your Packages/LSP/ directory.
+
+**Emacs:** See `ide/emacs/rockit-lsp.el` for lsp-mode and eglot configurations.
+
+**Helix:** Copy `ide/helix/languages.toml` into your Helix config directory.
+
+**Zed:** Copy `ide/zed/settings.json` into your Zed settings.
+
+---
+
 ## Compiler Pipeline
 
 | Phase | Input | Output | Status |
