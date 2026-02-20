@@ -82,7 +82,101 @@ rockit update
 
 # Version
 rockit version
+
+# Fuel — package management
+rockit fuel install              # Resolve and fetch all dependencies
+rockit fuel add json --git <url> # Add a dependency
+rockit fuel remove json          # Remove a dependency
+rockit fuel clean                # Clear the package cache
 ```
+
+## Fuel (Package Manager)
+
+Fuel manages dependencies for Rockit projects. Dependencies are declared in `fuel.toml` and resolved automatically during builds.
+
+### Create a project
+
+```bash
+rockit init myproject
+cd myproject
+```
+
+This creates:
+```
+myproject/
+  fuel.toml         # Project manifest
+  src/main.rok      # Entry point
+  tests/test_main.rok
+```
+
+### fuel.toml
+
+```toml
+[package]
+name = "myproject"
+version = "0.1.0"
+
+[dependencies]
+json = "^1.0.0"
+http = { version = "~2.1", git = "https://rustygits.com/Dark-Matter/http.git" }
+utils = { path = "../my-utils" }
+```
+
+Dependencies can be:
+- **Simple**: `name = "version-constraint"` (requires git URL via `fuel add`)
+- **Git**: `name = { version = "constraint", git = "url" }`
+- **Local path**: `name = { path = "../relative/path" }`
+
+### Version constraints
+
+| Syntax | Meaning |
+|--------|---------|
+| `^1.2.3` | Compatible — `>=1.2.3, <2.0.0` |
+| `~1.2.3` | Patch only — `>=1.2.3, <1.3.0` |
+| `>=1.0.0` | Greater or equal |
+| `1.2.3` | Exact version |
+| `*` | Any version |
+
+### Commands
+
+```bash
+# Add a dependency (git URL required until Silo registry is live)
+rockit fuel add json --git https://rustygits.com/Dark-Matter/json.git --version "^1.0"
+
+# Install all dependencies from fuel.toml
+rockit fuel install
+
+# Remove a dependency
+rockit fuel remove json
+
+# Clear the global package cache
+rockit fuel clean
+```
+
+### How it works
+
+1. `fuel.toml` is parsed for `[dependencies]`
+2. Version tags are discovered via `git ls-remote --tags`
+3. The highest version matching each constraint is selected
+4. Packages are fetched (shallow clone) into `~/.rockit/packages/`
+5. `fuel.lock` is written for reproducible builds
+6. All build commands (`build`, `run`, `build-native`, `run-native`, `check`, `emit-llvm`) automatically resolve dependencies — no separate install step required
+
+### Using dependencies
+
+Once a dependency is installed, import its modules:
+
+```kotlin
+import json
+import http.client
+
+fun main() {
+    val data = json.parse("{\"key\": \"value\"}")
+    println(data)
+}
+```
+
+---
 
 ## Test
 
