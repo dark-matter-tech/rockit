@@ -811,6 +811,14 @@ int64_t charCodeAt(RockitString* s, int64_t index) {
     return (int64_t)(unsigned char)s->chars[index];
 }
 
+RockitString* intToChar(int64_t code) {
+    if (code < 0 || code > 127) {
+        return rockit_string_new("");
+    }
+    char buf[2] = { (char)code, '\0' };
+    return rockit_string_new(buf);
+}
+
 int8_t startsWith(RockitString* s, RockitString* prefix) {
     if (!s || !prefix) return 0;
     if (prefix->length > s->length) return 0;

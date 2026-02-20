@@ -1,0 +1,763 @@
+// rockit.json — JSON encoder / decoder
+//
+// Usage:
+//   import rockit.json
+//   val obj = jsonParse("{\"name\": \"Rockit\", \"version\": 1}")
+//   println(jsonGetString(jsonObjectGet(obj, "name")))  // Rockit
+//   println(jsonStringify(obj))
+
+// ── Type Constants ──────────────────────────────────────────────────────
+
+fun JSON_NULL(): Int   { return 0 }
+fun JSON_BOOL(): Int   { return 1 }
+fun JSON_NUMBER(): Int { return 2 }
+fun JSON_STRING(): Int { return 3 }
+fun JSON_ARRAY(): Int  { return 4 }
+fun JSON_OBJECT(): Int { return 5 }
+fun JSON_ERROR(): Int  { return -1 }
+
+// ── Constructors ────────────────────────────────────────────────────────
+
+fun jsonNull(): Map {
+    val m = mapCreate()
+    mapPut(m, "type", JSON_NULL())
+    mapPut(m, "value", 0)
+    return m
+}
+
+fun jsonBool(b: Bool): Map {
+    val m = mapCreate()
+    mapPut(m, "type", JSON_BOOL())
+    if (b) {
+        mapPut(m, "value", 1)
+    } else {
+        mapPut(m, "value", 0)
+    }
+    return m
+}
+
+fun jsonNumber(n: Int): Map {
+    val m = mapCreate()
+    mapPut(m, "type", JSON_NUMBER())
+    mapPut(m, "value", toString(n))
+    return m
+}
+
+fun jsonNumberFromString(s: String): Map {
+    val m = mapCreate()
+    mapPut(m, "type", JSON_NUMBER())
+    mapPut(m, "value", s)
+    return m
+}
+
+fun jsonString(s: String): Map {
+    val m = mapCreate()
+    mapPut(m, "type", JSON_STRING())
+    mapPut(m, "value", s)
+    return m
+}
+
+fun jsonArray(): Map {
+    val m = mapCreate()
+    mapPut(m, "type", JSON_ARRAY())
+    mapPut(m, "value", listCreate())
+    return m
+}
+
+fun jsonObject(): Map {
+    val m = mapCreate()
+    mapPut(m, "type", JSON_OBJECT())
+    mapPut(m, "value", mapCreate())
+    return m
+}
+
+fun jsonError(msg: String): Map {
+    val m = mapCreate()
+    mapPut(m, "type", JSON_ERROR())
+    mapPut(m, "value", msg)
+    return m
+}
+
+// ── Type Checking ───────────────────────────────────────────────────────
+
+fun jsonType(v: Map): Int {
+    return toInt(mapGet(v, "type"))
+}
+
+fun jsonIsNull(v: Map): Bool {
+    return jsonType(v) == JSON_NULL()
+}
+
+fun jsonIsBool(v: Map): Bool {
+    return jsonType(v) == JSON_BOOL()
+}
+
+fun jsonIsNumber(v: Map): Bool {
+    return jsonType(v) == JSON_NUMBER()
+}
+
+fun jsonIsString(v: Map): Bool {
+    return jsonType(v) == JSON_STRING()
+}
+
+fun jsonIsArray(v: Map): Bool {
+    return jsonType(v) == JSON_ARRAY()
+}
+
+fun jsonIsObject(v: Map): Bool {
+    return jsonType(v) == JSON_OBJECT()
+}
+
+fun jsonIsError(v: Map): Bool {
+    return jsonType(v) == JSON_ERROR()
+}
+
+// ── Accessors ───────────────────────────────────────────────────────────
+
+fun jsonGetBool(v: Map): Bool {
+    return toInt(mapGet(v, "value")) != 0
+}
+
+fun jsonGetInt(v: Map): Int {
+    return toInt(toString(mapGet(v, "value")))
+}
+
+fun jsonGetString(v: Map): String {
+    return toString(mapGet(v, "value"))
+}
+
+fun jsonGetNumberString(v: Map): String {
+    return toString(mapGet(v, "value"))
+}
+
+// ── Array Operations ────────────────────────────────────────────────────
+
+fun jsonArrayAppend(arr: Map, item: Map): Unit {
+    val list = mapGet(arr, "value")
+    listAppend(list, item)
+}
+
+fun jsonArrayGet(arr: Map, index: Int): Map {
+    val list = mapGet(arr, "value")
+    if (index < 0 || index >= listSize(list)) {
+        return jsonNull()
+    }
+    return listGet(list, index)
+}
+
+fun jsonArraySize(arr: Map): Int {
+    val list = mapGet(arr, "value")
+    return listSize(list)
+}
+
+// ── Object Operations ───────────────────────────────────────────────────
+
+fun jsonObjectPut(obj: Map, key: String, value: Map): Unit {
+    val inner = mapGet(obj, "value")
+    mapPut(inner, key, value)
+}
+
+fun jsonObjectGet(obj: Map, key: String): Map {
+    val inner = mapGet(obj, "value")
+    val result = mapGet(inner, key)
+    if (result == null) {
+        return jsonNull()
+    }
+    return result
+}
+
+fun jsonObjectKeys(obj: Map): List {
+    val inner = mapGet(obj, "value")
+    return mapKeys(inner)
+}
+
+fun jsonObjectHas(obj: Map, key: String): Bool {
+    val inner = mapGet(obj, "value")
+    return mapGet(inner, key) != null
+}
+
+// ── Parser Internals ────────────────────────────────────────────────────
+
+fun parserPeek(state: Map): String {
+    val pos = toInt(mapGet(state, "pos"))
+    val len = toInt(mapGet(state, "len"))
+    if (pos >= len) { return "" }
+    val input = toString(mapGet(state, "input"))
+    return charAt(input, pos)
+}
+
+fun parserPeekCode(state: Map): Int {
+    val pos = toInt(mapGet(state, "pos"))
+    val len = toInt(mapGet(state, "len"))
+    if (pos >= len) { return 0 }
+    val input = toString(mapGet(state, "input"))
+    return charCodeAt(input, pos)
+}
+
+fun parserAdvance(state: Map): String {
+    val pos = toInt(mapGet(state, "pos"))
+    val len = toInt(mapGet(state, "len"))
+    if (pos >= len) { return "" }
+    val input = toString(mapGet(state, "input"))
+    val ch = charAt(input, pos)
+    mapPut(state, "pos", pos + 1)
+    return ch
+}
+
+fun parserSkipWhitespace(state: Map): Unit {
+    val len = toInt(mapGet(state, "len"))
+    var pos = toInt(mapGet(state, "pos"))
+    val input = toString(mapGet(state, "input"))
+    var done: Bool = false
+    while (!done) {
+        if (pos >= len) {
+            done = true
+        } else {
+            val code = charCodeAt(input, pos)
+            // space=32, tab=9, newline=10, carriage return=13
+            if (code == 32 || code == 9 || code == 10 || code == 13) {
+                pos = pos + 1
+            } else {
+                done = true
+            }
+        }
+    }
+    mapPut(state, "pos", pos)
+}
+
+fun parserExpect(state: Map, expected: String): Bool {
+    val ch = parserPeek(state)
+    if (ch == expected) {
+        parserAdvance(state)
+        return true
+    }
+    return false
+}
+
+fun parserErrorAt(state: Map, msg: String): Map {
+    val pos = toInt(mapGet(state, "pos"))
+    return jsonError(stringConcat(msg, stringConcat(" at position ", toString(pos))))
+}
+
+// ── Parse String ────────────────────────────────────────────────────────
+
+fun parseHexDigit(ch: String): Int {
+    val code = charCodeAt(ch, 0)
+    // '0'-'9' = 48-57
+    if (code >= 48 && code <= 57) { return code - 48 }
+    // 'a'-'f' = 97-102
+    if (code >= 97 && code <= 102) { return code - 87 }
+    // 'A'-'F' = 65-70
+    if (code >= 65 && code <= 70) { return code - 55 }
+    return -1
+}
+
+fun parseUnicodeEscape(state: Map): String {
+    var codePoint: Int = 0
+    var i: Int = 0
+    while (i < 4) {
+        val ch = parserAdvance(state)
+        val digit = parseHexDigit(ch)
+        if (digit < 0) {
+            return ""
+        }
+        codePoint = codePoint * 16 + digit
+        i = i + 1
+    }
+    return intToChar(codePoint)
+}
+
+fun parseJsonString(state: Map): Map {
+    // Consume opening quote
+    if (!parserExpect(state, "\"")) {
+        return parserErrorAt(state, "Expected '\"'")
+    }
+
+    var result: String = ""
+    var done: Bool = false
+
+    while (!done) {
+        val ch = parserPeek(state)
+        if (ch == "") {
+            return parserErrorAt(state, "Unterminated string")
+        } else if (ch == "\"") {
+            parserAdvance(state)
+            done = true
+        } else if (ch == "\\") {
+            parserAdvance(state)
+            val esc = parserAdvance(state)
+            if (esc == "\"") {
+                result = stringConcat(result, "\"")
+            } else if (esc == "\\") {
+                result = stringConcat(result, "\\")
+            } else if (esc == "/") {
+                result = stringConcat(result, "/")
+            } else if (esc == "b") {
+                result = stringConcat(result, intToChar(8))
+            } else if (esc == "f") {
+                result = stringConcat(result, intToChar(12))
+            } else if (esc == "n") {
+                result = stringConcat(result, intToChar(10))
+            } else if (esc == "r") {
+                result = stringConcat(result, intToChar(13))
+            } else if (esc == "t") {
+                result = stringConcat(result, intToChar(9))
+            } else if (esc == "u") {
+                val uni = parseUnicodeEscape(state)
+                if (stringLength(uni) == 0) {
+                    return parserErrorAt(state, "Invalid unicode escape")
+                }
+                result = stringConcat(result, uni)
+            } else {
+                return parserErrorAt(state, stringConcat("Invalid escape: \\", esc))
+            }
+        } else {
+            parserAdvance(state)
+            result = stringConcat(result, ch)
+        }
+    }
+
+    return jsonString(result)
+}
+
+// ── Parse Number ────────────────────────────────────────────────────────
+
+fun parseJsonNumber(state: Map): Map {
+    val input = toString(mapGet(state, "input"))
+    val len = toInt(mapGet(state, "len"))
+    val start = toInt(mapGet(state, "pos"))
+    var pos: Int = start
+
+    // Optional minus
+    if (pos < len && charCodeAt(input, pos) == 45) {
+        pos = pos + 1
+    }
+
+    // Integer part
+    if (pos < len && charCodeAt(input, pos) == 48) {
+        // Leading zero — just consume one '0'
+        pos = pos + 1
+    } else {
+        // One or more digits
+        if (pos >= len || charCodeAt(input, pos) < 48 || charCodeAt(input, pos) > 57) {
+            mapPut(state, "pos", pos)
+            return parserErrorAt(state, "Expected digit")
+        }
+        while (pos < len && charCodeAt(input, pos) >= 48 && charCodeAt(input, pos) <= 57) {
+            pos = pos + 1
+        }
+    }
+
+    // Optional fractional part
+    if (pos < len && charCodeAt(input, pos) == 46) {
+        pos = pos + 1
+        if (pos >= len || charCodeAt(input, pos) < 48 || charCodeAt(input, pos) > 57) {
+            mapPut(state, "pos", pos)
+            return parserErrorAt(state, "Expected digit after decimal point")
+        }
+        while (pos < len && charCodeAt(input, pos) >= 48 && charCodeAt(input, pos) <= 57) {
+            pos = pos + 1
+        }
+    }
+
+    // Optional exponent
+    if (pos < len && (charCodeAt(input, pos) == 101 || charCodeAt(input, pos) == 69)) {
+        pos = pos + 1
+        // Optional sign
+        if (pos < len && (charCodeAt(input, pos) == 43 || charCodeAt(input, pos) == 45)) {
+            pos = pos + 1
+        }
+        if (pos >= len || charCodeAt(input, pos) < 48 || charCodeAt(input, pos) > 57) {
+            mapPut(state, "pos", pos)
+            return parserErrorAt(state, "Expected digit in exponent")
+        }
+        while (pos < len && charCodeAt(input, pos) >= 48 && charCodeAt(input, pos) <= 57) {
+            pos = pos + 1
+        }
+    }
+
+    val numStr = substring(input, start, pos)
+    mapPut(state, "pos", pos)
+    return jsonNumberFromString(numStr)
+}
+
+// ── Parse Literal ───────────────────────────────────────────────────────
+
+fun parseJsonLiteral(state: Map): Map {
+    val input = toString(mapGet(state, "input"))
+    val len = toInt(mapGet(state, "len"))
+    val pos = toInt(mapGet(state, "pos"))
+
+    // true
+    if (pos + 4 <= len && substring(input, pos, pos + 4) == "true") {
+        mapPut(state, "pos", pos + 4)
+        return jsonBool(true)
+    }
+
+    // false
+    if (pos + 5 <= len && substring(input, pos, pos + 5) == "false") {
+        mapPut(state, "pos", pos + 5)
+        return jsonBool(false)
+    }
+
+    // null
+    if (pos + 4 <= len && substring(input, pos, pos + 4) == "null") {
+        mapPut(state, "pos", pos + 4)
+        return jsonNull()
+    }
+
+    return parserErrorAt(state, "Unexpected token")
+}
+
+// ── Parse Value (recursive) ─────────────────────────────────────────────
+
+fun parseJsonValue(state: Map): Map {
+    parserSkipWhitespace(state)
+
+    val ch = parserPeek(state)
+
+    if (ch == "") {
+        return parserErrorAt(state, "Unexpected end of input")
+    }
+
+    if (ch == "\"") {
+        return parseJsonString(state)
+    }
+
+    if (ch == "{") {
+        return parseJsonObject(state)
+    }
+
+    if (ch == "[") {
+        return parseJsonArray(state)
+    }
+
+    // Number: starts with digit or minus
+    val code = parserPeekCode(state)
+    if (code == 45 || (code >= 48 && code <= 57)) {
+        return parseJsonNumber(state)
+    }
+
+    // Literal: true, false, null
+    if (ch == "t" || ch == "f" || ch == "n") {
+        return parseJsonLiteral(state)
+    }
+
+    return parserErrorAt(state, stringConcat("Unexpected character: ", ch))
+}
+
+// ── Parse Array ─────────────────────────────────────────────────────────
+
+fun parseJsonArray(state: Map): Map {
+    parserAdvance(state) // consume '['
+    parserSkipWhitespace(state)
+
+    val arr = jsonArray()
+
+    // Empty array
+    if (parserPeek(state) == "]") {
+        parserAdvance(state)
+        return arr
+    }
+
+    var done: Bool = false
+    while (!done) {
+        val item = parseJsonValue(state)
+        if (jsonIsError(item)) {
+            return item
+        }
+        jsonArrayAppend(arr, item)
+
+        parserSkipWhitespace(state)
+        val ch = parserPeek(state)
+        if (ch == ",") {
+            parserAdvance(state)
+        } else if (ch == "]") {
+            parserAdvance(state)
+            done = true
+        } else {
+            return parserErrorAt(state, "Expected ',' or ']' in array")
+        }
+    }
+
+    return arr
+}
+
+// ── Parse Object ────────────────────────────────────────────────────────
+
+fun parseJsonObject(state: Map): Map {
+    parserAdvance(state) // consume '{'
+    parserSkipWhitespace(state)
+
+    val obj = jsonObject()
+
+    // Empty object
+    if (parserPeek(state) == "}") {
+        parserAdvance(state)
+        return obj
+    }
+
+    var done: Bool = false
+    while (!done) {
+        parserSkipWhitespace(state)
+
+        // Key must be a string
+        if (parserPeek(state) != "\"") {
+            return parserErrorAt(state, "Expected string key")
+        }
+        val keyNode = parseJsonString(state)
+        if (jsonIsError(keyNode)) {
+            return keyNode
+        }
+        val key = jsonGetString(keyNode)
+
+        // Colon
+        parserSkipWhitespace(state)
+        if (!parserExpect(state, ":")) {
+            return parserErrorAt(state, "Expected ':' after key")
+        }
+
+        // Value
+        val value = parseJsonValue(state)
+        if (jsonIsError(value)) {
+            return value
+        }
+
+        jsonObjectPut(obj, key, value)
+
+        parserSkipWhitespace(state)
+        val ch = parserPeek(state)
+        if (ch == ",") {
+            parserAdvance(state)
+        } else if (ch == "}") {
+            parserAdvance(state)
+            done = true
+        } else {
+            return parserErrorAt(state, "Expected ',' or '}' in object")
+        }
+    }
+
+    return obj
+}
+
+// ── Public Parse Entry Point ────────────────────────────────────────────
+
+fun jsonParse(input: String): Map {
+    val state = mapCreate()
+    mapPut(state, "input", input)
+    mapPut(state, "pos", 0)
+    mapPut(state, "len", stringLength(input))
+
+    val result = parseJsonValue(state)
+    if (jsonIsError(result)) {
+        return result
+    }
+
+    // Check for trailing content
+    parserSkipWhitespace(state)
+    val pos = toInt(mapGet(state, "pos"))
+    val len = toInt(mapGet(state, "len"))
+    if (pos < len) {
+        return parserErrorAt(state, "Unexpected trailing content")
+    }
+
+    return result
+}
+
+// ── String Escaping ─────────────────────────────────────────────────────
+
+fun jsonEscapeString(s: String): String {
+    var result: String = ""
+    val len = stringLength(s)
+    var i: Int = 0
+    while (i < len) {
+        val code = charCodeAt(s, i)
+        if (code == 34) {
+            // double quote
+            result = stringConcat(result, "\\\"")
+        } else if (code == 92) {
+            // backslash
+            result = stringConcat(result, "\\\\")
+        } else if (code == 10) {
+            // newline
+            result = stringConcat(result, "\\n")
+        } else if (code == 13) {
+            // carriage return
+            result = stringConcat(result, "\\r")
+        } else if (code == 9) {
+            // tab
+            result = stringConcat(result, "\\t")
+        } else if (code == 8) {
+            // backspace
+            result = stringConcat(result, "\\b")
+        } else if (code == 12) {
+            // form feed
+            result = stringConcat(result, "\\f")
+        } else if (code < 32) {
+            // Other control characters: \u00XX
+            val hex = intToHex4(code)
+            result = stringConcat(result, stringConcat("\\u", hex))
+        } else {
+            result = stringConcat(result, charAt(s, i))
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Convert an integer 0-65535 to a 4-digit hex string
+fun intToHex4(n: Int): String {
+    val hexChars = "0123456789abcdef"
+    val d3 = charAt(hexChars, (n / 4096) % 16)
+    val d2 = charAt(hexChars, (n / 256) % 16)
+    val d1 = charAt(hexChars, (n / 16) % 16)
+    val d0 = charAt(hexChars, n % 16)
+    return stringConcat(d3, stringConcat(d2, stringConcat(d1, d0)))
+}
+
+// ── Serialization ───────────────────────────────────────────────────────
+
+fun jsonStringify(v: Map): String {
+    val t = jsonType(v)
+
+    if (t == JSON_NULL()) {
+        return "null"
+    }
+
+    if (t == JSON_BOOL()) {
+        if (jsonGetBool(v)) {
+            return "true"
+        } else {
+            return "false"
+        }
+    }
+
+    if (t == JSON_NUMBER()) {
+        return jsonGetNumberString(v)
+    }
+
+    if (t == JSON_STRING()) {
+        return stringConcat("\"", stringConcat(jsonEscapeString(jsonGetString(v)), "\""))
+    }
+
+    if (t == JSON_ARRAY()) {
+        val list = mapGet(v, "value")
+        val size = listSize(list)
+        if (size == 0) { return "[]" }
+        var result: String = "["
+        var i: Int = 0
+        while (i < size) {
+            if (i > 0) {
+                result = stringConcat(result, ",")
+            }
+            result = stringConcat(result, jsonStringify(listGet(list, i)))
+            i = i + 1
+        }
+        result = stringConcat(result, "]")
+        return result
+    }
+
+    if (t == JSON_OBJECT()) {
+        val inner = mapGet(v, "value")
+        val keys = mapKeys(inner)
+        val size = listSize(keys)
+        if (size == 0) { return "{}" }
+        var result: String = "{"
+        var i: Int = 0
+        while (i < size) {
+            if (i > 0) {
+                result = stringConcat(result, ",")
+            }
+            val key = toString(listGet(keys, i))
+            result = stringConcat(result, stringConcat("\"", stringConcat(jsonEscapeString(key), "\":")))
+            result = stringConcat(result, jsonStringify(mapGet(inner, key)))
+            i = i + 1
+        }
+        result = stringConcat(result, "}")
+        return result
+    }
+
+    if (t == JSON_ERROR()) {
+        return stringConcat("\"<error: ", stringConcat(jsonGetString(v), ">\""))
+    }
+
+    return "null"
+}
+
+// ── Pretty Printing ─────────────────────────────────────────────────────
+
+fun jsonIndentString(level: Int): String {
+    var result: String = ""
+    var i: Int = 0
+    while (i < level) {
+        result = stringConcat(result, "  ")
+        i = i + 1
+    }
+    return result
+}
+
+fun jsonStringifyPretty(v: Map, indent: Int): String {
+    val t = jsonType(v)
+
+    if (t == JSON_NULL()) { return "null" }
+
+    if (t == JSON_BOOL()) {
+        if (jsonGetBool(v)) { return "true" }
+        return "false"
+    }
+
+    if (t == JSON_NUMBER()) { return jsonGetNumberString(v) }
+
+    if (t == JSON_STRING()) {
+        return stringConcat("\"", stringConcat(jsonEscapeString(jsonGetString(v)), "\""))
+    }
+
+    if (t == JSON_ARRAY()) {
+        val list = mapGet(v, "value")
+        val size = listSize(list)
+        if (size == 0) { return "[]" }
+
+        val childIndent = indent + 1
+        val pad = jsonIndentString(childIndent)
+        val closePad = jsonIndentString(indent)
+
+        var result: String = "[\n"
+        var i: Int = 0
+        while (i < size) {
+            if (i > 0) {
+                result = stringConcat(result, ",\n")
+            }
+            result = stringConcat(result, stringConcat(pad, jsonStringifyPretty(listGet(list, i), childIndent)))
+            i = i + 1
+        }
+        result = stringConcat(result, stringConcat("\n", stringConcat(closePad, "]")))
+        return result
+    }
+
+    if (t == JSON_OBJECT()) {
+        val inner = mapGet(v, "value")
+        val keys = mapKeys(inner)
+        val size = listSize(keys)
+        if (size == 0) { return "{}" }
+
+        val childIndent = indent + 1
+        val pad = jsonIndentString(childIndent)
+        val closePad = jsonIndentString(indent)
+
+        var result: String = "{\n"
+        var i: Int = 0
+        while (i < size) {
+            if (i > 0) {
+                result = stringConcat(result, ",\n")
+            }
+            val key = toString(listGet(keys, i))
+            result = stringConcat(result, stringConcat(pad, stringConcat("\"", stringConcat(jsonEscapeString(key), "\": "))))
+            result = stringConcat(result, jsonStringifyPretty(mapGet(inner, key), childIndent))
+            i = i + 1
+        }
+        result = stringConcat(result, stringConcat("\n", stringConcat(closePad, "}")))
+        return result
+    }
+
+    return "null"
+}

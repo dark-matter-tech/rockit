@@ -4731,6 +4731,18 @@ fun eliminateDeadFunctions(compiler: Map): Unit {
 // so that Stage 1 can produce native binaries via clang.
 
 // ---------------------------------------------------------------------------
+// Integer-to-string helper — avoids toString() which converts ROCKIT_NULL
+// (3405691582) to "null" instead of its numeric representation
+// ---------------------------------------------------------------------------
+
+fun llvmFormatI64(v: Int): String {
+    if (v < 0) { return stringConcat("-", llvmFormatI64(0 - v)) }
+    val digits = "0123456789"
+    if (v < 10) { return substring(digits, v, v + 1) }
+    return stringConcat(llvmFormatI64(v / 10), substring(digits, v % 10, v % 10 + 1))
+}
+
+// ---------------------------------------------------------------------------
 // String buffer helpers — build IR incrementally as a list of lines
 // ---------------------------------------------------------------------------
 
@@ -4790,6 +4802,7 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "stringLength", "i64|ptr")
     mapPut(t, "charAt", "ptr|ptr,i64")
     mapPut(t, "charCodeAt", "i64|ptr,i64")
+    mapPut(t, "intToChar", "ptr|i64")
     mapPut(t, "substring", "ptr|ptr,i64,i64")
     mapPut(t, "stringIndexOf", "i64|ptr,ptr")
     mapPut(t, "startsWith", "i8|ptr,ptr")
@@ -4981,13 +4994,10 @@ fun llvmReadU32(bc: List, offset: Int): Int {
 fun llvmReadI64(bc: List, offset: Int): Int {
     val hi = llvmReadU32(bc, offset)
     val lo = llvmReadU32(bc, offset + 4)
-    if (hi == 0) { return lo }
-    if (hi == 4294967295) {
-        // Negative: lo is the two's complement low word
-        return lo - 4294967296
-    }
-    // Large positive — return lo for now (simplified)
-    return lo
+    // Reconstruct full 64-bit value: hi * 2^32 + lo
+    // NOTE: Must compute 2^32 from smaller literals for bootstrap compatibility
+    val TWO_32 = 256 * 256 * 256 * 256
+    return hi * TWO_32 + lo
 }
 
 // ---------------------------------------------------------------------------
@@ -5084,6 +5094,8 @@ fun llvmInstrSize(op: Int, bc: List, ip: Int): Int {
         val argc = llvmReadU16(bc, ip + 5)
         return 7 + argc * 2
     }
+    if (op == 83) { return 5 }     // LOAD_GLOBAL: op + dest(2) + nameIdx(2)
+    if (op == 84) { return 5 }     // STORE_GLOBAL: op + nameIdx(2) + src(2)
     if (op == 96) { return 7 }     // GET_FIELD: op + dest(2) + obj(2) + fieldIdx(2)
     if (op == 97) { return 7 }     // SET_FIELD: op + obj(2) + fieldIdx(2) + val(2)
     if (op == 112) {                // NEW_OBJECT: op + dest(2) + typeIdx(2) + argc(2) + args(2*N)
@@ -5324,7 +5336,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             // OP_CONST_INT: dest(u16) + value(i64)
             val dest = llvmReadU16(bc, ip + 1)
             val value = llvmReadI64(bc, ip + 3)
-            llvmLine(buf, stringConcat("  store i64 ", stringConcat(toString(value), stringConcat(", ptr %t", toString(dest)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(llvmFormatI64(value), stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 11
         } else if (op == 2) {
             // OP_CONST_FLOAT: dest(u16) + poolIdx(u16)
@@ -6000,6 +6012,24 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 ", stringConcat(tfnPtr, stringConcat("(", stringConcat(argVals, ")")))))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7 + argc * 2
+        } else if (op == 83) {
+            // OP_LOAD_GLOBAL: dest(u16) + nameIdx(u16)
+            val dest = llvmReadU16(bc, ip + 1)
+            val nameIdx = llvmReadU16(bc, ip + 3)
+            val globalName = llvmPoolString(compiler, nameIdx)
+            val tval = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr @", globalName))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 5
+        } else if (op == 84) {
+            // OP_STORE_GLOBAL: nameIdx(u16) + src(u16)
+            val nameIdx = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val globalName = llvmPoolString(compiler, nameIdx)
+            val tval = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr @", globalName))))
+            ip = ip + 5
         } else if (op == 144) {
             // OP_TYPE_CHECK: dest(u16) + src(u16) + typeIdx(u16)
             val dest = llvmReadU16(bc, ip + 1)
@@ -6252,7 +6282,7 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             // OP_CONST_INT: dest(u16) + value(i64)
             val dest = llvmReadU16(bc, ip + 1)
             val value = llvmReadI64(bc, ip + 3)
-            llvmLine(buf, stringConcat("  store i64 ", stringConcat(toString(value), stringConcat(", ptr %t", toString(dest)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(llvmFormatI64(value), stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 11
         } else if (op == 2) {
             // OP_CONST_FLOAT: dest(u16) + poolIdx(u16)
@@ -6519,6 +6549,24 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 ", stringConcat(tfnPtr, stringConcat("(", stringConcat(argVals, ")")))))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7 + argc * 2
+        } else if (op == 83) {
+            // OP_LOAD_GLOBAL: dest(u16) + nameIdx(u16)
+            val dest = llvmReadU16(bc, ip + 1)
+            val nameIdx = llvmReadU16(bc, ip + 3)
+            val globalName = llvmPoolString(compiler, nameIdx)
+            val tval = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr @", globalName))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr %t", toString(dest)))))
+            ip = ip + 5
+        } else if (op == 84) {
+            // OP_STORE_GLOBAL: nameIdx(u16) + src(u16)
+            val nameIdx = llvmReadU16(bc, ip + 1)
+            val src = llvmReadU16(bc, ip + 3)
+            val globalName = llvmPoolString(compiler, nameIdx)
+            val tval = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr @", globalName))))
+            ip = ip + 5
         } else if (op == 96) {
             // OP_GET_FIELD
             val dest = llvmReadU16(bc, ip + 1)
@@ -6963,6 +7011,26 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         llvmLine(buf, stringConcat("  store i64 0, ptr %t", toString(dest)))
         return
     }
+    // callResumeFn(fn_ptr, frame, result): indirect call for coroutine resume
+    if (callName == "callResumeFn" && argc == 3) {
+        val fnReg = llvmReadU16(bc, argStart)
+        val frameReg = llvmReadU16(bc, argStart + 2)
+        val resReg = llvmReadU16(bc, argStart + 4)
+        val tfn = llvmNextSSA(state)
+        val tframe = llvmNextSSA(state)
+        val tres2 = llvmNextSSA(state)
+        val tfnptr = llvmNextSSA(state)
+        val tframeptr = llvmNextSSA(state)
+        val tret = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(tfn, stringConcat(" = load i64, ptr %t", toString(fnReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tframe, stringConcat(" = load i64, ptr %t", toString(frameReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tres2, stringConcat(" = load i64, ptr %t", toString(resReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tfnptr, stringConcat(" = inttoptr i64 ", stringConcat(tfn, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tframeptr, stringConcat(" = inttoptr i64 ", stringConcat(tframe, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(tret, stringConcat(" = call i64 ", stringConcat(tfnptr, stringConcat("(ptr ", stringConcat(tframeptr, stringConcat(", i64 ", stringConcat(tres2, ")")))))))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(tret, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
     // alloc(count): call malloc(count * 8)
     if (callName == "alloc" && argc == 1) {
         val cntReg = llvmReadU16(bc, argStart)
@@ -7056,6 +7124,14 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         }
     }
 
+    // __bitcast_Ptr(i64): no-op (Ptr<T> is just i64 in Rockit's type system)
+    if (callName == "__bitcast_Ptr" && argc == 1) {
+        val argReg = llvmReadU16(bc, argStart)
+        val targ = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(targ, stringConcat(" = load i64, ptr %t", toString(argReg)))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(targ, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
     // __bitcast_Float(i64): reinterpret i64 bits as double
     if (callName == "__bitcast_Float" && argc == 1) {
         val argReg = llvmReadU16(bc, argStart)
@@ -7438,6 +7514,28 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
         llvmLine(mainBuf, "")
     }
 
+    // Emit mutable global variable declarations
+    val globals = mapGet(compiler, "globals")
+    if (globals != null) {
+        val globalNames = mapKeys(globals)
+        var gi: Int = 0
+        while (gi < listSize(globalNames)) {
+            val gName = toString(listGet(globalNames, gi))
+            val gInfo = mapGet(globals, gName)
+            val gMutable = mapGet(gInfo, "mutable") == true
+            if (gMutable) {
+                val gInitKind = toString(mapGet(gInfo, "initKind"))
+                var gInitStr: String = "0"
+                if (gInitKind == "int") {
+                    gInitStr = llvmFormatI64(mapGet(gInfo, "initValue"))
+                }
+                llvmLine(mainBuf, stringConcat("@", stringConcat(gName, stringConcat(" = global i64 ", gInitStr))))
+            }
+            gi = gi + 1
+        }
+        llvmLine(mainBuf, "")
+    }
+
     // Build set of defined function names (so we don't declare them as extern)
     val definedFuncs = mapCreate()
     // Collect all used externs across all functions
@@ -7582,6 +7680,8 @@ fun OP_FGTE(): Int { return 58 }
 fun OP_AWAIT_CALL(): Int { return 192 }
 fun OP_CONCURRENT_BEGIN(): Int { return 193 }
 fun OP_CONCURRENT_END(): Int { return 194 }
+fun OP_LOAD_GLOBAL(): Int { return 83 }
+fun OP_STORE_GLOBAL(): Int { return 84 }
 
 // Constant pool kind tags
 fun CK_STRING(): Int { return 1 }
@@ -7626,6 +7726,7 @@ fun makeCompiler(): Map {
     mapPut(c, "externFuncs", mapCreate())  // name -> {params, returnType} for extern fun declarations
     mapPut(c, "creprTypes", mapCreate())  // typeName -> layout {fields, totalSize, alignment}
     mapPut(c, "noRuntime", false)        // freestanding mode: no runtime linked
+    mapPut(c, "globals", mapCreate())    // top-level val/var: name -> {initValue, mutable}
     return c
 }
 
@@ -7769,15 +7870,23 @@ fun emitU32At(fs: Map, offset: Int, v: Int): Unit {
 }
 
 fun emitI64(fs: Map, v: Int): Unit {
-    // Big-endian Int64 — for simplicity handle positive values
-    // For negative: two's complement
+    // Big-endian Int64 — proper 64-bit split into high/low 32-bit words
+    // NOTE: Must compute 2^32 from smaller literals for bootstrap compatibility
+    // (the old compiler's emitI64 can't encode literals >= 2^32)
+    val TWO_32 = 256 * 256 * 256 * 256
     if (v >= 0) {
-        emitU32(fs, 0)
-        emitU32(fs, v)
+        val high = v / TWO_32
+        val low = v - high * TWO_32
+        emitU32(fs, high)
+        emitU32(fs, low)
     } else {
-        // Negative: all 1s in high word, value in low word (simplified)
-        emitU32(fs, 4294967295)
-        emitU32(fs, 4294967296 + v)
+        // Negative: bitwise complement approach for two's complement
+        val nv = 0 - v - 1
+        val nHigh = nv / TWO_32
+        val nLow = nv - nHigh * TWO_32
+        val MAX_U32 = TWO_32 - 1
+        emitU32(fs, MAX_U32 - nHigh)
+        emitU32(fs, MAX_U32 - nLow)
     }
 }
 
@@ -7843,6 +7952,18 @@ fun emitLoadParam(fs: Map, dest: Int, paramIdx: Int): Unit {
     emitByte(fs, OP_LOAD_PARAM())
     emitU16(fs, dest)
     emitU16(fs, paramIdx)
+}
+
+fun emitLoadGlobal(fs: Map, dest: Int, nameIdx: Int): Unit {
+    emitByte(fs, OP_LOAD_GLOBAL())
+    emitU16(fs, dest)
+    emitU16(fs, nameIdx)
+}
+
+fun emitStoreGlobal(fs: Map, nameIdx: Int, src: Int): Unit {
+    emitByte(fs, OP_STORE_GLOBAL())
+    emitU16(fs, nameIdx)
+    emitU16(fs, src)
 }
 
 fun emitCall(fs: Map, dest: Int, funcName: String, args: List): Unit {
@@ -8212,6 +8333,39 @@ fun compileExpr(fs: Map, node: Map): Int {
                 val dest = allocReg(fs)
                 emitGetField(fs, dest, thisReg, name)
                 return dest
+            }
+        }
+        // Check if it's a top-level global val/var
+        val globalsMap = mapGet(mapGet(fs, "compiler"), "globals")
+        val globalInfo = mapGet(globalsMap, name)
+        if (globalInfo != null) {
+            val gMutable = mapGet(globalInfo, "mutable") == true
+            if (gMutable) {
+                // Mutable global: emit OP_LOAD_GLOBAL
+                val dest = allocReg(fs)
+                val gNameIdx = addFuncName(mapGet(fs, "compiler"), name)
+                emitLoadGlobal(fs, dest, gNameIdx)
+                return dest
+            } else {
+                // Immutable global: inline the constant value
+                val gInitKind = toString(mapGet(globalInfo, "initKind"))
+                if (gInitKind == "int") {
+                    val dest = allocReg(fs)
+                    // initValue is already an integer — do NOT call toInt() which
+                    // would convert ROCKIT_NULL (3405691582) to 0 via C runtime
+                    emitConstInt(fs, dest, mapGet(globalInfo, "initValue"))
+                    return dest
+                }
+                if (gInitKind == "float") {
+                    val dest = allocReg(fs)
+                    emitConstFloat(fs, dest, toString(mapGet(globalInfo, "initValue")))
+                    return dest
+                }
+                if (gInitKind == "string") {
+                    val dest = allocReg(fs)
+                    emitConstString(fs, dest, toString(mapGet(globalInfo, "initValue")))
+                    return dest
+                }
             }
         }
         // Unknown identifier — might be a function reference
@@ -9494,6 +9648,16 @@ fun compileStmt(fs: Map, node: Map): Unit {
                         emitSetField(fs, thisReg, name, valueReg)
                     }
                 }
+                // Check if it's a mutable global variable
+                val aGlobals = mapGet(mapGet(fs, "compiler"), "globals")
+                val aGlobalInfo = mapGet(aGlobals, name)
+                if (aGlobalInfo != null) {
+                    if (mapGet(aGlobalInfo, "mutable") == true) {
+                        val valueReg = compileExpr(fs, mapGet(node, "value"))
+                        val gNameIdx = addFuncName(mapGet(fs, "compiler"), name)
+                        emitStoreGlobal(fs, gNameIdx, valueReg)
+                    }
+                }
             }
         }
         if (targetKind == "member") {
@@ -9538,6 +9702,28 @@ fun compileStmt(fs: Map, node: Map): Unit {
                 val resultReg = allocReg(fs)
                 emitBinaryOp(fs, actualOp, resultReg, currentReg, valueReg)
                 emitStore(fs, slotInt, resultReg)
+            } else {
+                // Check if it's a mutable global variable
+                val caGlobals = mapGet(mapGet(fs, "compiler"), "globals")
+                val caGlobalInfo = mapGet(caGlobals, name)
+                if (caGlobalInfo != null) {
+                    if (mapGet(caGlobalInfo, "mutable") == true) {
+                        val gNameIdx = addFuncName(mapGet(fs, "compiler"), name)
+                        val currentReg = allocReg(fs)
+                        emitLoadGlobal(fs, currentReg, gNameIdx)
+                        val valueReg = compileExpr(fs, mapGet(node, "value"))
+                        val op = toString(mapGet(node, "op"))
+                        var actualOp: String = "+"
+                        if (op == "+=") { actualOp = "+" }
+                        if (op == "-=") { actualOp = "-" }
+                        if (op == "*=") { actualOp = "*" }
+                        if (op == "/=") { actualOp = "/" }
+                        if (op == "%=") { actualOp = "%" }
+                        val resultReg = allocReg(fs)
+                        emitBinaryOp(fs, actualOp, resultReg, currentReg, valueReg)
+                        emitStoreGlobal(fs, gNameIdx, resultReg)
+                    }
+                }
             }
         } else if (targetKind == "member") {
             val objReg = compileExpr(fs, mapGet(target, "object"))
@@ -11196,6 +11382,40 @@ fun compileProgram(ast: Map): Map {
         i = i + 1
     }
 
+    // Pass 1.5: Collect top-level val/var declarations as globals
+    i = 0
+    while (i < listSize(decls)) {
+        val decl = listGet(decls, i)
+        val kind = toString(mapGet(decl, "kind"))
+        if (kind == "valDecl" || kind == "varDecl") {
+            val gName = toString(mapGet(decl, "name"))
+            val gInit = mapGet(decl, "init")
+            val gInfo = mapCreate()
+            mapPut(gInfo, "mutable", kind == "varDecl")
+            if (gInit != null) {
+                val gInitKind = toString(mapGet(gInit, "kind"))
+                if (gInitKind == "intLit") {
+                    mapPut(gInfo, "initKind", "int")
+                    mapPut(gInfo, "initValue", toInt(mapGet(gInit, "value")))
+                } else if (gInitKind == "floatLit") {
+                    mapPut(gInfo, "initKind", "float")
+                    mapPut(gInfo, "initValue", toString(mapGet(gInit, "value")))
+                } else if (gInitKind == "stringLit") {
+                    mapPut(gInfo, "initKind", "string")
+                    mapPut(gInfo, "initValue", toString(mapGet(gInit, "value")))
+                } else {
+                    mapPut(gInfo, "initKind", "int")
+                    mapPut(gInfo, "initValue", 0)
+                }
+            } else {
+                mapPut(gInfo, "initKind", "int")
+                mapPut(gInfo, "initValue", 0)
+            }
+            mapPut(mapGet(compiler, "globals"), gName, gInfo)
+        }
+        i = i + 1
+    }
+
     // Pass 2: Compile classes and functions
     i = 0
     while (i < listSize(decls)) {
@@ -11692,8 +11912,10 @@ fun main(): Unit {
         mapPut(compiler, "noRuntime", true)
     }
 
-    // Dead function elimination (always on — safe and reduces output size)
-    eliminateDeadFunctions(compiler)
+    // Dead function elimination (skip in --no-runtime mode to preserve all functions)
+    if (noRuntime == false) {
+        eliminateDeadFunctions(compiler)
+    }
 
     val funcCount = listSize(mapGet(compiler, "functions"))
 

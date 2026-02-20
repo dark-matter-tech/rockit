@@ -1,0 +1,270 @@
+import rockit.json
+
+var passed: Int = 0
+var failed: Int = 0
+
+fun assert(condition: Bool, name: String): Unit {
+    if (condition) {
+        passed = passed + 1
+    } else {
+        println(stringConcat("FAIL: ", name))
+        failed = failed + 1
+    }
+}
+
+fun main(): Unit {
+    println("=== JSON Module Tests ===")
+
+    // ── Constructors & Type Checks ─────────────────────────────────────
+
+    val n = jsonNull()
+    assert(jsonIsNull(n), "jsonNull is null")
+    assert(jsonType(n) == JSON_NULL(), "jsonNull type == JSON_NULL")
+
+    val bt = jsonBool(true)
+    assert(jsonIsBool(bt), "jsonBool(true) is bool")
+    assert(jsonGetBool(bt), "jsonBool(true) value is true")
+
+    val bf = jsonBool(false)
+    assert(jsonIsBool(bf), "jsonBool(false) is bool")
+    assert(!jsonGetBool(bf), "jsonBool(false) value is false")
+
+    val num = jsonNumber(42)
+    assert(jsonIsNumber(num), "jsonNumber(42) is number")
+    assert(jsonGetInt(num) == 42, "jsonNumber(42) value is 42")
+    assert(jsonGetNumberString(num) == "42", "jsonNumber(42) string is \"42\"")
+
+    val numF = jsonNumberFromString("3.14")
+    assert(jsonIsNumber(numF), "jsonNumberFromString is number")
+    assert(jsonGetNumberString(numF) == "3.14", "float number string preserved")
+
+    val str = jsonString("hello")
+    assert(jsonIsString(str), "jsonString is string")
+    assert(jsonGetString(str) == "hello", "jsonString value")
+
+    val arr = jsonArray()
+    assert(jsonIsArray(arr), "jsonArray is array")
+    assert(jsonArraySize(arr) == 0, "empty array size")
+
+    val obj = jsonObject()
+    assert(jsonIsObject(obj), "jsonObject is object")
+
+    // ── Array Operations ───────────────────────────────────────────────
+
+    jsonArrayAppend(arr, jsonNumber(1))
+    jsonArrayAppend(arr, jsonString("two"))
+    jsonArrayAppend(arr, jsonBool(true))
+    assert(jsonArraySize(arr) == 3, "array size after appends")
+    assert(jsonGetInt(jsonArrayGet(arr, 0)) == 1, "array[0] == 1")
+    assert(jsonGetString(jsonArrayGet(arr, 1)) == "two", "array[1] == \"two\"")
+    assert(jsonGetBool(jsonArrayGet(arr, 2)), "array[2] == true")
+    assert(jsonIsNull(jsonArrayGet(arr, 99)), "array out of bounds returns null")
+
+    // ── Object Operations ──────────────────────────────────────────────
+
+    jsonObjectPut(obj, "name", jsonString("Rockit"))
+    jsonObjectPut(obj, "version", jsonNumber(1))
+    jsonObjectPut(obj, "stable", jsonBool(true))
+
+    assert(jsonObjectHas(obj, "name"), "object has 'name'")
+    assert(!jsonObjectHas(obj, "missing"), "object !has 'missing'")
+    assert(jsonGetString(jsonObjectGet(obj, "name")) == "Rockit", "obj.name == Rockit")
+    assert(jsonGetInt(jsonObjectGet(obj, "version")) == 1, "obj.version == 1")
+    assert(jsonIsNull(jsonObjectGet(obj, "missing")), "obj.missing returns null")
+
+    val keys = jsonObjectKeys(obj)
+    assert(listSize(keys) == 3, "object has 3 keys")
+
+    // ── Parse Primitives ───────────────────────────────────────────────
+
+    val pNull = jsonParse("null")
+    assert(jsonIsNull(pNull), "parse null")
+
+    val pTrue = jsonParse("true")
+    assert(jsonIsBool(pTrue), "parse true is bool")
+    assert(jsonGetBool(pTrue), "parse true value")
+
+    val pFalse = jsonParse("false")
+    assert(jsonIsBool(pFalse), "parse false is bool")
+    assert(!jsonGetBool(pFalse), "parse false value")
+
+    val pInt = jsonParse("42")
+    assert(jsonIsNumber(pInt), "parse 42 is number")
+    assert(jsonGetInt(pInt) == 42, "parse 42 value")
+
+    val pNeg = jsonParse("-7")
+    assert(jsonIsNumber(pNeg), "parse -7 is number")
+    assert(jsonGetInt(pNeg) == -7, "parse -7 value")
+
+    val pFloat = jsonParse("3.14")
+    assert(jsonIsNumber(pFloat), "parse 3.14 is number")
+    assert(jsonGetNumberString(pFloat) == "3.14", "parse 3.14 string")
+
+    val pExp = jsonParse("1e10")
+    assert(jsonIsNumber(pExp), "parse 1e10 is number")
+    assert(jsonGetNumberString(pExp) == "1e10", "parse 1e10 string")
+
+    val pExpNeg = jsonParse("-2.5E+3")
+    assert(jsonIsNumber(pExpNeg), "parse -2.5E+3 is number")
+    assert(jsonGetNumberString(pExpNeg) == "-2.5E+3", "parse -2.5E+3 string")
+
+    // ── Parse Strings ──────────────────────────────────────────────────
+
+    val pStr = jsonParse("\"hello world\"")
+    assert(jsonIsString(pStr), "parse string")
+    assert(jsonGetString(pStr) == "hello world", "parse string value")
+
+    val pEmpty = jsonParse("\"\"")
+    assert(jsonIsString(pEmpty), "parse empty string")
+    assert(jsonGetString(pEmpty) == "", "parse empty string value")
+
+    // Escape sequences
+    val pEsc = jsonParse("\"a\\nb\\tc\"")
+    assert(jsonIsString(pEsc), "parse escaped string")
+    val escVal = jsonGetString(pEsc)
+    assert(charCodeAt(escVal, 1) == 10, "escaped \\n is newline")
+    assert(charCodeAt(escVal, 3) == 9, "escaped \\t is tab")
+
+    val pQuote = jsonParse("\"say \\\"hi\\\"\"")
+    assert(jsonGetString(pQuote) == "say \"hi\"", "escaped quotes")
+
+    val pBackslash = jsonParse("\"a\\\\b\"")
+    assert(jsonGetString(pBackslash) == "a\\b", "escaped backslash")
+
+    // Unicode escape
+    val pUni = jsonParse("\"\\u0041\"")
+    assert(jsonGetString(pUni) == "A", "unicode escape \\u0041 == A")
+
+    // ── Parse Arrays ───────────────────────────────────────────────────
+
+    val pArr0 = jsonParse("[]")
+    assert(jsonIsArray(pArr0), "parse empty array")
+    assert(jsonArraySize(pArr0) == 0, "empty array size 0")
+
+    val pArr1 = jsonParse("[1, 2, 3]")
+    assert(jsonIsArray(pArr1), "parse [1,2,3]")
+    assert(jsonArraySize(pArr1) == 3, "array size 3")
+    assert(jsonGetInt(jsonArrayGet(pArr1, 0)) == 1, "arr[0] == 1")
+    assert(jsonGetInt(jsonArrayGet(pArr1, 1)) == 2, "arr[1] == 2")
+    assert(jsonGetInt(jsonArrayGet(pArr1, 2)) == 3, "arr[2] == 3")
+
+    val pArrMixed = jsonParse("[1, \"two\", true, null]")
+    assert(jsonArraySize(pArrMixed) == 4, "mixed array size")
+    assert(jsonIsNumber(jsonArrayGet(pArrMixed, 0)), "mixed[0] is number")
+    assert(jsonIsString(jsonArrayGet(pArrMixed, 1)), "mixed[1] is string")
+    assert(jsonIsBool(jsonArrayGet(pArrMixed, 2)), "mixed[2] is bool")
+    assert(jsonIsNull(jsonArrayGet(pArrMixed, 3)), "mixed[3] is null")
+
+    // Nested arrays
+    val pNested = jsonParse("[[1, 2], [3, 4]]")
+    assert(jsonIsArray(pNested), "parse nested arrays")
+    assert(jsonArraySize(pNested) == 2, "outer size 2")
+    val inner0 = jsonArrayGet(pNested, 0)
+    assert(jsonIsArray(inner0), "inner[0] is array")
+    assert(jsonGetInt(jsonArrayGet(inner0, 0)) == 1, "nested[0][0] == 1")
+
+    // ── Parse Objects ──────────────────────────────────────────────────
+
+    val pObj0 = jsonParse("{}")
+    assert(jsonIsObject(pObj0), "parse empty object")
+
+    val pObj1 = jsonParse("{\"name\": \"Rockit\", \"version\": 1, \"stable\": true}")
+    assert(jsonIsObject(pObj1), "parse object")
+    assert(jsonGetString(jsonObjectGet(pObj1, "name")) == "Rockit", "parsed obj.name")
+    assert(jsonGetInt(jsonObjectGet(pObj1, "version")) == 1, "parsed obj.version")
+    assert(jsonGetBool(jsonObjectGet(pObj1, "stable")), "parsed obj.stable")
+
+    // Nested object
+    val pDeep = jsonParse("{\"a\": {\"b\": {\"c\": 42}}}")
+    assert(jsonIsObject(pDeep), "parse nested object")
+    val aObj = jsonObjectGet(pDeep, "a")
+    val bObj = jsonObjectGet(aObj, "b")
+    assert(jsonGetInt(jsonObjectGet(bObj, "c")) == 42, "deep nested value")
+
+    // Object with array value
+    val pObjArr = jsonParse("{\"items\": [1, 2, 3]}")
+    val items = jsonObjectGet(pObjArr, "items")
+    assert(jsonIsArray(items), "object value is array")
+    assert(jsonArraySize(items) == 3, "object array size")
+
+    // ── Parse Whitespace Handling ──────────────────────────────────────
+
+    val pWs = jsonParse("  {  \"key\"  :  \"value\"  }  ")
+    assert(jsonIsObject(pWs), "parse with extra whitespace")
+    assert(jsonGetString(jsonObjectGet(pWs, "key")) == "value", "whitespace obj value")
+
+    // ── Stringify ──────────────────────────────────────────────────────
+
+    assert(jsonStringify(jsonNull()) == "null", "stringify null")
+    assert(jsonStringify(jsonBool(true)) == "true", "stringify true")
+    assert(jsonStringify(jsonBool(false)) == "false", "stringify false")
+    assert(jsonStringify(jsonNumber(42)) == "42", "stringify 42")
+    assert(jsonStringify(jsonNumberFromString("3.14")) == "3.14", "stringify 3.14")
+    assert(jsonStringify(jsonString("hello")) == "\"hello\"", "stringify string")
+
+    // Stringify with escapes
+    val strEsc = jsonString("say \"hi\"\nbye")
+    val escaped = jsonStringify(strEsc)
+    assert(stringIndexOf(escaped, "\\\"") >= 0, "stringify escapes quotes")
+    assert(stringIndexOf(escaped, "\\n") >= 0, "stringify escapes newline")
+
+    // Stringify array
+    val sArr = jsonArray()
+    jsonArrayAppend(sArr, jsonNumber(1))
+    jsonArrayAppend(sArr, jsonNumber(2))
+    assert(jsonStringify(sArr) == "[1,2]", "stringify array")
+
+    // Stringify empty containers
+    assert(jsonStringify(jsonArray()) == "[]", "stringify empty array")
+    assert(jsonStringify(jsonObject()) == "{}", "stringify empty object")
+
+    // ── Roundtrip ──────────────────────────────────────────────────────
+
+    val complex = "{\"name\":\"Rockit\",\"version\":1,\"features\":[\"fast\",\"safe\"],\"meta\":{\"lang\":\"rok\"}}"
+    val parsed = jsonParse(complex)
+    assert(!jsonIsError(parsed), "roundtrip parse succeeds")
+    val serialized = jsonStringify(parsed)
+    val reparsed = jsonParse(serialized)
+    assert(!jsonIsError(reparsed), "roundtrip reparse succeeds")
+    assert(jsonGetString(jsonObjectGet(reparsed, "name")) == "Rockit", "roundtrip preserves name")
+    assert(jsonGetInt(jsonObjectGet(reparsed, "version")) == 1, "roundtrip preserves version")
+    val features = jsonObjectGet(reparsed, "features")
+    assert(jsonArraySize(features) == 2, "roundtrip preserves array size")
+    assert(jsonGetString(jsonArrayGet(features, 0)) == "fast", "roundtrip preserves array[0]")
+    val meta = jsonObjectGet(reparsed, "meta")
+    assert(jsonGetString(jsonObjectGet(meta, "lang")) == "rok", "roundtrip preserves nested")
+
+    // ── Error Cases ────────────────────────────────────────────────────
+
+    val eEmpty = jsonParse("")
+    assert(jsonIsError(eEmpty), "empty input is error")
+
+    val eUntermStr = jsonParse("\"hello")
+    assert(jsonIsError(eUntermStr), "unterminated string is error")
+
+    val eTrailing = jsonParse("42 extra")
+    assert(jsonIsError(eTrailing), "trailing content is error")
+
+    val eBadLit = jsonParse("tru")
+    assert(jsonIsError(eBadLit), "truncated literal is error")
+
+    // ── Pretty Print ───────────────────────────────────────────────────
+
+    val prettyObj = jsonObject()
+    jsonObjectPut(prettyObj, "name", jsonString("Rockit"))
+    jsonObjectPut(prettyObj, "version", jsonNumber(1))
+    val pretty = jsonStringifyPretty(prettyObj, 0)
+    assert(stringIndexOf(pretty, "\n") >= 0, "pretty print has newlines")
+    assert(stringIndexOf(pretty, "  ") >= 0, "pretty print has indentation")
+
+    // ── Summary ────────────────────────────────────────────────────────
+
+    println("")
+    println(stringConcat("Passed: ", toString(passed)))
+    println(stringConcat("Failed: ", toString(failed)))
+    if (failed == 0) {
+        println("All JSON tests passed!")
+    } else {
+        println("SOME TESTS FAILED")
+    }
+}

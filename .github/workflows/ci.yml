@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, develop]
+    branches: [master, develop, 'feature/**']
   pull_request:
     branches: [master, develop]
 
@@ -204,7 +204,7 @@ jobs:
           for f in Examples/test_*.rok; do
             name=$(basename "$f" .rok)
             # Skip Stage 1-only tests (compiled with Stage 1 binary after bootstrap)
-            case "$name" in test_unsafe*|test_crepr*|test_funptr*|test_freestanding*|test_byte_ops*) echo "  ┌──────────────────────────────────────────────"; printf "  │ ⏭️  %-42s" "$name"; echo "⏭️  SKIP (Stage 1 only)"; echo "  └──────────────────────────────────────────────"; continue;; esac
+            case "$name" in test_unsafe*|test_crepr*|test_funptr*|test_freestanding*|test_byte_ops*|test_json*) echo "  ┌──────────────────────────────────────────────"; printf "  │ ⏭️  %-42s" "$name"; echo "⏭️  SKIP (Stage 1 only)"; echo "  └──────────────────────────────────────────────"; continue;; esac
             TOTAL=$((TOTAL + 1))
             echo "  ┌──────────────────────────────────────────────"
             printf "  │ 🚀 %-42s" "$name"
@@ -460,6 +460,50 @@ jobs:
             else
               echo "  💀 Stage 1 tests: $S1_FAIL/$S1_TOTAL failed"
               printf "$S1_FAILED\n"
+              exit 1
+            fi
+          fi
+
+          # ============================================================
+          # Standard Library Tests (require --lib-path)
+          # ============================================================
+          echo ""
+          echo "  ╔═══════════════════════════════════════════╗"
+          echo "  ║  📚 Standard Library Tests                 ║"
+          echo "  ╚═══════════════════════════════════════════╝"
+          SL_PASS=0; SL_FAIL=0; SL_TOTAL=0
+          SL_FAILED=""
+          for f in Examples/test_json*.rok; do
+            [ -f "$f" ] || continue
+            SL_TOTAL=$((SL_TOTAL + 1))
+            name=$(basename "$f" .rok)
+            echo "  ┌──────────────────────────────────────────────"
+            printf "  │ 📚 %-42s" "$name"
+            if $STAGE1_CMD build-native "$f" -o "Examples/$name" --lib-path Stage1/stdlib --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE > /tmp/sl_build_log 2>&1; then
+              output=$("Examples/$name" 2>&1) || true
+              echo "✅ PASS"
+              if [ -n "$output" ]; then
+                echo "$output" | while IFS= read -r line; do
+                  echo "  │   📟 $line"
+                done
+              fi
+              SL_PASS=$((SL_PASS + 1))
+            else
+              echo "❌ FAIL"
+              cat /tmp/sl_build_log | while IFS= read -r line; do
+                echo "  │   💥 $line"
+              done
+              SL_FAIL=$((SL_FAIL + 1))
+              SL_FAILED="$SL_FAILED\n    💥 $name"
+            fi
+            echo "  └──────────────────────────────────────────────"
+          done
+          if [ "$SL_TOTAL" -gt 0 ]; then
+            if [ "$SL_FAIL" -eq 0 ]; then
+              echo "  ✅ Stdlib tests: $SL_PASS/$SL_TOTAL passed"
+            else
+              echo "  💀 Stdlib tests: $SL_FAIL/$SL_TOTAL failed"
+              printf "$SL_FAILED\n"
               exit 1
             fi
           fi

@@ -483,6 +483,7 @@ public final class LLVMCodeGen {
         // String operations
         externalDecls.insert("declare ptr @charAt(ptr, i64)")
         externalDecls.insert("declare i64 @charCodeAt(ptr, i64)")
+        externalDecls.insert("declare ptr @intToChar(i64)")
         externalDecls.insert("declare i1 @startsWith(ptr, ptr)")
         externalDecls.insert("declare i1 @endsWith(ptr, ptr)")
         externalDecls.insert("declare ptr @stringConcat(ptr, ptr)")
@@ -2806,7 +2807,8 @@ public final class LLVMCodeGen {
         switch name {
         case "rockit_string_new", "rockit_string_concat", "stringConcat",
              "readLine", "substring", "charAt", "stringTrim", "fileRead",
-             "rockit_int_to_string", "rockit_float_to_string", "rockit_bool_to_string":
+             "rockit_int_to_string", "rockit_float_to_string", "rockit_bool_to_string",
+             "intToChar":
             return .string
         case "rockit_list_create", "listCreate", "listCreateFilled":
             return .list
@@ -4245,7 +4247,7 @@ public final class LLVMCodeGen {
              "stringSubstring", "substring", "charAt", "stringTrim",
              "stringReplace", "stringToLower", "stringToUpper",
              "stringConcat", "stringFromCharCodes", "readLine",
-             "fileRead", "getEnv":
+             "fileRead", "getEnv", "intToChar":
             return "ptr"
         case "stringLength", "charCodeAt", "stringIndexOf", "toInt",
              "charToInt", "abs", "min", "max", "listSize", "mapSize":
