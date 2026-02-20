@@ -31,8 +31,8 @@ public final class RenameProvider {
             default:
                 return nil
             }
-        case .declaration:
-            return sourceSpanToLSPRange(declarationSpan(nodeCtx.kind.asDeclaration!))
+        case .declaration(let decl):
+            return nameRangeForDeclaration(decl)
         case .parameter(let p):
             return sourceSpanToLSPRange(p.span)
         case .statement:
@@ -63,6 +63,70 @@ public final class RenameProvider {
         }
 
         return LSPWorkspaceEdit(changes: changes)
+    }
+
+    // MARK: - Private Helpers
+
+    /// Compute a range covering just the name portion of a declaration
+    private static func nameRangeForDeclaration(_ decl: RDeclaration) -> LSPRange? {
+        guard let name = declarationName(decl) else { return nil }
+        let span = declarationSpan(decl)
+        let line = span.start.line - 1 // Convert to 0-indexed
+        let startCol: Int
+
+        switch decl {
+        case .function(let f):
+            // "fun name" — name starts after "fun "
+            startCol = span.start.column + 4
+            _ = f
+        case .property(let p):
+            // "val name" or "var name"
+            startCol = span.start.column + 4
+            _ = p
+        case .classDecl:
+            return findNameInSpan(name: name, span: span)
+        case .interfaceDecl:
+            return findNameInSpan(name: name, span: span)
+        case .enumDecl:
+            return findNameInSpan(name: name, span: span)
+        case .objectDecl:
+            return findNameInSpan(name: name, span: span)
+        case .actorDecl:
+            return findNameInSpan(name: name, span: span)
+        case .viewDecl:
+            return findNameInSpan(name: name, span: span)
+        default:
+            return findNameInSpan(name: name, span: span)
+        }
+
+        return LSPRange(
+            start: LSPPosition(line: line, character: startCol),
+            end: LSPPosition(line: line, character: startCol + name.count)
+        )
+    }
+
+    private static func findNameInSpan(name: String, span: SourceSpan) -> LSPRange? {
+        let line = span.start.line - 1
+        return LSPRange(
+            start: LSPPosition(line: line, character: span.start.column),
+            end: LSPPosition(line: line, character: span.start.column + name.count)
+        )
+    }
+
+    private static func declarationName(_ decl: RDeclaration) -> String? {
+        switch decl {
+        case .function(let f): return f.name
+        case .property(let p): return p.name
+        case .classDecl(let c): return c.name
+        case .interfaceDecl(let i): return i.name
+        case .enumDecl(let e): return e.name
+        case .objectDecl(let o): return o.name
+        case .actorDecl(let a): return a.name
+        case .viewDecl(let v): return v.name
+        case .navigationDecl(let n): return n.name
+        case .themeDecl(let t): return t.name
+        case .typeAlias(let ta): return ta.name
+        }
     }
 }
 

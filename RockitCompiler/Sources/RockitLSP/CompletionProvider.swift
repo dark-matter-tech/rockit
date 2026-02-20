@@ -79,7 +79,102 @@ public final class CompletionProvider {
         if analysisResult.typeCheckResult.symbolTable.lookupType(name) != nil {
             return name
         }
+        // Search AST for local variable declarations and resolve from explicit type or initializer
+        if let typeName = resolveLocalVariableType(name: name, in: analysisResult) {
+            return typeName
+        }
         return nil
+    }
+
+    private static func resolveLocalVariableType(name: String, in result: AnalysisResult) -> String? {
+        for decl in result.ast.declarations {
+            if let typeName = findLocalVarType(name: name, in: decl, typeCheckResult: result.typeCheckResult) {
+                return typeName
+            }
+        }
+        return nil
+    }
+
+    private static func findLocalVarType(name: String, in decl: Declaration, typeCheckResult: TypeCheckResult) -> String? {
+        switch decl {
+        case .function(let f):
+            // Check function parameters
+            for p in f.parameters where p.name == name {
+                if let t = p.type { return typeNodeToTypeName(t) }
+            }
+            // Check body
+            if let body = f.body {
+                switch body {
+                case .block(let block):
+                    return findVarTypeInStatements(name: name, stmts: block.statements, typeCheckResult: typeCheckResult)
+                case .expression:
+                    return nil
+                }
+            }
+        case .classDecl(let c):
+            for p in c.constructorParams where p.name == name {
+                if let t = p.type { return typeNodeToTypeName(t) }
+            }
+            for member in c.members {
+                if let t = findLocalVarType(name: name, in: member, typeCheckResult: typeCheckResult) { return t }
+            }
+        case .property(let p) where p.name == name:
+            if let t = p.type { return typeNodeToTypeName(t) }
+            // Try to resolve from initializer type
+            if let init_ = p.initializer {
+                return resolveExpressionTypeName(init_, typeCheckResult: typeCheckResult)
+            }
+        default:
+            break
+        }
+        return nil
+    }
+
+    private static func findVarTypeInStatements(name: String, stmts: [RockitKit.Statement], typeCheckResult: TypeCheckResult) -> String? {
+        for stmt in stmts {
+            switch stmt {
+            case .propertyDecl(let p) where p.name == name:
+                if let t = p.type { return typeNodeToTypeName(t) }
+                if let init_ = p.initializer {
+                    return resolveExpressionTypeName(init_, typeCheckResult: typeCheckResult)
+                }
+            case .forLoop(let f):
+                if let t = findVarTypeInStatements(name: name, stmts: f.body.statements, typeCheckResult: typeCheckResult) { return t }
+            case .whileLoop(let w):
+                if let t = findVarTypeInStatements(name: name, stmts: w.body.statements, typeCheckResult: typeCheckResult) { return t }
+            case .declaration(let d):
+                if let t = findLocalVarType(name: name, in: d, typeCheckResult: typeCheckResult) { return t }
+            default:
+                break
+            }
+        }
+        return nil
+    }
+
+    private static func resolveExpressionTypeName(_ expr: RockitKit.Expression, typeCheckResult: TypeCheckResult) -> String? {
+        let span = expressionSpan(expr)
+        let exprId = ExpressionID(span)
+        if let type = typeCheckResult.typeMap[exprId] {
+            return type.typeName ?? typeToName(type)
+        }
+        // For constructor calls like Dog("Rusty"), the callee name IS the type name
+        if case .call(let callee, _, _, _) = expr {
+            if case .identifier(let calleeName, _) = callee {
+                if typeCheckResult.symbolTable.lookupType(calleeName) != nil {
+                    return calleeName
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func typeNodeToTypeName(_ typeNode: TypeNode) -> String? {
+        switch typeNode {
+        case .simple(let name, _, _): return name
+        case .qualified(_, let member, _): return member
+        case .nullable(let inner, _): return typeNodeToTypeName(inner)
+        default: return nil
+        }
     }
 
     private static func typeToName(_ type: Type) -> String? {
