@@ -72,8 +72,7 @@ install_binary() {
         sudo cp "${extracted}/bin/rockit" "${BIN_DIR}/rockit"
         sudo cp "${extracted}/bin/fuel" "${BIN_DIR}/fuel"
         sudo chmod +x "${BIN_DIR}/rockit" "${BIN_DIR}/fuel"
-        sudo cp "${extracted}/share/rockit/rockit_runtime.c" "${SHARE_DIR}/rockit_runtime.c"
-        sudo cp "${extracted}/share/rockit/rockit_runtime.h" "${SHARE_DIR}/rockit_runtime.h"
+        sudo cp "${extracted}/share/rockit/rockit_runtime.o" "${SHARE_DIR}/rockit_runtime.o"
         if [ -d "${extracted}/share/rockit/rockit" ]; then
             sudo mkdir -p "${SHARE_DIR}/rockit"
             sudo cp "${extracted}/share/rockit/rockit/"* "${SHARE_DIR}/rockit/"
@@ -120,12 +119,10 @@ install_source() {
     sudo cp Stage1/command "${BIN_DIR}/rockit"
     sudo cp "${tmp}/fuel/fuel" "${BIN_DIR}/fuel"
     sudo chmod +x "${BIN_DIR}/rockit" "${BIN_DIR}/fuel"
-    sudo cp Runtime/rockit_runtime.c "${SHARE_DIR}/rockit_runtime.c"
-    sudo cp Runtime/rockit_runtime.h "${SHARE_DIR}/rockit_runtime.h"
+    # Build and install the Rockit runtime
     if [ -d Runtime/rockit ]; then
-        sudo mkdir -p "${SHARE_DIR}/rockit"
-        sudo cp Runtime/rockit/*.rok "${SHARE_DIR}/rockit/"
-        sudo cp Runtime/rockit/build.sh "${SHARE_DIR}/rockit/"
+        cd Runtime/rockit && bash build.sh && cd ../..
+        sudo cp Runtime/rockit_runtime.o "${SHARE_DIR}/rockit_runtime.o"
     fi
 
     rm -rf "$tmp"

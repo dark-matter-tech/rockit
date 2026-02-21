@@ -4434,25 +4434,32 @@ extension LLVMCodeGen {
             throw LLVMCodeGenError.clangNotFound
         }
 
-        // Compile C runtime
-        print("  Compiling runtime...", terminator: "")
-        fflush(stdout)
-        let runtimeObjPath = Platform.tempFilePath("rockit_runtime" + Platform.objectFileExtension)
-        let runtimeSrcPath = Platform.pathJoin(runtimeDir, "rockit_runtime.c")
-
-        let compileRuntime = Process()
-        compileRuntime.executableURL = URL(fileURLWithPath: clangPath)
-        compileRuntime.arguments = ["-c", "-O2", "-I", runtimeDir, runtimeSrcPath, "-o", runtimeObjPath]
-        try compileRuntime.run()
-        compileRuntime.waitUntilExit()
-        guard compileRuntime.terminationStatus == 0 else {
-            throw LLVMCodeGenError.runtimeCompileFailed
+        // Find runtime object file — prefer pre-built .o, fall back to compiling .c
+        let prebuiltObj = Platform.pathJoin(runtimeDir, "rockit_runtime.o")
+        let runtimeObjPath: String
+        if FileManager.default.fileExists(atPath: prebuiltObj) {
+            print("  Linking native binary...", terminator: "")
+            fflush(stdout)
+            runtimeObjPath = prebuiltObj
+        } else {
+            // Fallback: compile C runtime
+            let runtimeSrcPath = Platform.pathJoin(runtimeDir, "rockit_runtime.c")
+            print("  Compiling runtime...", terminator: "")
+            fflush(stdout)
+            runtimeObjPath = Platform.tempFilePath("rockit_runtime" + Platform.objectFileExtension)
+            let compileRuntime = Process()
+            compileRuntime.executableURL = URL(fileURLWithPath: clangPath)
+            compileRuntime.arguments = ["-c", "-O2", "-I", runtimeDir, runtimeSrcPath, "-o", runtimeObjPath]
+            try compileRuntime.run()
+            compileRuntime.waitUntilExit()
+            guard compileRuntime.terminationStatus == 0 else {
+                throw LLVMCodeGenError.linkFailed
+            }
+            print(" done")
+            print("  Linking native binary...", terminator: "")
+            fflush(stdout)
         }
-        print(" done")
 
-        // Compile + link
-        print("  Linking native binary...", terminator: "")
-        fflush(stdout)
         let finalOutputPath = Platform.withExeExtension(outputPath)
         let link = Process()
         link.executableURL = URL(fileURLWithPath: clangPath)
@@ -4476,7 +4483,6 @@ extension LLVMCodeGen {
 
 public enum LLVMCodeGenError: Error, CustomStringConvertible {
     case frontendErrors(Int)
-    case runtimeCompileFailed
     case linkFailed
     case clangNotFound
 
@@ -4484,8 +4490,6 @@ public enum LLVMCodeGenError: Error, CustomStringConvertible {
         switch self {
         case .frontendErrors(let count):
             return "\(count) frontend error(s)"
-        case .runtimeCompileFailed:
-            return "failed to compile C runtime"
         case .linkFailed:
             return "failed to link native binary"
         case .clangNotFound:

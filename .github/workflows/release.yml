@@ -89,13 +89,20 @@ jobs:
         env:
           FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
 
+      - name: Build Rockit runtime
+        if: env.SKIP_RELEASE != 'true'
+        working-directory: RockitCompiler
+        run: |
+          cd Runtime/rockit
+          bash build.sh
+
       - name: Clone and build Fuel
         if: env.SKIP_RELEASE != 'true'
         run: |
           echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
           chmod 600 ~/.netrc
           git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
-          RockitCompiler/Stage1/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path RockitCompiler/Runtime/rockit_runtime.c
+          RockitCompiler/Stage1/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path RockitCompiler/Runtime/rockit_runtime.o
         env:
           FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
 
@@ -107,8 +114,9 @@ jobs:
           mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit
           cp RockitCompiler/Stage1/command dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
           chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
-          cp RockitCompiler/Runtime/rockit_runtime.c dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
-          cp RockitCompiler/Runtime/rockit_runtime.h dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
+          cp /tmp/fuel/fuel dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
+          chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
+          cp RockitCompiler/Runtime/rockit_runtime.o dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
           # Standard library
           mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/stdlib/rockit/core
           mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/stdlib/rockit/io
@@ -160,7 +168,7 @@ jobs:
             -d "{
               \"tag_name\": \"${TAG}\",
               \"name\": \"Rockit ${TAG}\",
-              \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## What's Included\\n\\n- **rockit** — The Rockit compiler (Stage 1, self-hosted)\\n- **fuel** — The Rockit package manager\\n- **stdlib** — Standard library (json, collections, math, strings, result, file)\\n- **rockit_runtime.c** — C runtime\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/develop/RockitCompiler/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
+              \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## What's Included\\n\\n- **rockit** — The Rockit compiler (Stage 1, self-hosted)\\n- **fuel** — The Rockit package manager\\n- **stdlib** — Standard library (json, collections, math, strings, result, file)\\n- **rockit_runtime.o** — Prebuilt runtime\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/develop/RockitCompiler/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
               \"draft\": false,
               \"prerelease\": false
             }" | jq -r '.id')

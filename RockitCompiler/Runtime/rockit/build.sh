@@ -32,7 +32,15 @@ cat \
 
 echo "Concatenated runtime → rockit_runtime.rok"
 
-# Compile with --no-runtime to produce .ll file
-"$COMMAND" build-native rockit_runtime.rok --no-runtime -o rockit_runtime
+# Compile with --no-runtime to produce LLVM IR
+"$COMMAND" compile rockit_runtime.rok --emit-llvm --no-runtime -o rockit_runtime.ll
 
-echo "Built rockit_runtime"
+echo "Generated rockit_runtime.ll"
+
+# Compile LLVM IR to linkable object file
+clang -c -O1 -w rockit_runtime.ll -o rockit_runtime.o
+
+# Copy to parent Runtime/ directory for Stage 0 discovery
+cp rockit_runtime.o "$SCRIPT_DIR/../rockit_runtime.o"
+
+echo "Built rockit_runtime.o"

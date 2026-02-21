@@ -129,6 +129,14 @@ fun listRemoveAt(list: Int, index: Int): Int {
     }
 }
 
+fun rockit_list_contains(list: Int, value: Int): Int {
+    return listContains(list, value)
+}
+
+fun rockit_list_remove_at(list: Int, index: Int): Int {
+    return listRemoveAt(list, index)
+}
+
 fun rockit_list_create_filled(size: Int, value: Int): Int {
     unsafe {
         val list = malloc(LIST_HEADER)

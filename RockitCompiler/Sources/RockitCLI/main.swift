@@ -1228,43 +1228,42 @@ func runNativeCommand(file: String) {
     }
 }
 
-/// Find the Runtime/ directory containing C runtime source files.
+/// Find the Runtime/ directory containing the runtime file (.o preferred, .c fallback).
 func findRuntimeDir() -> String {
     let fm = FileManager.default
-    let runtimeFile = "rockit_runtime.c"
+    let runtimeFiles = ["rockit_runtime.o", "rockit_runtime.c"]
+
+    func searchDir(_ dir: String) -> Bool {
+        for f in runtimeFiles {
+            if fm.fileExists(atPath: Platform.pathJoin(dir, f)) { return true }
+        }
+        return false
+    }
 
     // Check ROCKIT_RUNTIME_DIR environment variable first
     if let envDir = ProcessInfo.processInfo.environment["ROCKIT_RUNTIME_DIR"],
-       fm.fileExists(atPath: Platform.pathJoin(envDir, runtimeFile)) {
+       searchDir(envDir) {
         return envDir
     }
 
     // Try relative to current working directory
     let cwd = fm.currentDirectoryPath
     let cwdRuntime = Platform.pathJoin(cwd, "Runtime")
-    if fm.fileExists(atPath: Platform.pathJoin(cwdRuntime, runtimeFile)) {
-        return cwdRuntime
-    }
+    if searchDir(cwdRuntime) { return cwdRuntime }
 
     // Try relative to the executable
     let execPath = CommandLine.arguments[0]
     let execDir = (execPath as NSString).deletingLastPathComponent
     let execRuntime = Platform.pathJoin(execDir, "..", "Runtime")
-    if fm.fileExists(atPath: Platform.pathJoin(execRuntime, runtimeFile)) {
-        return execRuntime
-    }
+    if searchDir(execRuntime) { return execRuntime }
 
     // Try the project source tree (common during development)
     let devRuntime = Platform.pathJoin(execDir, "..", "..", "Runtime")
-    if fm.fileExists(atPath: Platform.pathJoin(devRuntime, runtimeFile)) {
-        return devRuntime
-    }
+    if searchDir(devRuntime) { return devRuntime }
 
     // Try installed location
     let installedRuntime = Platform.pathJoin(execDir, "..", "lib", "rockit", "runtime")
-    if fm.fileExists(atPath: Platform.pathJoin(installedRuntime, runtimeFile)) {
-        return installedRuntime
-    }
+    if searchDir(installedRuntime) { return installedRuntime }
 
     // Fallback: assume cwd
     return cwdRuntime

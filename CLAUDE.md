@@ -34,7 +34,7 @@ From Stage 2 onward, each new version of `command` is compiled by the previous v
 
 ### Distribution
 
-Rockit releases bundle the compiler, Fuel, stdlib, and C runtime into a single tarball. Fuel is built from the separate `fuel` repo (`Dark-Matter/fuel`) during the release workflow. The release structure:
+Rockit releases bundle the compiler, Fuel, stdlib, and prebuilt runtime into a single tarball. Fuel is built from the separate `fuel` repo (`Dark-Matter/fuel`) during the release workflow. The release structure:
 
 ```
 rockit/
@@ -42,8 +42,7 @@ rockit/
     rockit              # Stage 1 compiler
     fuel                # Package manager
   share/rockit/
-    rockit_runtime.c    # C runtime
-    rockit_runtime.h
+    rockit_runtime.o    # Prebuilt Rockit runtime
     stdlib/rockit/      # Standard library modules
 ```
 

@@ -1132,6 +1132,14 @@ fun listRemoveAt(list: Int, index: Int): Int {
     }
 }
 
+fun rockit_list_contains(list: Int, value: Int): Int {
+    return listContains(list, value)
+}
+
+fun rockit_list_remove_at(list: Int, index: Int): Int {
+    return listRemoveAt(list, index)
+}
+
 fun rockit_list_create_filled(size: Int, value: Int): Int {
     unsafe {
         val list = malloc(LIST_HEADER)
@@ -1939,6 +1947,7 @@ fun fileDelete(path: Int): Int {
 
 extern fun getenv(name: Int): Int
 extern fun system(cmd: Int): Int
+extern fun exit(code: Int): Unit
 extern fun uname(buf: Int): Int
 
 var s_argc: Int = 0
@@ -2004,6 +2013,12 @@ fun platformOS(): Int {
             return rockit_string_new(cstr("linux"))
         }
         return rockit_string_new(cstr("linux"))
+    }
+}
+
+fun processExit(code: Int): Unit {
+    unsafe {
+        exit(code)
     }
 }
 

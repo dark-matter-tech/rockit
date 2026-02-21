@@ -4074,7 +4074,7 @@ fun replMain(): Unit {
 // ---------------------------------------------------------------------------
 
 fun findRuntimePath(sourceDir: String): String {
-    val runtimeFile = "rockit_runtime.c"
+    val runtimeFile = "rockit_runtime.o"
     val sep = pathSep()
 
     // 1. ROCKIT_HOME env var
@@ -4120,8 +4120,8 @@ fun findRuntimePath(sourceDir: String): String {
             if (fileExists(winCandidate2)) { return winCandidate2 }
         }
     } else {
-        if (fileExists("/usr/local/share/rockit/rockit_runtime.c")) {
-            return "/usr/local/share/rockit/rockit_runtime.c"
+        if (fileExists("/usr/local/share/rockit/rockit_runtime.o")) {
+            return "/usr/local/share/rockit/rockit_runtime.o"
         }
     }
 
@@ -4326,17 +4326,25 @@ fun main(): Unit {
             if (stringLength(runtimePath) == 0) {
                 runtimePath = findRuntimePath(sourceDir)
                 if (stringLength(runtimePath) == 0) {
-                    println("error: cannot find rockit_runtime.c")
+                    println("error: cannot find rockit_runtime.o")
                     println("Set ROCKIT_HOME or use --runtime-path")
                     return
                 }
             }
-            // Invoke clang (with -I for the runtime header directory)
-            val runtimeDir = dirName(runtimePath)
-            clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
-            // Linux needs -lm for math; Windows and macOS don't
-            if (toString(platformOS()) == "linux") {
-                clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+            // Invoke clang to link
+            if (endsWith(runtimePath, ".c")) {
+                // Backward compat: C runtime needs -I for the header directory
+                val runtimeDir = dirName(runtimePath)
+                clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
+                if (toString(platformOS()) == "linux") {
+                    clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+                }
+            } else {
+                // Pre-built .o runtime — link directly, no -I needed
+                clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
+                if (toString(platformOS()) == "linux") {
+                    clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
+                }
             }
         }
         val exitCode = systemExec(clangCmd)
