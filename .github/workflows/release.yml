@@ -53,12 +53,12 @@ jobs:
 
       - name: Clone and build Fuel
         run: |
-          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
           chmod 600 ~/.netrc
           git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
           RockitCompiler/Stage1/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path RockitCompiler/Runtime/rockit_runtime.c
         env:
-          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Package Linux x86_64
         run: |
@@ -82,14 +82,14 @@ jobs:
           ARCHIVE="rockit-${VERSION}-linux-x86_64.tar.gz"
 
           # Check if release already exists for this tag
-          RELEASE_ID=$(curl -s -H "Authorization: token ${FUEL_TOKEN}" \
+          RELEASE_ID=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
             "${API}/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
             | jq -r '.id // empty')
 
           if [ -z "$RELEASE_ID" ]; then
             # Create new release
             RELEASE_ID=$(curl -s -X POST \
-              -H "Authorization: token ${FUEL_TOKEN}" \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
               -H "Content-Type: application/json" \
               "${API}/repos/${GITHUB_REPOSITORY}/releases" \
               -d "{
@@ -107,11 +107,11 @@ jobs:
 
           # Upload tarball
           curl -s -X POST \
-            -H "Authorization: token ${FUEL_TOKEN}" \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Content-Type: application/gzip" \
             --data-binary "@dist/${ARCHIVE}" \
             "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${ARCHIVE}"
 
           echo "Uploaded: ${ARCHIVE}"
         env:
-          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
