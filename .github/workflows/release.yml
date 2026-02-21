@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       version:
@@ -39,7 +41,13 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
           chmod 600 ~/.netrc
-          git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+          if [ -n "${GITHUB_REF_NAME}" ] && echo "${GITHUB_REF_NAME}" | grep -q "^v"; then
+            # Tag push — check out the tag
+            git clone --depth 1 --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+          else
+            # Branch push (master merge) — check out master
+            git clone --depth 1 --branch master "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+          fi
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -54,7 +62,45 @@ jobs:
           echo "Stage 1 compiler built"
           Stage1/command version
 
+      - name: Determine version
+        run: |
+          VERSION=$(RockitCompiler/Stage1/command version 2>&1 | grep -oP '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG=v${VERSION}" >> "$GITHUB_ENV"
+          echo "Detected version: ${VERSION}"
+
+      - name: Check if release already exists
+        run: |
+          GITEA_URL="${GITHUB_SERVER_URL}"
+          API="${GITEA_URL}/api/v1"
+
+          # Check if a release with this tag already exists
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${FUEL_TOKEN}" \
+            "${API}/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
+
+          if [ "$STATUS" = "200" ]; then
+            echo "Release ${TAG} already exists — skipping."
+            echo "SKIP_RELEASE=true" >> "$GITHUB_ENV"
+          else
+            echo "No existing release for ${TAG} — proceeding."
+            echo "SKIP_RELEASE=false" >> "$GITHUB_ENV"
+          fi
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+      - name: Clone and build Fuel
+        if: env.SKIP_RELEASE != 'true'
+        run: |
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
+          RockitCompiler/Stage1/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path RockitCompiler/Runtime/rockit_runtime.c
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
       - name: Package Linux x86_64
+        if: env.SKIP_RELEASE != 'true'
         run: |
           ARCHIVE="rockit-${VERSION}-linux-x86_64.tar.gz"
           mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/bin
@@ -73,37 +119,52 @@ jobs:
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
           ls -la "${ARCHIVE}"
 
-      - name: Upload to release
+      - name: Create tag (if triggered by master merge)
+        if: env.SKIP_RELEASE != 'true'
+        run: |
+          # Create the tag via Gitea API (works even in containers without git push access)
+          GITEA_URL="${GITHUB_SERVER_URL}"
+          API="${GITEA_URL}/api/v1"
+          SHA=$(git rev-parse HEAD)
+
+          # Check if tag exists
+          TAG_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${FUEL_TOKEN}" \
+            "${API}/repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}")
+
+          if [ "$TAG_STATUS" != "200" ]; then
+            echo "Creating tag ${TAG} at ${SHA}..."
+            curl -s -X POST \
+              -H "Authorization: token ${FUEL_TOKEN}" \
+              -H "Content-Type: application/json" \
+              "${API}/repos/${GITHUB_REPOSITORY}/tags" \
+              -d "{\"tag_name\": \"${TAG}\", \"target\": \"${SHA}\"}"
+            echo "Tag ${TAG} created."
+          else
+            echo "Tag ${TAG} already exists."
+          fi
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+      - name: Create Gitea release and upload
+        if: env.SKIP_RELEASE != 'true'
         run: |
           GITEA_URL="${GITHUB_SERVER_URL}"
           API="${GITEA_URL}/api/v1"
-          ARCHIVE="rockit-${VERSION}-linux-x86_64.tar.gz"
 
-          # Check if release already exists for this tag
-          RELEASE_ID=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-            "${API}/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
-            | jq -r '.id // empty')
+          # Create release
+          RELEASE_ID=$(curl -s -X POST \
+            -H "Authorization: token ${FUEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${API}/repos/${GITHUB_REPOSITORY}/releases" \
+            -d "{
+              \"tag_name\": \"${TAG}\",
+              \"name\": \"Rockit ${TAG}\",
+              \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## What's Included\\n\\n- **rockit** — The Rockit compiler (Stage 1, self-hosted)\\n- **fuel** — The Rockit package manager\\n- **stdlib** — Standard library (json, collections, math, strings, result, file)\\n- **rockit_runtime.c** — C runtime\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/develop/RockitCompiler/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
+              \"draft\": false,
+              \"prerelease\": false
+            }" | jq -r '.id')
 
-          if [ -z "$RELEASE_ID" ]; then
-            # Create new release
-            RELEASE_ID=$(curl -s -X POST \
-              -H "Authorization: token ${GITHUB_TOKEN}" \
-              -H "Content-Type: application/json" \
-              "${API}/repos/${GITHUB_REPOSITORY}/releases" \
-              -d "{
-                \"tag_name\": \"${TAG}\",
-                \"target_commitish\": \"develop\",
-                \"name\": \"Rockit ${TAG}\",
-                \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/develop/RockitCompiler/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
-                \"draft\": false,
-                \"prerelease\": false
-              }" | jq -r '.id')
-            echo "Release created: ID=${RELEASE_ID}"
-          else
-            echo "Release already exists: ID=${RELEASE_ID}"
-          fi
-
-          # Verify we got a valid release ID
           if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
             echo "ERROR: Failed to get/create release"
             exit 1
@@ -111,7 +172,7 @@ jobs:
 
           # Upload tarball
           UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Authorization: token ${FUEL_TOKEN}" \
             -H "Content-Type: application/gzip" \
             --data-binary "@dist/${ARCHIVE}" \
             "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${ARCHIVE}")
@@ -128,4 +189,4 @@ jobs:
 
           echo "Successfully uploaded: ${ARCHIVE}"
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
