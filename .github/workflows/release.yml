@@ -51,24 +51,13 @@ jobs:
           echo "Stage 1 compiler built"
           Stage1/command version
 
-      - name: Clone and build Fuel
-        run: |
-          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
-          chmod 600 ~/.netrc
-          git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
-          RockitCompiler/Stage1/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path RockitCompiler/Runtime/rockit_runtime.c
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
       - name: Package Linux x86_64
         run: |
           ARCHIVE="rockit-${VERSION}-linux-x86_64.tar.gz"
           mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/bin
           mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit
           cp RockitCompiler/Stage1/command dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
-          cp /tmp/fuel/fuel dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
           chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
-          chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
           cp RockitCompiler/Runtime/rockit_runtime.c dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
           cp RockitCompiler/Runtime/rockit_runtime.h dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
           cd dist && tar -czf "${ARCHIVE}" "rockit-${VERSION}-linux-x86_64"
