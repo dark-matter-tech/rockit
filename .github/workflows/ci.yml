@@ -334,9 +334,7 @@ jobs:
           echo "  ║  Rockit compiler builds itself            ║"
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
-          # Use C runtime for bootstrap — the compiler defines functions (isIdentCodePoint, etc.)
-          # that collide with same-named symbols in the Rockit runtime .o
-          Stage1/command build-native Stage1/command.rok -o /tmp/stage2 --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE 2>&1
+          Stage1/command build-native Stage1/command.rok -o /tmp/stage2 --runtime-path Runtime/rockit_runtime.o --target-triple $TRIPLE 2>&1
           END=$(date +%s)
           echo "  ✅ Stage 2 built ($(($END - $START))s)"
           echo ""

@@ -544,10 +544,13 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
     mapPut(state, "creprRegs", creprRegs)
 
     // Function signature
+    val noRuntime = mapGet(compiler, "noRuntime") == true
     if (isMain) {
         llvmLine(buf, "define i32 @main(i32 %argc, ptr %argv) {")
     } else {
-        var sig: String = stringConcat("define i64 @", stringConcat(funcName, "("))
+        var linkage: String = ""
+        if (noRuntime == false) { linkage = "internal " }
+        var sig: String = stringConcat("define ", stringConcat(linkage, stringConcat("i64 @", stringConcat(funcName, "("))))
         var pi: Int = 0
         while (pi < paramCount) {
             if (pi > 0) { sig = stringConcat(sig, ", ") }
@@ -1372,10 +1375,13 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
     val resumeName = stringConcat(funcName, "_resume")
 
     // === Wrapper function ===
+    val noRuntime = mapGet(compiler, "noRuntime") == true
     if (isMain) {
         llvmLine(buf, "define i32 @main(i32 %argc, ptr %argv) {")
     } else {
-        var sig: String = stringConcat("define i64 @", stringConcat(funcName, "("))
+        var linkage: String = ""
+        if (noRuntime == false) { linkage = "internal " }
+        var sig: String = stringConcat("define ", stringConcat(linkage, stringConcat("i64 @", stringConcat(funcName, "("))))
         var pi: Int = 0
         while (pi < paramCount) {
             if (pi > 0) { sig = stringConcat(sig, ", ") }
@@ -1444,7 +1450,9 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
         ssi = ssi + 1
     }
 
-    llvmLine(buf, stringConcat("define i64 @", stringConcat(resumeName, "(ptr %frame, i64 %result) {")))
+    var resumeLinkage: String = ""
+    if (noRuntime == false) { resumeLinkage = "internal " }
+    llvmLine(buf, stringConcat("define ", stringConcat(resumeLinkage, stringConcat("i64 @", stringConcat(resumeName, "(ptr %frame, i64 %result) {")))))
     llvmLine(buf, "entry:")
 
     // Allocas for all registers
