@@ -317,6 +317,16 @@ jobs:
           sleep 0.3
 
           # ============================================================
+          # Build Rockit runtime .o (needed for all subsequent steps)
+          # ============================================================
+          echo "  ╔═══════════════════════════════════════════╗"
+          echo "  ║  ⚙️  Building Rockit Runtime (.o)          ║"
+          echo "  ╚═══════════════════════════════════════════╝"
+          bash Runtime/rockit/build.sh 2>&1
+          echo "  ✅ rockit_runtime.o built"
+          echo ""
+
+          # ============================================================
           # STAGE 1 -> STAGE 2
           # ============================================================
           echo "  ╔═══════════════════════════════════════════╗"
@@ -324,7 +334,7 @@ jobs:
           echo "  ║  Rockit compiler builds itself            ║"
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
-          Stage1/command build-native Stage1/command.rok -o /tmp/stage2 --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE 2>&1
+          Stage1/command build-native Stage1/command.rok -o /tmp/stage2 --runtime-path Runtime/rockit_runtime.o --target-triple $TRIPLE 2>&1
           END=$(date +%s)
           echo "  ✅ Stage 2 built ($(($END - $START))s)"
           echo ""
@@ -435,7 +445,7 @@ jobs:
             name=$(basename "$f" .rok)
             echo "  ┌──────────────────────────────────────────────"
             printf "  │ 🔬 %-42s" "$name"
-            if $STAGE1_CMD build-native "$f" -o "Examples/$name" --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE > /tmp/s1_build_log 2>&1; then
+            if $STAGE1_CMD build-native "$f" -o "Examples/$name" --runtime-path Runtime/rockit_runtime.o --target-triple $TRIPLE > /tmp/s1_build_log 2>&1; then
               output=$("Examples/$name" 2>&1) || true
               echo "✅ PASS"
               if [ -n "$output" ]; then
@@ -465,41 +475,8 @@ jobs:
           fi
 
           # ============================================================
-          # Rockit Runtime Verification
+          # Consistency Verification
           # ============================================================
-          echo ""
-          echo "  ╔═══════════════════════════════════════════╗"
-          echo "  ║  ⚙️  Rockit Runtime Build Verification     ║"
-          echo "  ╚═══════════════════════════════════════════╝"
-          echo "  Rebuilding freestanding runtime from source modules..."
-          # Concatenate modules in dependency order
-          cat \
-              Runtime/rockit/math.rok \
-              Runtime/rockit/memory.rok \
-              Runtime/rockit/string.rok \
-              Runtime/rockit/string_ops.rok \
-              Runtime/rockit/object.rok \
-              Runtime/rockit/list.rok \
-              Runtime/rockit/map.rok \
-              Runtime/rockit/io.rok \
-              Runtime/rockit/exception.rok \
-              Runtime/rockit/file.rok \
-              Runtime/rockit/process.rok \
-              Runtime/rockit/concurrency.rok \
-              > /tmp/rockit_runtime_verify.rok
-          # Compile with --no-runtime (link will fail — no main — but compilation must succeed)
-          if $STAGE1_CMD build-native /tmp/rockit_runtime_verify.rok --no-runtime -o /tmp/rockit_runtime_verify --target-triple $TRIPLE > /tmp/rt_build_log 2>&1; then
-            echo "  ✅ Rockit runtime compiles successfully"
-          else
-            # Link failure due to missing main is expected; check if it's just that
-            if grep -q "undefined.*_main" /tmp/rt_build_log && ! grep -q "error:.*\.ll:" /tmp/rt_build_log; then
-              echo "  ✅ Rockit runtime compiles successfully (link skipped — no main)"
-            else
-              echo "  ❌ Rockit runtime compilation FAILED"
-              cat /tmp/rt_build_log
-              exit 1
-            fi
-          fi
 
           # Verify command.rok matches concatenated Stage 1 modules
           echo "  Verifying Stage 1 command.rok consistency..."
@@ -529,7 +506,7 @@ jobs:
             name=$(basename "$f" .rok)
             echo "  ┌──────────────────────────────────────────────"
             printf "  │ 📚 %-42s" "$name"
-            if $STAGE1_CMD build-native "$f" -o "Examples/$name" --lib-path Stage1/stdlib --runtime-path Runtime/rockit_runtime.c --target-triple $TRIPLE > /tmp/sl_build_log 2>&1; then
+            if $STAGE1_CMD build-native "$f" -o "Examples/$name" --lib-path Stage1/stdlib --runtime-path Runtime/rockit_runtime.o --target-triple $TRIPLE > /tmp/sl_build_log 2>&1; then
               output=$("Examples/$name" 2>&1) || true
               echo "✅ PASS"
               if [ -n "$output" ]; then
