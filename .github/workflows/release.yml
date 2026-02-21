@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.1)'
+        required: true
 
 jobs:
   build-and-release:
@@ -16,12 +21,22 @@ jobs:
           apt-get update && apt-get install -y git clang-15 curl jq
           ln -sf /usr/bin/clang-15 /usr/bin/clang
 
+      - name: Set version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
+            echo "TAG=v${{ inputs.version }}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          fi
+
       - name: Checkout
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
           chmod 600 ~/.netrc
-          git clone --depth 1 --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+          git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -47,7 +62,6 @@ jobs:
 
       - name: Package Linux x86_64
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
           ARCHIVE="rockit-${VERSION}-linux-x86_64.tar.gz"
           mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/bin
           mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit
@@ -59,29 +73,37 @@ jobs:
           cp RockitCompiler/Runtime/rockit_runtime.h dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
           cd dist && tar -czf "${ARCHIVE}" "rockit-${VERSION}-linux-x86_64"
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
-          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           ls -la "${ARCHIVE}"
 
-      - name: Create Gitea release and upload
+      - name: Upload to release
         run: |
           GITEA_URL="${GITHUB_SERVER_URL}"
           API="${GITEA_URL}/api/v1"
-          TAG="${GITHUB_REF_NAME}"
+          ARCHIVE="rockit-${VERSION}-linux-x86_64.tar.gz"
 
-          # Create release
-          RELEASE_ID=$(curl -s -X POST \
-            -H "Authorization: token ${FUEL_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "${API}/repos/${GITHUB_REPOSITORY}/releases" \
-            -d "{
-              \"tag_name\": \"${TAG}\",
-              \"name\": \"Rockit ${TAG}\",
-              \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/develop/RockitCompiler/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
-              \"draft\": false,
-              \"prerelease\": false
-            }" | jq -r '.id')
+          # Check if release already exists for this tag
+          RELEASE_ID=$(curl -s -H "Authorization: token ${FUEL_TOKEN}" \
+            "${API}/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            | jq -r '.id // empty')
 
-          echo "Release created: ID=${RELEASE_ID}"
+          if [ -z "$RELEASE_ID" ]; then
+            # Create new release
+            RELEASE_ID=$(curl -s -X POST \
+              -H "Authorization: token ${FUEL_TOKEN}" \
+              -H "Content-Type: application/json" \
+              "${API}/repos/${GITHUB_REPOSITORY}/releases" \
+              -d "{
+                \"tag_name\": \"${TAG}\",
+                \"target_commitish\": \"develop\",
+                \"name\": \"Rockit ${TAG}\",
+                \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/develop/RockitCompiler/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
+                \"draft\": false,
+                \"prerelease\": false
+              }" | jq -r '.id')
+            echo "Release created: ID=${RELEASE_ID}"
+          else
+            echo "Release already exists: ID=${RELEASE_ID}"
+          fi
 
           # Upload tarball
           curl -s -X POST \
