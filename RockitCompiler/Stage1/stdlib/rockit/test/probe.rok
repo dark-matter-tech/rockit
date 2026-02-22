@@ -1,0 +1,113 @@
+// rockit.test.probe — Probe Test Framework
+// Assertion library for Rockit test files.
+// Use with @Test annotation and `rockit test` command.
+
+// ── Core assertions ─────────────────────────────────────────────────────
+
+fun assert(condition: Bool, message: String = ""): Unit {
+    if (condition) { return }
+    if (stringLength(message) > 0) {
+        panic("ASSERTION FAILED: " + message)
+    }
+    panic("ASSERTION FAILED")
+}
+
+fun assertTrue(condition: Bool, message: String = ""): Unit {
+    if (condition) { return }
+    if (stringLength(message) > 0) {
+        panic("ASSERTION FAILED: expected true — " + message)
+    }
+    panic("ASSERTION FAILED: expected true")
+}
+
+fun assertFalse(condition: Bool, message: String = ""): Unit {
+    if (!condition) { return }
+    if (stringLength(message) > 0) {
+        panic("ASSERTION FAILED: expected false — " + message)
+    }
+    panic("ASSERTION FAILED: expected false")
+}
+
+// ── Equality assertions ─────────────────────────────────────────────────
+
+fun assertEquals(expected: Int, actual: Int, message: String = ""): Unit {
+    if (expected == actual) { return }
+    val msg = "ASSERTION FAILED: expected " + toString(expected) + " but got " + toString(actual)
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+fun assertEqualsStr(expected: String, actual: String, message: String = ""): Unit {
+    if (expected == actual) { return }
+    val msg = "ASSERTION FAILED: expected \"" + expected + "\" but got \"" + actual + "\""
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+fun assertNotEquals(a: Int, b: Int, message: String = ""): Unit {
+    if (a != b) { return }
+    val msg = "ASSERTION FAILED: expected values to differ, both are " + toString(a)
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+// ── Comparison assertions ───────────────────────────────────────────────
+
+fun assertGreaterThan(a: Int, b: Int, message: String = ""): Unit {
+    if (a > b) { return }
+    val msg = "ASSERTION FAILED: expected " + toString(a) + " > " + toString(b)
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+fun assertLessThan(a: Int, b: Int, message: String = ""): Unit {
+    if (a < b) { return }
+    val msg = "ASSERTION FAILED: expected " + toString(a) + " < " + toString(b)
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+// ── String assertions ───────────────────────────────────────────────────
+
+fun assertStringContains(haystack: String, needle: String, message: String = ""): Unit {
+    if (stringIndexOf(haystack, needle) >= 0) { return }
+    val msg = "ASSERTION FAILED: \"" + haystack + "\" does not contain \"" + needle + "\""
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+fun assertStartsWith(s: String, prefix: String, message: String = ""): Unit {
+    if (startsWith(s, prefix)) { return }
+    val msg = "ASSERTION FAILED: \"" + s + "\" does not start with \"" + prefix + "\""
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+fun assertEndsWith(s: String, suffix: String, message: String = ""): Unit {
+    if (endsWith(s, suffix)) { return }
+    val msg = "ASSERTION FAILED: \"" + s + "\" does not end with \"" + suffix + "\""
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+// ── Unconditional failure ───────────────────────────────────────────────
+
+fun fail(message: String = "test failed"): Unit {
+    panic("ASSERTION FAILED: " + message)
+}

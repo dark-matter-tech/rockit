@@ -1,0 +1,62 @@
+import rockit.test.probe
+
+@Test
+fun testAssertTrue() {
+    assertTrue(1 == 1, "basic truth")
+    assertTrue(10 > 5)
+}
+
+@Test
+fun testAssertFalse() {
+    assertFalse(1 == 2, "basic falsehood")
+    assertFalse(5 > 10)
+}
+
+@Test
+fun testAssertEquals() {
+    assertEquals(42, 42, "same integers")
+    assertEquals(0, 0)
+    assertEquals(100, 50 + 50, "arithmetic")
+}
+
+@Test
+fun testAssertEqualsStr() {
+    assertEqualsStr("hello", "hello", "same strings")
+    assertEqualsStr("", "")
+}
+
+@Test
+fun testAssertNotEquals() {
+    assertNotEquals(1, 2, "different integers")
+    assertNotEquals(0, 1)
+}
+
+@Test
+fun testAssertGreaterThan() {
+    assertGreaterThan(10, 5, "ten > five")
+    assertGreaterThan(1, 0)
+}
+
+@Test
+fun testAssertLessThan() {
+    assertLessThan(5, 10, "five < ten")
+    assertLessThan(0, 1)
+}
+
+@Test
+fun testAssertStringContains() {
+    assertStringContains("hello world", "world", "contains world")
+    assertStringContains("abcdef", "cd")
+}
+
+@Test
+fun testAssertStartsWith() {
+    assertStartsWith("hello world", "hello", "starts with hello")
+    assertStartsWith("abc", "a")
+}
+
+@Test
+fun testAssertEndsWith() {
+    assertEndsWith("hello world", "world", "ends with world")
+    assertEndsWith("abc", "c")
+}

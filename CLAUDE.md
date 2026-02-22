@@ -26,7 +26,7 @@ From Stage 2 onward, each new version of `command` is compiled by the previous v
 | CLI / Build Tool | Command | Shipped |
 | Package Manager | Fuel | Shipped (bundled with Rockit releases) |
 | Standard Library | stdlib (`rockit.*`) | Shipped (bundled with Rockit releases) |
-| Test Framework | Probe | Planned |
+| Test Framework | Probe | Shipped |
 | Registry | Silo | Planned |
 | REPL | Launch | Shipped |
 | Browser | Nova | Planned |

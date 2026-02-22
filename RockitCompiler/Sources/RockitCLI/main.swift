@@ -722,6 +722,7 @@ func initCommand(name: String) {
 
 func testCommand(file: String?) {
     let fm = FileManager.default
+    let stdlibPaths: [String] = findStdlibDir().map { [$0] } ?? []
 
     var testFiles: [String] = []
 
@@ -764,7 +765,12 @@ func testCommand(file: String?) {
         let lexer = Lexer(source: source, fileName: testFile, diagnostics: diagnostics)
         let tokens = lexer.tokenize()
         let parser = Parser(tokens: tokens, diagnostics: diagnostics)
-        let ast = parser.parse()
+        let parsedAST = parser.parse()
+
+        let sourceDir = (testFile as NSString).deletingLastPathComponent
+        let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: stdlibPaths, diagnostics: diagnostics)
+        let ast = importResolver.resolve(parsedAST)
+
         let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
         let typeResult = checker.check()
 
@@ -811,7 +817,9 @@ func testCommand(file: String?) {
                 let wLexer = Lexer(source: wrapperSource, fileName: testFile, diagnostics: wDiag)
                 let wTokens = wLexer.tokenize()
                 let wParser = Parser(tokens: wTokens, diagnostics: wDiag)
-                let wAst = wParser.parse()
+                let wParsedAst = wParser.parse()
+                let wImportResolver = ImportResolver(sourceDir: sourceDir, libPaths: stdlibPaths, diagnostics: wDiag)
+                let wAst = wImportResolver.resolve(wParsedAst)
                 let wChecker = TypeChecker(ast: wAst, diagnostics: wDiag)
                 let wResult = wChecker.check()
 
@@ -1267,6 +1275,29 @@ func findRuntimeDir() -> String {
 
     // Fallback: assume cwd
     return cwdRuntime
+}
+
+func findStdlibDir() -> String? {
+    let fm = FileManager.default
+
+    // Check ROCKIT_STDLIB_DIR environment variable first
+    if let envDir = ProcessInfo.processInfo.environment["ROCKIT_STDLIB_DIR"],
+       fm.fileExists(atPath: envDir) {
+        return envDir
+    }
+
+    // Try Stage1/stdlib relative to CWD (development)
+    let cwd = fm.currentDirectoryPath
+    let cwdStdlib = Platform.pathJoin(cwd, "Stage1", "stdlib")
+    if fm.fileExists(atPath: Platform.pathJoin(cwdStdlib, "rockit")) { return cwdStdlib }
+
+    // Try relative to the executable (installed: share/rockit/stdlib)
+    let execPath = CommandLine.arguments[0]
+    let execDir = (execPath as NSString).deletingLastPathComponent
+    let installedStdlib = Platform.pathJoin(execDir, "..", "share", "rockit", "stdlib")
+    if fm.fileExists(atPath: Platform.pathJoin(installedStdlib, "rockit")) { return installedStdlib }
+
+    return nil
 }
 
 // MARK: - Main
