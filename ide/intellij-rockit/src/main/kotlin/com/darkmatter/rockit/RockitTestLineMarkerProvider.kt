@@ -19,41 +19,171 @@ import java.util.concurrent.TimeUnit
 import javax.swing.Icon
 
 /**
- * Adds Xcode-style gutter play buttons next to @Test functions.
+ * Adds Xcode-style gutter icons for @Test functions and per-assertion results.
  *
+ * Function-level icons:
  * - Green play icon: test not yet run (click to run)
  * - Yellow circle: test is running
  * - Green checkmark: test passed
  * - Red X: test failed
+ *
+ * Assertion-level icons (after running with --detailed):
+ * - Green checkmark: assertion passed
+ * - Red X: assertion failed (with failure message in tooltip)
  */
 class RockitTestLineMarkerProvider : LineMarkerProvider {
 
     enum class TestState { RUNNING, PASSED, FAILED }
 
+    data class AssertionResult(val passed: Boolean, val message: String = "")
+
     companion object {
         // Cache: filePath -> (testFunctionName -> state)
         val testStates = ConcurrentHashMap<String, ConcurrentHashMap<String, TestState>>()
+        // Cache: filePath -> (testFunctionName -> list of per-assertion results)
+        val assertionResults = ConcurrentHashMap<String, ConcurrentHashMap<String, List<AssertionResult>>>()
         private const val NOTIFICATION_GROUP = "Rockit Test Runner"
+
+        val ASSERT_FUNCTIONS = setOf(
+            "assert", "assertTrue", "assertFalse", "assertEquals", "assertEqualsStr",
+            "assertNotEquals", "assertGreaterThan", "assertLessThan",
+            "assertStringContains", "assertStartsWith", "assertEndsWith", "fail"
+        )
     }
 
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? {
-        if (element.node.elementType != RockitTokenTypes.KW_FUN) return null
+        val type = element.node.elementType
 
-        val testFunctionName = findTestFunctionName(element) ?: return null
+        // @Test function play buttons
+        if (type == RockitTokenTypes.KW_FUN) {
+            val testFunctionName = findTestFunctionName(element) ?: return null
+            val filePath = element.containingFile.virtualFile?.path ?: return null
+
+            val icon = getIcon(filePath, testFunctionName)
+            val tooltip = getTooltip(filePath, testFunctionName)
+
+            return LineMarkerInfo(
+                element,
+                element.textRange,
+                icon,
+                { tooltip },
+                { _, elt -> runTest(elt, filePath, testFunctionName) },
+                GutterIconRenderer.Alignment.CENTER,
+                { tooltip }
+            )
+        }
+
+        // Per-assertion result icons
+        if (type == RockitTokenTypes.IDENTIFIER || type == RockitTokenTypes.FUNCTION_CALL) {
+            val name = element.text
+            if (name in ASSERT_FUNCTIONS) {
+                return getAssertionLineMarker(element, name)
+            }
+        }
+
+        return null
+    }
+
+    private fun getAssertionLineMarker(element: PsiElement, assertName: String): LineMarkerInfo<*>? {
         val filePath = element.containingFile.virtualFile?.path ?: return null
+        val fileAssertions = assertionResults[filePath] ?: return null
 
-        val icon = getIcon(filePath, testFunctionName)
-        val tooltip = getTooltip(filePath, testFunctionName)
+        val document = PsiDocumentManager.getInstance(element.project)
+            .getDocument(element.containingFile) ?: return null
+
+        // Find which @Test function this assertion is inside
+        val elementLine = document.getLineNumber(element.textOffset)
+        val testInfo = findEnclosingTestFunction(document, elementLine) ?: return null
+        val (testName, testFunBodyLine) = testInfo
+
+        val results = fileAssertions[testName] ?: return null
+
+        // Count assertion calls from function body start to this element's line
+        val assertionIndex = getAssertionIndex(document, testFunBodyLine, elementLine)
+        if (assertionIndex < 0 || assertionIndex >= results.size) return null
+
+        val result = results[assertionIndex]
+        val icon = if (result.passed)
+            AllIcons.RunConfigurations.TestState.Green2
+        else
+            AllIcons.RunConfigurations.TestState.Red2
+        val tooltip = if (result.passed)
+            "$assertName passed"
+        else
+            "$assertName failed: ${result.message}"
 
         return LineMarkerInfo(
             element,
             element.textRange,
             icon,
             { tooltip },
-            { _, elt -> runTest(elt, filePath, testFunctionName) },
+            null,
             GutterIconRenderer.Alignment.CENTER,
             { tooltip }
         )
+    }
+
+    /**
+     * Walk backwards from elementLine to find the enclosing @Test function.
+     * Returns (testFunctionName, bodyStartLine) or null.
+     */
+    private fun findEnclosingTestFunction(
+        document: com.intellij.openapi.editor.Document,
+        elementLine: Int
+    ): Pair<String, Int>? {
+        // Scan backwards for a `fun` keyword line
+        for (line in elementLine downTo 0) {
+            val lineStart = document.getLineStartOffset(line)
+            val lineEnd = document.getLineEndOffset(line)
+            val lineText = document.getText(TextRange(lineStart, lineEnd)).trim()
+
+            // Match "fun functionName(" pattern
+            val funMatch = Regex("""^fun\s+(\w+)\s*\(""").find(lineText) ?: continue
+            val funcName = funMatch.groupValues[1]
+
+            // Check if this function has @Test annotation above it
+            for (prevLine in (line - 1) downTo maxOf(0, line - 3)) {
+                val prevStart = document.getLineStartOffset(prevLine)
+                val prevEnd = document.getLineEndOffset(prevLine)
+                val prevText = document.getText(TextRange(prevStart, prevEnd)).trim()
+                if (prevText == "@Test") {
+                    // Body starts on the line after the fun declaration (after opening brace)
+                    return Pair(funcName, line + 1)
+                }
+                if (prevText.isNotEmpty() && !prevText.startsWith("@")) break
+            }
+
+            // Also check if @Test is on the same line before fun
+            if (lineText.startsWith("@Test")) {
+                return Pair(funcName, line + 1)
+            }
+
+            // If we hit a non-@Test function, stop searching
+            return null
+        }
+        return null
+    }
+
+    /**
+     * Count how many assertion calls appear on lines [bodyStartLine, elementLine)
+     * to determine this assertion's index in the recorded results.
+     */
+    private fun getAssertionIndex(
+        document: com.intellij.openapi.editor.Document,
+        bodyStartLine: Int,
+        elementLine: Int
+    ): Int {
+        var index = 0
+        for (lineNum in bodyStartLine until elementLine) {
+            if (lineNum >= document.lineCount) break
+            val lineStart = document.getLineStartOffset(lineNum)
+            val lineEnd = document.getLineEndOffset(lineNum)
+            val lineText = document.getText(TextRange(lineStart, lineEnd)).trim()
+            if (ASSERT_FUNCTIONS.any { lineText.startsWith("$it(") || lineText.startsWith("$it (") }) {
+                index++
+            }
+        }
+        return index
     }
 
     private fun findTestFunctionName(funElement: PsiElement): String? {
@@ -145,7 +275,7 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
                 }
 
                 val commandLine = GeneralCommandLine(
-                    "rockit", "test", filePath, "--filter", testName
+                    "rockit", "test", filePath, "--filter", testName, "--detailed"
                 ).withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
                 if (workDir != null) {
                     commandLine.withWorkDirectory(workDir)
@@ -163,7 +293,29 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
                     return@executeOnPooledThread
                 }
 
-                // Parse result for this specific test
+                // Parse per-assertion results from __PROBE_RESULTS_BEGIN/END block
+                val probeResults = mutableListOf<AssertionResult>()
+                var inProbeBlock = false
+                for (line in output.lines()) {
+                    if (line.trim() == "__PROBE_RESULTS_BEGIN") { inProbeBlock = true; continue }
+                    if (line.trim() == "__PROBE_RESULTS_END") { inProbeBlock = false; continue }
+                    if (inProbeBlock && line.trim().isNotEmpty()) {
+                        val trimmed = line.trim()
+                        if (trimmed == "P") {
+                            probeResults.add(AssertionResult(passed = true))
+                        } else if (trimmed.startsWith("F:")) {
+                            probeResults.add(AssertionResult(passed = false, message = trimmed.removePrefix("F:")))
+                        }
+                    }
+                }
+
+                // Store assertion results
+                if (probeResults.isNotEmpty()) {
+                    val fileAssertions = assertionResults.getOrPut(filePath) { ConcurrentHashMap() }
+                    fileAssertions[testName] = probeResults
+                }
+
+                // Parse overall result for this specific test
                 val passPattern = Regex("""PASS\s+\S+::(\w+)""")
                 val failPattern = Regex("""FAIL\s+\S+::(\w+)""")
                 var found = false
@@ -179,7 +331,6 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
                     failPattern.find(line)?.let { match ->
                         if (match.groupValues[1] == testName) {
                             fileStates[testName] = TestState.FAILED
-                            // Extract error message after " — "
                             val errorMsg = line.substringAfter(" — ", "").take(200)
                             notify(project, "$testName failed: $errorMsg", NotificationType.WARNING)
                             found = true

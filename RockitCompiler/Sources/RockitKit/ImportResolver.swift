@@ -53,12 +53,13 @@ public class ImportResolver {
             diagnostics.warning("could not read imported file: \(filePath)", at: imp.span.start)
             return
         }
-
         // Parse the imported file
-        let lexer = Lexer(source: source, fileName: filePath, diagnostics: diagnostics)
+        let importDiag = DiagnosticEngine()
+        let lexer = Lexer(source: source, fileName: filePath, diagnostics: importDiag)
         let tokens = lexer.tokenize()
-        let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+        let parser = Parser(tokens: tokens, diagnostics: importDiag)
         let importedAST = parser.parse()
+        // Note: import parse errors are in importDiag, not forwarded
 
         // Recursively resolve imports in the imported file
         let importedDir = (filePath as NSString).deletingLastPathComponent

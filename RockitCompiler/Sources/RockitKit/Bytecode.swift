@@ -20,6 +20,7 @@ public enum Opcode: UInt8 {
     case load           = 0x12
     case loadParam      = 0x13
     case loadGlobal     = 0x14
+    case storeGlobal    = 0x15
 
     // Arithmetic
     case add            = 0x20
@@ -97,6 +98,7 @@ extension Opcode: CustomStringConvertible {
         case .load:         return "LOAD"
         case .loadParam:    return "LOAD_PARAM"
         case .loadGlobal:   return "LOAD_GLOBAL"
+        case .storeGlobal:  return "STORE_GLOBAL"
         case .add:          return "ADD"
         case .sub:          return "SUB"
         case .mul:          return "MUL"

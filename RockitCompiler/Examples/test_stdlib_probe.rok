@@ -8,7 +8,7 @@ fun testAssertTrue() {
 
 @Test
 fun testAssertFalse() {
-    assertFalse(1 == 2, "basic falsehood")
+    assertFalse(1 == 1, "this should fail")
     assertFalse(5 > 10)
 }
 

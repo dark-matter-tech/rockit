@@ -371,6 +371,11 @@ public final class VM {
                     let nameIdx = readUInt16(bytecode, frame: frameIdx)
                     callStack[frameIdx].registers[Int(dest)] = globals[nameIdx] ?? .null
 
+                case .storeGlobal:
+                    let nameIdx = readUInt16(bytecode, frame: frameIdx)
+                    let src = readUInt16(bytecode, frame: frameIdx)
+                    globals[nameIdx] = callStack[frameIdx].registers[Int(src)]
+
                 // MARK: Arithmetic
                 case .add:
                     let dest = readUInt16(bytecode, frame: frameIdx)
@@ -826,46 +831,42 @@ public final class VM {
 
         let funcName = constantString(funcIdx)
 
-        // Check builtins first
-        if let builtin = builtins.lookup(funcName) {
+        // Module functions take precedence over builtins (user code shadows builtins)
+        if let targetIdx = functionTable[funcName] {
+            guard callStack.count < config.maxCallStackDepth else {
+                throw VMError.stackOverflow(depth: callStack.count)
+            }
+
+            let targetFunc = module.functions[targetIdx]
+            let returnReg: UInt16? = destReg != 0xFFFF ? destReg : nil
+
+            var newFrame = CallFrame(
+                functionIndex: targetIdx,
+                registerCount: Int(targetFunc.registerCount),
+                returnRegister: returnReg,
+                functionName: funcName
+            )
+
+            // Pass arguments: store in first N registers (for LOAD_PARAM to read)
+            for (i, arg) in args.prefix(Int(targetFunc.parameterCount)).enumerated() {
+                newFrame.registers[i] = arg
+                arc.retain(arg)
+            }
+
+            callStack.append(newFrame)
+
+            // Execute the called function
+            try executeLoop()
+        } else if let builtin = builtins.lookup(funcName) {
+            // Fall back to built-in functions
             let result = try builtin(args)
             if destReg != 0xFFFF {
                 callStack[frameIdx].registers[Int(destReg)] = result
                 arc.retain(result)
             }
-            return
-        }
-
-        // Module function
-        guard let targetIdx = functionTable[funcName] else {
+        } else {
             throw VMError.unknownFunction(name: funcName)
         }
-
-        guard callStack.count < config.maxCallStackDepth else {
-            throw VMError.stackOverflow(depth: callStack.count)
-        }
-
-        let targetFunc = module.functions[targetIdx]
-        let returnReg: UInt16? = destReg != 0xFFFF ? destReg : nil
-
-        var newFrame = CallFrame(
-            functionIndex: targetIdx,
-            registerCount: Int(targetFunc.registerCount),
-            returnRegister: returnReg,
-            functionName: funcName
-        )
-
-        // Pass arguments: store in first N registers (for LOAD_PARAM to read)
-        // Retain objectRefs so frame release doesn't over-decrement the caller's references.
-        for (i, arg) in args.prefix(Int(targetFunc.parameterCount)).enumerated() {
-            newFrame.registers[i] = arg
-            arc.retain(arg)
-        }
-
-        callStack.append(newFrame)
-
-        // Execute the called function
-        try executeLoop()
     }
 
     // MARK: - Await Call

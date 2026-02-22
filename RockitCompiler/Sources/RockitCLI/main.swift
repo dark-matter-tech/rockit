@@ -720,7 +720,7 @@ func initCommand(name: String) {
 
 // MARK: - Test Command (Probe Test Framework)
 
-func testCommand(file: String?, filter: String? = nil) {
+func testCommand(file: String?, filter: String? = nil, detailed: Bool = false) {
     let fm = FileManager.default
     let stdlibPaths: [String] = findStdlibDir().map { [$0] } ?? []
 
@@ -816,7 +816,23 @@ func testCommand(file: String?, filter: String? = nil) {
             let sourceWithoutMain = stripMainFunction(source)
             for testFn in testFunctions {
                 // Generate a wrapper main() that calls this test function
-                let wrapperSource = sourceWithoutMain + "\nfun main() { \(testFn)() }\n"
+                let wrapperSource: String
+                if detailed {
+                    // Recording mode: assertions record P/F instead of panicking
+                    wrapperSource = sourceWithoutMain
+                        + "\nfun main() {\n"
+                        + "    __probeRecording = 1\n"
+                        + "    \(testFn)()\n"
+                        + "    println(\"__PROBE_RESULTS_BEGIN\")\n"
+                        + "    println(__probeResults)\n"
+                        + "    println(\"__PROBE_RESULTS_END\")\n"
+                        + "    if (__probeFailed > 0) {\n"
+                        + "        panic(\"test failed\")\n"
+                        + "    }\n"
+                        + "}\n"
+                } else {
+                    wrapperSource = sourceWithoutMain + "\nfun main() { \(testFn)() }\n"
+                }
 
                 let wDiag = DiagnosticEngine()
                 let wLexer = Lexer(source: wrapperSource, fileName: testFile, diagnostics: wDiag)
@@ -1409,7 +1425,8 @@ case "test":
     if let filterIdx = args.firstIndex(of: "--filter"), filterIdx + 1 < args.count {
         testFilter = args[filterIdx + 1]
     }
-    testCommand(file: file, filter: testFilter)
+    let detailed = args.contains("--detailed")
+    testCommand(file: file, filter: testFilter, detailed: detailed)
 
 case "update":
     updateCommand()

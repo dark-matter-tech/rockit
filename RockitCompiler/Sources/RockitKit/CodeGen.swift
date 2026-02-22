@@ -229,7 +229,7 @@ public final class CodeGen {
         case .alloc:
             return 5   // op(1) + reg(2) + typeIdx(2)
         case .store, .load:
-            return 5   // op(1) + reg(2) + reg(2)  OR  op(1) + reg(2) + idx(2)
+            return 5   // op(1) + reg(2) + reg(2)  OR  op(1) + idx(2) + reg(2)
         case .add, .sub, .mul, .div, .mod:
             return 7   // op(1) + 3*reg(6)
         case .neg:
@@ -325,9 +325,16 @@ public final class CodeGen {
             emitTypeIndex(type, emitter: emitter)
 
         case .store(let dest, let src):
-            emitter.emitOpcode(.store)
-            emitter.emitUInt16(resolveRegister(dest))
-            emitter.emitUInt16(resolveRegister(src))
+            if dest.hasPrefix("global.") {
+                let globalName = String(dest.dropFirst(7))
+                emitter.emitOpcode(.storeGlobal)
+                emitter.emitUInt16(pool.intern(globalName, kind: .globalName))
+                emitter.emitUInt16(resolveRegister(src))
+            } else {
+                emitter.emitOpcode(.store)
+                emitter.emitUInt16(resolveRegister(dest))
+                emitter.emitUInt16(resolveRegister(src))
+            }
 
         case .load(let dest, let src):
             if src.hasPrefix("param.") {
@@ -810,6 +817,12 @@ public final class CodeGen {
                 let idx = readUInt16(bytes, at: &pc)
                 let name = Int(idx) < pool.count ? pool[Int(idx)].value : "#\(idx)"
                 lines.append("  \(offset): \(op) r\(dest), \(name)")
+
+            case .storeGlobal:
+                let idx = readUInt16(bytes, at: &pc)
+                let src = readUInt16(bytes, at: &pc)
+                let name = Int(idx) < pool.count ? pool[Int(idx)].value : "#\(idx)"
+                lines.append("  \(offset): \(op) \(name), r\(src)")
 
             case .add, .sub, .mul, .div, .mod:
                 let dest = readUInt16(bytes, at: &pc)
