@@ -1,0 +1,14 @@
+import rockit.test.probe
+
+@Test
+fun testFloatComparison() {
+    val pi = 3.14
+    val e = 2.718
+    assertTrue(pi > e, "pi > e")
+}
+
+@Test
+fun testNegativeFloat() {
+    val neg = -3.14
+    assertTrue(neg < 0.0, "negative float is less than zero")
+}

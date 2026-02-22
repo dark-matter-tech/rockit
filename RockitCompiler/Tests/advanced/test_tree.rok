@@ -1,0 +1,26 @@
+import rockit.test.probe
+
+data class TreeNode(val left: Int, val right: Int)
+
+fun makeTree(depth: Int): TreeNode {
+    if (depth == 0) {
+        return TreeNode(0, 0)
+    }
+    val l = makeTree(depth - 1)
+    val r = makeTree(depth - 1)
+    return TreeNode(l.left + l.right + 1, r.left + r.right + 1)
+}
+
+@Test
+fun testTreeDepth4() {
+    val t = makeTree(4)
+    assertEquals(15, t.left, "tree depth 4 left = 15")
+    assertEquals(15, t.right, "tree depth 4 right = 15")
+}
+
+@Test
+fun testTreeDepth0() {
+    val t = makeTree(0)
+    assertEquals(0, t.left, "tree depth 0 left = 0")
+    assertEquals(0, t.right, "tree depth 0 right = 0")
+}

@@ -1,0 +1,39 @@
+// test_unsafe.rok — extern fun, Ptr, unsafe blocks, pointer ops
+// Low-level test — uses features that may not work with probe framework
+// Run with: rockit run tests/advanced/test_unsafe.rok
+
+extern fun puts(str: Ptr<Byte>): Int
+
+fun main() {
+    val p = alloc(1)
+    unsafe {
+        p.store(42)
+        val x = p.load()
+        println(x)
+    }
+    free(p)
+
+    val arr = alloc(3)
+    unsafe {
+        arr.store(10)
+        arr.offset(1).store(20)
+        arr.offset(2).store(30)
+        println(arr.load())
+        println(arr.offset(1).load())
+        println(arr.offset(2).load())
+    }
+    free(arr)
+
+    val msg = "Hello from unsafe Rockit!"
+    val cMsg = cstr(msg)
+    puts(cMsg)
+
+    val q = alloc(1)
+    unsafe {
+        val notNull = q.isNull()
+        println(notNull)
+    }
+    free(q)
+
+    println("All unsafe tests passed!")
+}

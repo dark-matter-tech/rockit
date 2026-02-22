@@ -1,0 +1,33 @@
+import rockit.test.probe
+
+@Test
+fun testIfExprTrue() {
+    val x: String = if (true) { "yes" } else { "no" }
+    assertEqualsStr("yes", x, "if-expression with true")
+}
+
+@Test
+fun testIfExprFalse() {
+    val y: String = if (false) { "wrong" } else { "right" }
+    assertEqualsStr("right", y, "if-expression with false")
+}
+
+@Test
+fun testIfExprInt() {
+    val a: Int = if (true) { 42 } else { 0 }
+    assertEquals(42, a, "if-expression returning int")
+}
+
+@Test
+fun testIfExprIntFalse() {
+    val b: Int = if (false) { 1 } else { 99 }
+    assertEquals(99, b, "if-expression returning int (false branch)")
+}
+
+@Test
+fun testNestedIfExpr() {
+    val grade: Int = 85
+    var letter: String = "F"
+    if (grade >= 90) { letter = "A" } else { if (grade >= 80) { letter = "B" } else { letter = "C" } }
+    assertEqualsStr("B", letter, "nested if for grade 85")
+}

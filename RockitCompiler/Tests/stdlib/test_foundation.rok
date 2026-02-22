@@ -1,0 +1,110 @@
+import rockit.test.probe
+import rockit.net.http
+import rockit.net.url
+import rockit.encoding.base64
+import rockit.time.datetime
+import rockit.core.uuid
+import rockit.io.path
+
+// --- Base64 ---
+@Test
+fun testBase64Roundtrip() {
+    val encoded = base64Encode("Hello, World!")
+    val decoded = base64Decode(encoded)
+    assertEqualsStr("Hello, World!", decoded, "base64 roundtrip")
+}
+
+@Test
+fun testBase64Empty() {
+    assertEqualsStr("", base64Encode(""), "base64 empty")
+}
+
+@Test
+fun testBase64OneByte() {
+    assertEqualsStr("YQ==", base64Encode("a"), "base64 1 byte")
+}
+
+@Test
+fun testBase64TwoBytes() {
+    assertEqualsStr("YWI=", base64Encode("ab"), "base64 2 bytes")
+}
+
+@Test
+fun testBase64ThreeBytes() {
+    assertEqualsStr("YWJj", base64Encode("abc"), "base64 3 bytes")
+}
+
+// --- URL Parser ---
+@Test
+fun testUrlParse() {
+    val parsed = urlParse("http://example.com:8080/path?key=value&foo=bar#section")
+    assertEqualsStr("http", urlScheme(parsed), "url scheme")
+    assertEqualsStr("example.com", urlHost(parsed), "url host")
+    assertEquals(8080, urlPort(parsed), "url port")
+    assertEqualsStr("/path", urlPath(parsed), "url path")
+    assertEqualsStr("section", urlFragment(parsed), "url fragment")
+}
+
+@Test
+fun testUrlEncodeDecode() {
+    val urlEncoded = urlEncode("hello world&foo=bar")
+    val urlDecoded = urlDecode(urlEncoded)
+    assertEqualsStr("hello world&foo=bar", urlDecoded, "url encode/decode roundtrip")
+}
+
+// --- Path Utils ---
+@Test
+fun testPathJoin() {
+    assertEqualsStr("/usr/local", pathJoin("/usr", "local"), "path join")
+    assertEqualsStr("/usr/local", pathJoin("/usr/", "local"), "path join trailing slash")
+}
+
+@Test
+fun testPathComponents() {
+    assertEqualsStr("/usr/local", pathDir("/usr/local/bin"), "pathDir")
+    assertEqualsStr("bin", pathBase("/usr/local/bin"), "pathBase")
+    assertEqualsStr(".txt", pathExt("file.txt"), "pathExt")
+    assertEqualsStr("", pathExt("Makefile"), "pathExt no ext")
+    assertEqualsStr("file", pathWithoutExt("file.txt"), "pathWithoutExt")
+}
+
+@Test
+fun testPathAbsolute() {
+    assertTrue(pathIsAbsolute("/usr"), "absolute path")
+    assertFalse(pathIsAbsolute("usr"), "relative path")
+}
+
+@Test
+fun testPathNormalize() {
+    assertEqualsStr("/usr/bin", pathNormalize("/usr/local/../bin"), "path normalize")
+}
+
+// --- DateTime ---
+@Test
+fun testLeapYear() {
+    assertTrue(isLeapYear(2024), "2024 is leap year")
+    assertFalse(isLeapYear(2023), "2023 is not leap year")
+    assertTrue(isLeapYear(2000), "2000 is leap year")
+    assertFalse(isLeapYear(1900), "1900 is not leap year")
+}
+
+@Test
+fun testDaysInMonth() {
+    assertEquals(29, daysInMonth(2024, 2), "feb 2024 has 29 days")
+    assertEquals(28, daysInMonth(2023, 2), "feb 2023 has 28 days")
+}
+
+// --- UUID ---
+@Test
+fun testUuidFormat() {
+    val id1 = uuid4()
+    assertEquals(36, stringLength(id1), "uuid length is 36")
+    assertEqualsStr("4", charAt(id1, 14), "uuid version char is 4")
+}
+
+@Test
+fun testUuidUniqueness() {
+    val id1 = uuid4()
+    val id2 = uuid4()
+    assertTrue(id1 != id2, "two UUIDs are unique")
+}

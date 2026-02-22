@@ -1,0 +1,31 @@
+import rockit.test.probe
+
+enum class Color {
+    RED,
+    GREEN,
+    BLUE
+}
+
+fun colorName(c: Color): String {
+    return when (c) {
+        Color.RED -> "red"
+        Color.GREEN -> "green"
+        Color.BLUE -> "blue"
+        else -> "unknown"
+    }
+}
+
+@Test
+fun testEnumRed() {
+    assertEqualsStr("red", colorName(Color.RED), "Color.RED maps to red")
+}
+
+@Test
+fun testEnumGreen() {
+    assertEqualsStr("green", colorName(Color.GREEN), "Color.GREEN maps to green")
+}
+
+@Test
+fun testEnumBlue() {
+    assertEqualsStr("blue", colorName(Color.BLUE), "Color.BLUE maps to blue")
+}

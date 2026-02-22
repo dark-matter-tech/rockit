@@ -1,0 +1,25 @@
+// test_freestanding.rok — Freestanding mode test (--no-runtime)
+// Cannot use import rockit.test.probe — no runtime available
+// Run with: rockit run --no-runtime tests/advanced/test_freestanding.rok
+
+extern fun puts(str: Ptr<Int>): Int
+
+fun main(): Unit {
+    unsafe {
+        val msg = cstr("Hello from freestanding Rockit!")
+        puts(msg)
+
+        val p = alloc(3)
+        p.store(10)
+        p.offset(1).store(20)
+        p.offset(2).store(30)
+
+        val sum = p.load() + p.offset(1).load() + p.offset(2).load()
+        if (sum == 60) {
+            puts(cstr("Pointer arithmetic: OK"))
+        }
+
+        free(p)
+        puts(cstr("Freestanding mode works!"))
+    }
+}

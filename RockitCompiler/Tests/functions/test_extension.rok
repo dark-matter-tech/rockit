@@ -1,0 +1,15 @@
+import rockit.test.probe
+
+fun Int.double(): Int {
+    return this * 2
+}
+
+@Test
+fun testExtensionDouble() {
+    assertEquals(10, 5.double(), "5.double() = 10")
+}
+
+@Test
+fun testExtensionDoubleLarger() {
+    assertEquals(20, 10.double(), "10.double() = 20")
+}

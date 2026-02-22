@@ -1,0 +1,39 @@
+// test_byte_ops.rok — loadByte/storeByte intrinsics
+// Low-level test — uses features that may not work with probe framework
+// Run with: rockit run tests/advanced/test_byte_ops.rok
+
+extern fun puts(s: Ptr<Int>): Int
+extern fun malloc(size: Int): Int
+extern fun free(ptr: Int): Unit
+
+fun main(): Unit {
+    unsafe {
+        val buf = malloc(16)
+
+        storeByte(buf, 0, 72)   // 'H'
+        storeByte(buf, 1, 101)  // 'e'
+        storeByte(buf, 2, 108)  // 'l'
+        storeByte(buf, 3, 108)  // 'l'
+        storeByte(buf, 4, 111)  // 'o'
+        storeByte(buf, 5, 0)    // null terminator
+
+        puts(buf)
+
+        val h = loadByte(buf, 0)
+        val e = loadByte(buf, 1)
+        if (h == 72) {
+            puts(cstr("loadByte 0: OK"))
+        }
+        if (e == 101) {
+            puts(cstr("loadByte 1: OK"))
+        }
+
+        val sum = h + e
+        if (sum == 173) {
+            puts(cstr("byte arithmetic: OK"))
+        }
+
+        free(buf)
+        puts(cstr("byte ops test complete"))
+    }
+}

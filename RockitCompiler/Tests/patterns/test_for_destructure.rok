@@ -1,0 +1,40 @@
+import rockit.test.probe
+
+@Test
+fun testForMapDestructure() {
+    val scores = mapCreate()
+    mapPut(scores, "alice", 95)
+    mapPut(scores, "bob", 87)
+    mapPut(scores, "carol", 92)
+
+    var total = 0
+    for ((name, score) in scores) {
+        total = total + score
+    }
+    assertEquals(274, total, "sum of map values via destructuring")
+}
+
+@Test
+fun testSingleElementMap() {
+    val single = mapCreate()
+    mapPut(single, "only", 1)
+    var count = 0
+    for ((k, v) in single) {
+        count = count + 1
+        assertEqualsStr("only", k, "single map key")
+        assertEquals(1, v, "single map value")
+    }
+    assertEquals(1, count, "iterated once")
+}
+
+@Test
+fun testDestructureSumValues() {
+    val coords = mapCreate()
+    mapPut(coords, "x", 10)
+    mapPut(coords, "y", 20)
+    var sum = 0
+    for ((key, val_) in coords) {
+        sum = sum + val_
+    }
+    assertEquals(30, sum, "sum of coordinate values")
+}

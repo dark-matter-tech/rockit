@@ -1,0 +1,25 @@
+import rockit.test.probe
+
+fun describe(n: Int): String {
+    return when (n) {
+        1 -> "one"
+        2 -> "two"
+        3 -> "three"
+        else -> "other"
+    }
+}
+
+@Test
+fun testWhenMatchesFirst() {
+    assertEqualsStr("one", describe(1), "when matches 1")
+}
+
+@Test
+fun testWhenMatchesSecond() {
+    assertEqualsStr("two", describe(2), "when matches 2")
+}
+
+@Test
+fun testWhenElseBranch() {
+    assertEqualsStr("other", describe(99), "when falls to else")
+}

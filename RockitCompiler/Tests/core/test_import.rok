@@ -1,0 +1,14 @@
+import rockit.test.probe
+import lib.math_utils
+
+@Test
+fun testImportedDouble() {
+    val d = double(21)
+    assertEquals(42, d, "imported double(21) = 42")
+}
+
+@Test
+fun testImportedSquare() {
+    val s = square(5)
+    assertEquals(25, s, "imported square(5) = 25")
+}

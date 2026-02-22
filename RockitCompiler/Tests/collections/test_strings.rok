@@ -1,0 +1,62 @@
+import rockit.test.probe
+
+@Test
+fun testStringConcat() {
+    val hello: String = "hello"
+    val world: String = "world"
+    val greeting: String = stringConcat(hello, stringConcat(" ", world))
+    assertEqualsStr("hello world", greeting, "string concatenation")
+}
+
+@Test
+fun testStringLength() {
+    val hello: String = "hello"
+    assertEquals(5, stringLength(hello), "length of hello = 5")
+}
+
+@Test
+fun testCharAt() {
+    val hello: String = "hello"
+    assertEqualsStr("h", charAt(hello, 0), "charAt(0) = h")
+    assertEqualsStr("o", charAt(hello, 4), "charAt(4) = o")
+}
+
+@Test
+fun testSubstring() {
+    val greeting: String = "hello world"
+    assertEqualsStr("hello", substring(greeting, 0, 5), "substring 0..5")
+    assertEqualsStr("world", substring(greeting, 6, 11), "substring 6..11")
+}
+
+@Test
+fun testStringEquality() {
+    val a: String = "abc"
+    val b: String = "abc"
+    val c: String = "xyz"
+    assertTrue(a == b, "abc == abc")
+    assertTrue(a != c, "abc != xyz")
+}
+
+@Test
+fun testStartsEndsWith() {
+    val greeting: String = "hello world"
+    assertTrue(startsWith(greeting, "hello"), "starts with hello")
+    assertTrue(endsWith(greeting, "world"), "ends with world")
+}
+
+@Test
+fun testIndexOf() {
+    val greeting: String = "hello world"
+    assertEquals(6, stringIndexOf(greeting, "world"), "indexOf world = 6")
+}
+
+@Test
+fun testTrim() {
+    val padded: String = "  hi  "
+    assertEqualsStr("hi", stringTrim(padded), "trim whitespace")
+}
+
+@Test
+fun testToString() {
+    assertEqualsStr("42", toString(42), "toString(42)")
+}

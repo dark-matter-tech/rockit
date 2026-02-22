@@ -1,0 +1,9 @@
+import rockit.test.probe
+
+package com.darkmatter.test
+
+@Test
+fun testPackageDeclParses() {
+    // If this test runs, the package declaration was parsed successfully
+    assertTrue(true, "package declaration parsed")
+}

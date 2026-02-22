@@ -1,0 +1,27 @@
+import rockit.test.probe
+
+fun <T> identity(x: T): T {
+    return x
+}
+
+fun <T> first(a: T, b: Int): T {
+    return a
+}
+
+@Test
+fun testGenericIdentityInt() {
+    val n = identity(42)
+    assertEquals(42, n, "identity(42) = 42")
+}
+
+@Test
+fun testGenericIdentityString() {
+    val s = identity("hello")
+    assertEqualsStr("hello", s, "identity(hello) = hello")
+}
+
+@Test
+fun testGenericFirst() {
+    val f = first(99, 0)
+    assertEquals(99, f, "first(99, 0) = 99")
+}

@@ -1,0 +1,45 @@
+// test_funptr.rok — Function pointers and C callbacks
+// Low-level test — uses features that may not work with probe framework
+// Run with: rockit run tests/advanced/test_funptr.rok
+
+extern fun puts(str: Ptr<Byte>): Int
+extern fun atexit(func: Ptr<Byte>): Int
+extern fun qsort(base: Ptr<Byte>, nmemb: Int, size: Int, compar: Ptr<Byte>): Unit
+
+fun cleanup() {
+    puts(cstr("atexit callback called!"))
+}
+
+fun compareInts(a: Ptr<Byte>, b: Ptr<Byte>): Int {
+    var aVal: Int = 0
+    var bVal: Int = 0
+    unsafe {
+        aVal = a.load()
+        bVal = b.load()
+    }
+    return aVal - bVal
+}
+
+fun main() {
+    atexit(addressOf(cleanup))
+
+    val arr = alloc(5)
+    unsafe {
+        arr.store(50)
+        arr.offset(1).store(10)
+        arr.offset(2).store(40)
+        arr.offset(3).store(20)
+        arr.offset(4).store(30)
+    }
+    qsort(arr, 5, 8, addressOf(compareInts))
+    unsafe {
+        println(arr.load())
+        println(arr.offset(1).load())
+        println(arr.offset(2).load())
+        println(arr.offset(3).load())
+        println(arr.offset(4).load())
+    }
+    free(arr)
+
+    println("All function pointer tests passed!")
+}

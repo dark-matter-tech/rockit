@@ -1,0 +1,41 @@
+import rockit.test.probe
+
+suspend fun fetchPayload(): String {
+    return "network payload"
+}
+
+suspend fun processPayload(): String {
+    val payload = await fetchPayload()
+    return stringConcat("processed: ", payload)
+}
+
+suspend fun fetchHeader(): String {
+    return "header-ok"
+}
+
+suspend fun fetchStatus(): String {
+    return "status-200"
+}
+
+@Test
+suspend fun testSequentialAwait() {
+    val result = await processPayload()
+    assertEqualsStr("processed: network payload", result, "sequential await processes payload")
+}
+
+@Test
+suspend fun testRawAwait() {
+    val raw = await fetchPayload()
+    assertEqualsStr("network payload", raw, "raw fetch returns payload")
+}
+
+@Test
+suspend fun testConcurrentBlock() {
+    concurrent {
+        val h = await fetchHeader()
+        assertEqualsStr("header-ok", h, "concurrent header fetch")
+        val s = await fetchStatus()
+        assertEqualsStr("status-200", s, "concurrent status fetch")
+    }
+    assertTrue(true, "code after concurrent block executes")
+}

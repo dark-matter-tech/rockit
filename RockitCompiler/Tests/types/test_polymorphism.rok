@@ -1,0 +1,37 @@
+import rockit.test.probe
+
+sealed class Shape
+class Circle(val radius: Int) : Shape {
+    fun area(): Int {
+        return radius * radius * 3
+    }
+}
+class Rect(val w: Int, val h: Int) : Shape {
+    fun area(): Int {
+        return w * h
+    }
+}
+
+fun getArea(s: Shape): Int {
+    return s.area()
+}
+
+@Test
+fun testCircleArea() {
+    val c = Circle(5)
+    assertEquals(75, c.area(), "Circle(5).area() = 75")
+}
+
+@Test
+fun testRectArea() {
+    val r = Rect(3, 4)
+    assertEquals(12, r.area(), "Rect(3,4).area() = 12")
+}
+
+@Test
+fun testPolymorphicDispatch() {
+    val c = Circle(5)
+    val r = Rect(3, 4)
+    assertEquals(75, getArea(c), "polymorphic Circle area")
+    assertEquals(12, getArea(r), "polymorphic Rect area")
+}

@@ -1,0 +1,27 @@
+import rockit.test.probe
+
+@Test
+fun testNullCheck() {
+    val s: String? = null
+    assertTrue(s == null, "null value should be null")
+}
+
+@Test
+fun testNotNullCheck() {
+    val t: String? = "hello"
+    assertTrue(t != null, "non-null value should not be null")
+}
+
+@Test
+fun testElvisOperator() {
+    val s: String? = null
+    val result: String = s ?: "default"
+    assertEqualsStr("default", result, "elvis provides default for null")
+}
+
+@Test
+fun testElvisWithValue() {
+    val s: String? = "present"
+    val result: String = s ?: "default"
+    assertEqualsStr("present", result, "elvis returns value when non-null")
+}

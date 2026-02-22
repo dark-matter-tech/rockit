@@ -1,0 +1,107 @@
+import rockit.test.probe
+
+// --- String interpolation ---
+@Test
+fun testSimpleInterpolation() {
+    val name: String = "Rockit"
+    val greeting: String = "Hello, $name!"
+    assertEqualsStr("Hello, Rockit!", greeting, "simple string interpolation")
+}
+
+@Test
+fun testExpressionInterpolation() {
+    val x: Int = 3
+    val y: Int = 4
+    val math: String = "${x} + ${y} = ${x + y}"
+    assertEqualsStr("3 + 4 = 7", math, "expression interpolation")
+}
+
+// --- For loops ---
+@Test
+fun testForLoopSum() {
+    val items = listCreate()
+    listAppend(items, 10)
+    listAppend(items, 20)
+    listAppend(items, 30)
+    var sum: Int = 0
+    for (item in items) {
+        sum = sum + item
+    }
+    assertEquals(60, sum, "sum of list items via for loop")
+}
+
+// --- Lambdas ---
+fun applyOp(a: Int, b: Int, op: (Int, Int) -> Int): Int {
+    return op(a, b)
+}
+
+@Test
+fun testLambdaCall() {
+    val add = { a: Int, b: Int -> a + b }
+    assertEquals(7, add(3, 4), "lambda add(3,4) = 7")
+}
+
+@Test
+fun testLambdaAsParam() {
+    val result = applyOp(10, 5, { a: Int, b: Int -> a - b })
+    assertEquals(5, result, "applyOp subtract 10-5 = 5")
+}
+
+// --- When expressions ---
+fun describe(n: Int): String {
+    return when (n) {
+        1 -> "one"
+        2 -> "two"
+        3 -> "three"
+        else -> "other"
+    }
+}
+
+@Test
+fun testWhenExpression() {
+    assertEqualsStr("one", describe(1), "when 1 = one")
+    assertEqualsStr("two", describe(2), "when 2 = two")
+    assertEqualsStr("other", describe(99), "when 99 = other")
+}
+
+// --- Nullable ---
+@Test
+fun testNullableNull() {
+    val s: String? = null
+    assertTrue(s == null, "null is null")
+}
+
+@Test
+fun testNullableNotNull() {
+    val t: String? = "hello"
+    assertTrue(t != null, "hello is not null")
+}
+
+@Test
+fun testElvisOperator() {
+    val s: String? = null
+    val result: String = s ?: "default"
+    assertEqualsStr("default", result, "elvis provides default")
+}
+
+// --- Enum ---
+enum class Color {
+    RED,
+    GREEN,
+    BLUE
+}
+
+fun colorName(c: Color): String {
+    return when (c) {
+        Color.RED -> "red"
+        Color.GREEN -> "green"
+        Color.BLUE -> "blue"
+        else -> "unknown"
+    }
+}
+
+@Test
+fun testEnumWhen() {
+    val c = Color.GREEN
+    assertEqualsStr("green", colorName(c), "Color.GREEN = green")
+}

@@ -1,0 +1,41 @@
+import rockit.test.probe
+
+fun classify(x: Int): String {
+    return when (x) {
+        in 1..5 -> "small"
+        in 6..10 -> "medium"
+        in 11..100 -> "large"
+        else -> "out of range"
+    }
+}
+
+@Test
+fun testRangeSmall() {
+    assertEqualsStr("small", classify(3), "3 is small")
+}
+
+@Test
+fun testRangeMedium() {
+    assertEqualsStr("medium", classify(7), "7 is medium")
+}
+
+@Test
+fun testRangeLarge() {
+    assertEqualsStr("large", classify(50), "50 is large")
+}
+
+@Test
+fun testRangeOutOfRange() {
+    assertEqualsStr("out of range", classify(0), "0 is out of range")
+    assertEqualsStr("out of range", classify(101), "101 is out of range")
+}
+
+@Test
+fun testRangeBoundaries() {
+    assertEqualsStr("small", classify(1), "1 is lower bound of small")
+    assertEqualsStr("small", classify(5), "5 is upper bound of small")
+    assertEqualsStr("medium", classify(6), "6 is lower bound of medium")
+    assertEqualsStr("medium", classify(10), "10 is upper bound of medium")
+    assertEqualsStr("large", classify(11), "11 is lower bound of large")
+    assertEqualsStr("large", classify(100), "100 is upper bound of large")
+}

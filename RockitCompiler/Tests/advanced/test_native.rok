@@ -1,0 +1,9 @@
+import rockit.test.probe
+
+@Test
+fun testNativeArithmetic() {
+    val a: Int = 40
+    val b: Int = 2
+    val result: Int = a + b
+    assertEquals(42, result, "40 + 2 = 42")
+}

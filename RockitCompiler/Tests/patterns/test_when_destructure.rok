@@ -1,0 +1,25 @@
+import rockit.test.probe
+
+sealed class Shape
+class Circle(val radius: Int) : Shape
+class Rect(val width: Int, val height: Int) : Shape
+
+fun describe(s: Shape): String {
+    return when (s) {
+        is Circle(val r) -> stringConcat("Circle with radius ", toString(r))
+        is Rect(val w, val h) -> stringConcat("Rect ", stringConcat(toString(w), stringConcat("x", toString(h))))
+        else -> "unknown"
+    }
+}
+
+@Test
+fun testCircleDestructure() {
+    val c = Circle(5)
+    assertEqualsStr("Circle with radius 5", describe(c), "destructure Circle")
+}
+
+@Test
+fun testRectDestructure() {
+    val r = Rect(10, 20)
+    assertEqualsStr("Rect 10x20", describe(r), "destructure Rect")
+}

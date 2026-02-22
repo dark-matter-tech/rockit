@@ -1,0 +1,84 @@
+import rockit.test.probe
+
+fun abs(n: Int): Int {
+    if (n < 0) {
+        return 0 - n
+    }
+    return n
+}
+
+fun fib(n: Int): Int {
+    if (n <= 1) { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fun classify(n: Int): String {
+    if (n < 0) {
+        return "negative"
+    } else if (n == 0) {
+        return "zero"
+    } else {
+        return "positive"
+    }
+}
+
+@Test
+fun testClassify() {
+    assertEqualsStr("negative", classify(-5), "classify -5")
+    assertEqualsStr("zero", classify(0), "classify 0")
+    assertEqualsStr("positive", classify(7), "classify 7")
+}
+
+@Test
+fun testAbs() {
+    assertEquals(42, abs(-42), "abs of -42")
+    assertEquals(42, abs(42), "abs of 42")
+}
+
+@Test
+fun testWhileLoopSum() {
+    var sum: Int = 0
+    var i: Int = 1
+    while (i <= 10) {
+        sum = sum + i
+        i = i + 1
+    }
+    assertEquals(55, sum, "sum 1..10")
+}
+
+@Test
+fun testNestedLoops() {
+    var product: Int = 0
+    var r: Int = 1
+    while (r <= 3) {
+        var c: Int = 1
+        while (c <= 3) {
+            product = product + r * c
+            c = c + 1
+        }
+        r = r + 1
+    }
+    assertEquals(36, product, "nested loop product sum")
+}
+
+@Test
+fun testBooleanLogic() {
+    val t: Bool = true
+    val f: Bool = false
+    assertTrue(t && !f, "true AND NOT false")
+    assertTrue(t || f, "true OR false")
+    assertTrue(!f, "NOT false")
+}
+
+@Test
+fun testRecursion() {
+    assertEquals(55, fib(10), "fibonacci(10)")
+}
+
+@Test
+fun testComparisons() {
+    assertTrue(3 < 5, "3 < 5")
+    assertTrue(5 > 3, "5 > 3")
+    assertTrue(3 <= 3, "3 <= 3")
+    assertTrue(5 >= 5, "5 >= 5")
+}

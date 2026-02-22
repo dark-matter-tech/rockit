@@ -1,0 +1,23 @@
+import rockit.test.probe
+
+fun applyOp(a: Int, b: Int, op: (Int, Int) -> Int): Int {
+    return op(a, b)
+}
+
+@Test
+fun testLambdaAdd() {
+    val add = { a: Int, b: Int -> a + b }
+    assertEquals(7, add(3, 4), "lambda addition")
+}
+
+@Test
+fun testLambdaSubtract() {
+    val result = applyOp(10, 5, { a: Int, b: Int -> a - b })
+    assertEquals(5, result, "lambda subtraction via higher-order function")
+}
+
+@Test
+fun testLambdaMultiply() {
+    val result = applyOp(6, 7, { a: Int, b: Int -> a * b })
+    assertEquals(42, result, "lambda multiplication")
+}

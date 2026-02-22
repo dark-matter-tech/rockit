@@ -1,0 +1,66 @@
+import rockit.test.probe
+
+class Box<T>(val value: T) {
+    fun get(): T {
+        return value
+    }
+}
+
+class Pair<A, B>(val first: A, val second: B) {
+    fun getFirst(): A {
+        return first
+    }
+    fun getSecond(): B {
+        return second
+    }
+}
+
+interface Container<T> {
+    fun getValue(): T
+    fun describe(): String
+}
+
+class IntContainer(val n: Int) : Container {
+    fun getValue(): Int {
+        return n
+    }
+    fun describe(): String {
+        return "IntContainer"
+    }
+}
+
+fun <T> identity(x: T): T {
+    return x
+}
+
+@Test
+fun testBoxInt() {
+    val intBox = Box(42)
+    assertEquals(42, intBox.get(), "Box(42).get() = 42")
+}
+
+@Test
+fun testBoxString() {
+    val strBox = Box("hello")
+    assertEqualsStr("hello", strBox.get(), "Box(hello).get() = hello")
+}
+
+@Test
+fun testGenericPair() {
+    val pair = Pair(10, 20)
+    assertEquals(10, pair.getFirst(), "Pair.first = 10")
+    assertEquals(20, pair.getSecond(), "Pair.second = 20")
+}
+
+@Test
+fun testGenericInterface() {
+    val ic = IntContainer(99)
+    assertEqualsStr("IntContainer", ic.describe(), "describe = IntContainer")
+    assertEquals(99, ic.getValue(), "getValue = 99")
+}
+
+@Test
+fun testGenericIdentityFunction() {
+    val x = identity(7)
+    assertEquals(7, x, "identity(7) = 7")
+}

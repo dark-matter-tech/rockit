@@ -1,0 +1,21 @@
+import rockit.test.probe
+
+sealed class Shape
+class Circle(val radius: Int) : Shape
+class Rect(val w: Int, val h: Int) : Shape
+
+@Test
+fun testIsOperatorDirect() {
+    val c = Circle(5)
+    val r = Rect(3, 4)
+    assertTrue(c is Circle, "Circle is Circle")
+    assertTrue(r is Rect, "Rect is Rect")
+}
+
+@Test
+fun testIsOperatorSubtype() {
+    val c = Circle(5)
+    val r = Rect(3, 4)
+    assertTrue(c is Shape, "Circle is Shape")
+    assertTrue(r is Shape, "Rect is Shape")
+}

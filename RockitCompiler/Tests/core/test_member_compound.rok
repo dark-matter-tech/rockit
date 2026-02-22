@@ -1,0 +1,24 @@
+import rockit.test.probe
+
+class Counter(var count: Int)
+
+@Test
+fun testPlusEquals() {
+    val c = Counter(10)
+    c.count += 5
+    assertEquals(15, c.count, "10 += 5 = 15")
+}
+
+@Test
+fun testMinusEquals() {
+    val c = Counter(15)
+    c.count -= 3
+    assertEquals(12, c.count, "15 -= 3 = 12")
+}
+
+@Test
+fun testTimesEquals() {
+    val c = Counter(12)
+    c.count *= 2
+    assertEquals(24, c.count, "12 *= 2 = 24")
+}

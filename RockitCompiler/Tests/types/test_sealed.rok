@@ -1,0 +1,26 @@
+import rockit.test.probe
+
+sealed class Shape {
+    data class Circle(val radius: Int)
+    data class Rect(val w: Int, val h: Int)
+}
+
+fun area(s: Shape): Int {
+    return when (s) {
+        is Shape.Circle -> s.radius * s.radius * 3
+        is Shape.Rect -> s.w * s.h
+        else -> 0
+    }
+}
+
+@Test
+fun testCircleArea() {
+    val c = Shape.Circle(5)
+    assertEquals(75, area(c), "circle area: 5*5*3 = 75")
+}
+
+@Test
+fun testRectArea() {
+    val r = Shape.Rect(4, 6)
+    assertEquals(24, area(r), "rect area: 4*6 = 24")
+}

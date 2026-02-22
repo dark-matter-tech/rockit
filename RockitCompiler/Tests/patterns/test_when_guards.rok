@@ -1,0 +1,45 @@
+import rockit.test.probe
+
+fun classify(x: Int): String {
+    return when (x) {
+        in 1..100 if x > 50 -> "high"
+        in 1..100 if x > 20 -> "medium"
+        in 1..100 -> "low"
+        else -> "out of range"
+    }
+}
+
+fun describeNumber(n: Int): String {
+    return when (n) {
+        0 -> "zero"
+        1 if n > 0 -> "one"
+        else -> "other"
+    }
+}
+
+@Test
+fun testWhenGuardHigh() {
+    assertEqualsStr("high", classify(75), "75 is high")
+}
+
+@Test
+fun testWhenGuardMedium() {
+    assertEqualsStr("medium", classify(35), "35 is medium")
+}
+
+@Test
+fun testWhenGuardLow() {
+    assertEqualsStr("low", classify(10), "10 is low")
+}
+
+@Test
+fun testWhenGuardOutOfRange() {
+    assertEqualsStr("out of range", classify(200), "200 is out of range")
+}
+
+@Test
+fun testValueMatchWithGuard() {
+    assertEqualsStr("zero", describeNumber(0), "0 is zero")
+    assertEqualsStr("one", describeNumber(1), "1 is one")
+    assertEqualsStr("other", describeNumber(5), "5 is other")
+}

@@ -1,0 +1,28 @@
+import rockit.test.probe
+
+fun greet(): String {
+    return "hello"
+}
+
+fun greet(name: String): String {
+    return stringConcat("hello, ", name)
+}
+
+fun greet(name: String, greeting: String): String {
+    return stringConcat(greeting, stringConcat(", ", name))
+}
+
+@Test
+fun testNoArgOverload() {
+    assertEqualsStr("hello", greet(), "greet() returns hello")
+}
+
+@Test
+fun testOneArgOverload() {
+    assertEqualsStr("hello, world", greet("world"), "greet(name) returns hello, name")
+}
+
+@Test
+fun testTwoArgOverload() {
+    assertEqualsStr("hi, world", greet("world", "hi"), "greet(name, greeting) returns greeting, name")
+}

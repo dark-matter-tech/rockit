@@ -1,0 +1,53 @@
+import rockit.test.probe
+
+fun sum(vararg numbers: Int): Int {
+    var total = 0
+    val len = listSize(numbers)
+    var i = 0
+    while (i < len) {
+        total = total + toInt(listGet(numbers, i))
+        i = i + 1
+    }
+    return total
+}
+
+fun printAll(prefix: String, vararg items: String): String {
+    var result = prefix
+    val len = listSize(items)
+    var i = 0
+    while (i < len) {
+        result = stringConcat(result, toString(listGet(items, i)))
+        if (i < len - 1) {
+            result = stringConcat(result, ", ")
+        }
+        i = i + 1
+    }
+    return result
+}
+
+@Test
+fun testVarargMultiple() {
+    assertEquals(6, sum(1, 2, 3), "sum(1,2,3) = 6")
+}
+
+@Test
+fun testVarargSingle() {
+    assertEquals(10, sum(10), "sum(10) = 10")
+}
+
+@Test
+fun testVarargEmpty() {
+    assertEquals(0, sum(), "sum() = 0")
+}
+
+@Test
+fun testVarargWithRegularParam() {
+    val msg = printAll("Items: ", "apple", "banana", "cherry")
+    assertEqualsStr("Items: apple, banana, cherry", msg, "vararg with prefix")
+}
+
+@Test
+fun testVarargSingleItem() {
+    val msg = printAll("One: ", "hello")
+    assertEqualsStr("One: hello", msg, "vararg single item with prefix")
+}

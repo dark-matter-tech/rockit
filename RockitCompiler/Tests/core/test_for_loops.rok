@@ -1,0 +1,38 @@
+import rockit.test.probe
+
+@Test
+fun testForLoopSum() {
+    val items = listCreate()
+    listAppend(items, 10)
+    listAppend(items, 20)
+    listAppend(items, 30)
+    var sum: Int = 0
+    for (item in items) {
+        sum = sum + item
+    }
+    assertEquals(60, sum, "sum of list items")
+}
+
+@Test
+fun testForLoopCount() {
+    val items = listCreate()
+    listAppend(items, 1)
+    listAppend(items, 2)
+    listAppend(items, 3)
+    listAppend(items, 4)
+    var count: Int = 0
+    for (item in items) {
+        count = count + 1
+    }
+    assertEquals(4, count, "count of list items")
+}
+
+@Test
+fun testForLoopEmptyList() {
+    val items = listCreate()
+    var count: Int = 0
+    for (item in items) {
+        count = count + 1
+    }
+    assertEquals(0, count, "empty list iteration")
+}

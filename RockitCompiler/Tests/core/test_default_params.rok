@@ -1,0 +1,15 @@
+import rockit.test.probe
+
+fun add(a: Int, b: Int = 10): Int {
+    return a + b
+}
+
+@Test
+fun testDefaultParamUsed() {
+    assertEquals(15, add(5), "default b=10, so 5+10=15")
+}
+
+@Test
+fun testDefaultParamOverridden() {
+    assertEquals(25, add(5, 20), "explicit b=20, so 5+20=25")
+}

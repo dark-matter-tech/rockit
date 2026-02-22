@@ -1,0 +1,10 @@
+import rockit.test.probe
+
+data class Node(left: Int, right: Int)
+
+@Test
+fun testDataClassFields() {
+    val n = Node(10, 20)
+    assertEquals(10, n.left, "Node.left = 10")
+    assertEquals(20, n.right, "Node.right = 20")
+}

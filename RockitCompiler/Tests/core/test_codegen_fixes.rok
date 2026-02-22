@@ -1,0 +1,138 @@
+import rockit.test.probe
+
+// --- Non-null assert ---
+@Test
+fun testNonNullAssert() {
+    val s: String? = "hello"
+    val notNull: String = s!!
+    assertEqualsStr("hello", notNull, "!! extracts non-null value")
+}
+
+// --- Subscript assignment ---
+@Test
+fun testSubscriptAssign() {
+    val list = listCreate()
+    listAppend(list, 10)
+    listAppend(list, 20)
+    listAppend(list, 30)
+    list[1] = 99
+    assertEquals(99, listGet(list, 1), "subscript assignment sets value")
+}
+
+// --- Member compound assignment ---
+data class Counter(var count: Int)
+
+@Test
+fun testMemberCompound() {
+    val c = Counter(10)
+    c.count += 5
+    assertEquals(15, c.count, "10 += 5 = 15")
+    c.count -= 3
+    assertEquals(12, c.count, "15 -= 3 = 12")
+    c.count *= 2
+    assertEquals(24, c.count, "12 *= 2 = 24")
+}
+
+// --- If as expression ---
+@Test
+fun testIfExpression() {
+    val x: Int = if (true) { 42 } else { 0 }
+    assertEquals(42, x, "if true yields 42")
+    val y: Int = if (false) { 1 } else { 99 }
+    assertEquals(99, y, "if false yields 99")
+}
+
+// --- Short-circuit && / || ---
+fun crashIfCalled(): Bool {
+    fail("crashIfCalled should not be called")
+    return true
+}
+
+@Test
+fun testShortCircuitAnd() {
+    if (false && crashIfCalled()) {
+        fail("should not enter branch")
+    }
+    assertTrue(true, "false && short-circuits")
+}
+
+@Test
+fun testShortCircuitOr() {
+    if (true || crashIfCalled()) {
+        assertTrue(true, "true || short-circuits")
+    } else {
+        fail("should not enter else")
+    }
+}
+
+@Test
+fun testNormalBooleanEval() {
+    assertTrue(true && true, "true && true = true")
+    assertTrue(false || true, "false || true = true")
+    assertFalse(false || false, "false || false = false")
+}
+
+// --- Compound operators for locals ---
+@Test
+fun testCompoundOps() {
+    var x: Int = 10
+    x += 5
+    assertEquals(15, x, "10 += 5 = 15")
+    x -= 3
+    assertEquals(12, x, "15 -= 3 = 12")
+    x *= 2
+    assertEquals(24, x, "12 *= 2 = 24")
+    x /= 4
+    assertEquals(6, x, "24 /= 4 = 6")
+    x %= 4
+    assertEquals(2, x, "6 %= 4 = 2")
+}
+
+// --- break / continue ---
+@Test
+fun testBreak() {
+    var sum: Int = 0
+    var i: Int = 1
+    while (i <= 10) {
+        if (i == 6) { break }
+        sum = sum + i
+        i = i + 1
+    }
+    assertEquals(15, sum, "sum 1..5 with break at 6")
+}
+
+@Test
+fun testContinue() {
+    var sum: Int = 0
+    var j: Int = 0
+    while (j < 10) {
+        j = j + 1
+        if (j % 2 == 0) { continue }
+        sum = sum + j
+    }
+    assertEquals(25, sum, "sum odd 1..9 with continue")
+}
+
+// --- do-while ---
+@Test
+fun testDoWhile() {
+    var i: Int = 0
+    do {
+        i = i + 1
+    } while (i < 5)
+    assertEquals(5, i, "do-while counts to 5")
+}
+
+// --- Expression-body functions ---
+fun double(x: Int): Int = x * 2
+fun greetName(name: String): String = "hi ${name}"
+
+@Test
+fun testExpressionBodyInt() {
+    assertEquals(42, double(21), "double(21) = 42")
+}
+
+@Test
+fun testExpressionBodyString() {
+    assertEqualsStr("hi world", greetName("world"), "greet(world) = hi world")
+}

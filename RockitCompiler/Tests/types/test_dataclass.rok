@@ -1,0 +1,16 @@
+import rockit.test.probe
+
+data class Point(val x: Int, val y: Int)
+
+@Test
+fun testDataClassFields() {
+    val p = Point(3, 4)
+    assertEquals(3, p.x, "point x")
+    assertEquals(4, p.y, "point y")
+}
+
+@Test
+fun testDataClassArithmetic() {
+    val q = Point(10, 20)
+    assertEquals(30, q.x + q.y, "sum of point fields")
+}

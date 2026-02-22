@@ -1,0 +1,11 @@
+fun double(x: Int): Int {
+    return x * 2
+}
+
+fun square(x: Int): Int {
+    return x * x
+}
+
+fun greetLib(): Unit {
+    println("math_utils loaded")
+}

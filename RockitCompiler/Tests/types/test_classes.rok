@@ -1,0 +1,41 @@
+import rockit.test.probe
+
+data class Point(x: Int, y: Int)
+
+fun distSquared(p: Point): Int {
+    return p.x * p.x + p.y * p.y
+}
+
+fun addPoints(a: Point, b: Point): Point {
+    return Point(a.x + b.x, a.y + b.y)
+}
+
+@Test
+fun testFieldAccess() {
+    val p1 = Point(3, 4)
+    assertEquals(3, p1.x, "Point.x = 3")
+    assertEquals(4, p1.y, "Point.y = 4")
+}
+
+@Test
+fun testPassToFunction() {
+    val p = Point(3, 4)
+    assertEquals(25, distSquared(p), "distSquared(3,4) = 25")
+}
+
+@Test
+fun testReturnObject() {
+    val p1 = Point(3, 4)
+    val p2 = Point(10, 20)
+    val p3 = addPoints(p1, p2)
+    assertEquals(13, p3.x, "added x = 13")
+    assertEquals(24, p3.y, "added y = 24")
+}
+
+@Test
+fun testNullCheck() {
+    val maybeNull: Point? = null
+    assertTrue(maybeNull == null, "null is null")
+    val notNull: Point? = Point(1, 2)
+    assertTrue(notNull != null, "non-null is not null")
+}

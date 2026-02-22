@@ -1,0 +1,23 @@
+// test_crepr.rok — @CRepr structs, sizeOf, offsetOf, bitcast
+// Low-level test — uses features that may not work with probe framework
+// Run with: rockit run tests/advanced/test_crepr.rok
+
+@CRepr
+data class Point(x: Float, y: Float)
+
+fun main() {
+    println(sizeOf<Point>())
+    println(offsetOf<Point>("y"))
+
+    val p = Point(3.14, 2.72)
+    println(p.x)
+    println(p.y)
+
+    val bits = bitcast<Int>(3.14)
+    println(bits)
+    val back = bitcast<Float>(bits)
+    println(back)
+
+    free(p)
+    println("All @CRepr tests passed!")
+}

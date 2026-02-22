@@ -1,0 +1,32 @@
+import rockit.test.probe
+
+view Greeting(name: String) {
+    val msg = stringConcat("view: Hello, ", name)
+    println(msg)
+}
+
+navigation AppNav {
+    println("navigation: routes registered")
+}
+
+theme AppTheme {
+    println("theme: styles applied")
+}
+
+@Test
+fun testViewDeclaration() {
+    Greeting("world")
+    assertTrue(true, "view declaration compiles and runs")
+}
+
+@Test
+fun testNavigationDeclaration() {
+    AppNav()
+    assertTrue(true, "navigation declaration compiles and runs")
+}
+
+@Test
+fun testThemeDeclaration() {
+    AppTheme()
+    assertTrue(true, "theme declaration compiles and runs")
+}

@@ -1,0 +1,41 @@
+import rockit.test.probe
+
+fun makePair(): List {
+    val list = listCreate()
+    listAppend(list, 10)
+    listAppend(list, 20)
+    return list
+}
+
+fun makeTriple(): List {
+    val list = listCreate()
+    listAppend(list, 1)
+    listAppend(list, 2)
+    listAppend(list, 3)
+    return list
+}
+
+@Test
+fun testPairDestructure() {
+    val (a, b) = makePair()
+    assertEquals(10, a, "first element of pair")
+    assertEquals(20, b, "second element of pair")
+}
+
+@Test
+fun testTripleDestructure() {
+    val (x, y, z) = makeTriple()
+    assertEquals(1, x, "first of triple")
+    assertEquals(2, y, "second of triple")
+    assertEquals(3, z, "third of triple")
+}
+
+@Test
+fun testInlineListDestructure() {
+    val items = listCreate()
+    listAppend(items, 100)
+    listAppend(items, 200)
+    val (first, second) = items
+    assertEquals(100, first, "first of inline list")
+    assertEquals(200, second, "second of inline list")
+}

@@ -1,0 +1,30 @@
+import rockit.test.probe
+
+typealias Number = Int
+typealias Text = String
+
+fun double(x: Number): Number {
+    return x * 2
+}
+
+fun greet(name: Text): Text {
+    return stringConcat("Hello, ", name)
+}
+
+@Test
+fun testTypeAliasInt() {
+    val n: Number = 21
+    assertEquals(42, double(n), "double 21 = 42")
+}
+
+@Test
+fun testTypeAliasString() {
+    val t: Text = "world"
+    assertEqualsStr("Hello, world", greet(t), "greet with alias")
+}
+
+@Test
+fun testTypeAliasExpression() {
+    val sum: Number = 10 + 20
+    assertEquals(30, sum, "type alias in expression")
+}

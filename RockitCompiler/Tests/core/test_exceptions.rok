@@ -1,0 +1,58 @@
+import rockit.test.probe
+
+fun riskyDiv(a: Int, b: Int): Int {
+    if (b == 0) {
+        throw "division by zero"
+    }
+    return a / b
+}
+
+@Test
+fun testTryCatchSuccess() {
+    var result: Int = 0
+    try {
+        result = riskyDiv(10, 2)
+    } catch (e) {
+        fail("should not catch on valid division")
+    }
+    assertEquals(5, result, "10 / 2 = 5")
+}
+
+@Test
+fun testTryCatchException() {
+    var caught: Bool = false
+    try {
+        val result = riskyDiv(10, 0)
+    } catch (e) {
+        caught = true
+    }
+    assertTrue(caught, "division by zero should be caught")
+}
+
+@Test
+fun testCodeAfterTryCatch() {
+    try {
+        val result = riskyDiv(10, 0)
+    } catch (e) {
+        // expected
+    }
+    // code continues after try/catch
+    assertTrue(true, "code after try/catch executes")
+}
+
+@Test
+fun testNestedTryCatch() {
+    var innerCaught: Bool = false
+    var outerCaught: Bool = false
+    try {
+        try {
+            throw "inner"
+        } catch (e) {
+            innerCaught = true
+        }
+    } catch (e) {
+        outerCaught = true
+    }
+    assertTrue(innerCaught, "inner catch fires")
+    assertFalse(outerCaught, "outer catch should not fire")
+}

@@ -1,0 +1,33 @@
+import rockit.test.probe
+
+interface Greeter {
+    fun greet(): String {
+        return "hello from default"
+    }
+    fun farewell(): String {
+        return "goodbye from default"
+    }
+}
+
+class FriendlyBot() : Greeter {
+}
+
+class CustomBot() : Greeter {
+    fun greet(): String {
+        return "hello from custom"
+    }
+}
+
+@Test
+fun testDefaultMethodInherited() {
+    val bot = FriendlyBot()
+    assertEqualsStr("hello from default", bot.greet(), "inherits default greet")
+    assertEqualsStr("goodbye from default", bot.farewell(), "inherits default farewell")
+}
+
+@Test
+fun testOverrideWithDefaultFallback() {
+    val bot = CustomBot()
+    assertEqualsStr("hello from custom", bot.greet(), "overrides greet")
+    assertEqualsStr("goodbye from default", bot.farewell(), "inherits default farewell")
+}

@@ -1,0 +1,23 @@
+import rockit.test.probe
+
+@Test
+fun testSimpleInterpolation() {
+    val name: String = "Rockit"
+    val greeting: String = "Hello, $name!"
+    assertEqualsStr("Hello, Rockit!", greeting, "simple variable interpolation")
+}
+
+@Test
+fun testExpressionInterpolation() {
+    val x: Int = 5
+    val msg: String = "value: ${x + 1}"
+    assertEqualsStr("value: 6", msg, "expression interpolation")
+}
+
+@Test
+fun testMultipleInterpolations() {
+    val a: String = "hello"
+    val b: String = "world"
+    val result: String = "$a $b"
+    assertEqualsStr("hello world", result, "multiple interpolations")
+}

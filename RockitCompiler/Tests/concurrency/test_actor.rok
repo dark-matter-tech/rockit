@@ -1,0 +1,28 @@
+import rockit.test.probe
+
+actor Counter {
+    var count: Int = 0
+
+    fun increment(): Unit {
+        count = count + 1
+    }
+
+    fun getCount(): Int {
+        return count
+    }
+}
+
+@Test
+fun testActorIncrement() {
+    val c = Counter()
+    c.increment()
+    c.increment()
+    c.increment()
+    assertEquals(3, c.getCount(), "counter incremented 3 times")
+}
+
+@Test
+fun testActorInitialState() {
+    val c = Counter()
+    assertEquals(0, c.getCount(), "counter starts at 0")
+}
