@@ -203,16 +203,15 @@ fun substring(s: Int, start: Int, end: Int): Int {
 // ── Conversion ───────────────────────────────────────────────────────────
 
 fun toString(value: Int): Int {
-    if (value == ROCKIT_NULL) {
-        unsafe { return rockit_string_new(cstr("null")) }
-    }
-    if (value == 0) {
-        return rockit_int_to_string(value)
-    }
-    if (is_likely_string_ptr(value) == 1) {
-        return value
-    }
+    if (value == ROCKIT_NULL) { return toString_null() }
+    if (value == 0) { return rockit_int_to_string(value) }
+    if (is_likely_string_ptr(value) == 1) { return value }
     return rockit_int_to_string(value)
+}
+
+fun toString_null(): Int {
+    unsafe { return rockit_string_new(cstr("null")) }
+    return 0
 }
 
 fun rockit_int_to_string(value: Int): Int {
@@ -253,21 +252,19 @@ fun rockit_int_to_string(value: Int): Int {
 fun toInt(value: Int): Int {
     if (value == ROCKIT_NULL) { return 0 }
     if (value == 0) { return 0 }
-    if (is_likely_string_ptr(value) == 1) {
-        unsafe {
-            val p = bitcast<Ptr<Int>>(value)
-            val len = p.offset(1).load()
-            val chars = p.offset(2).load()
-            // Copy to null-terminated buffer for strtoll
-            var bufLen: Int = len
-            if (bufLen > 31) { bufLen = 31 }
-            val buf = malloc(32)
-            memcpy(buf, chars, bufLen)
-            storeByte(buf, bufLen, 0)
-            val result = strtoll(buf, 0, 10)
-            free(buf)
-            return result
-        }
+    if (is_likely_string_ptr(value) != 1) { return value }
+    unsafe {
+        val p = bitcast<Ptr<Int>>(value)
+        val len = p.offset(1).load()
+        val chars = p.offset(2).load()
+        var bufLen: Int = len
+        if (bufLen > 31) { bufLen = 31 }
+        val buf = malloc(32)
+        memcpy(buf, chars, bufLen)
+        storeByte(buf, bufLen, 0)
+        val result = strtoll(buf, 0, 10)
+        free(buf)
+        return result
     }
     return value
 }
