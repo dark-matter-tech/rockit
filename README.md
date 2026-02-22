@@ -136,14 +136,61 @@ navigation AppRouter {
 
 ## Ecosystem
 
-| Tool | Name | Description |
-|------|------|-------------|
-| Language | **Rockit** | `.rok` / `.rokb` files |
-| Compiler | **Command** | Compiles, runs, and manages Rockit projects |
-| Package Manager | **Fuel** | Dependency management |
-| Test Framework | **Probe** | Built-in testing |
-| Registry | **Silo** | Package registry |
-| REPL | **Launch** | Interactive shell |
+| Tool | Name | Status |
+|------|------|--------|
+| Language | **Rockit** | Shipped |
+| Compiler | **Command** | Shipped |
+| Package Manager | **Fuel** | Shipped |
+| Standard Library | **stdlib** | Shipped (14 modules) |
+| Test Framework | **Probe** | Shipped |
+| REPL | **Launch** | Shipped |
+| Registry | **Silo** | Planned |
+| Browser | **Nova** | Planned |
+
+---
+
+## Standard Library
+
+14 modules ship with Rockit. Import with `import rockit.<module>`.
+
+| Module | Import | Description |
+|--------|--------|-------------|
+| Collections | `import rockit.core.collections` | List map, filter, fold, sort, zip, flatten, distinct |
+| Math | `import rockit.core.math` | Integer/float math, trig, gcd, lcm, constants |
+| Strings | `import rockit.core.strings` | Pad, repeat, join, split, replace, truncate |
+| Result | `import rockit.core.result` | Result type (Success/Failure) for error handling |
+| UUID | `import rockit.core.uuid` | UUID v4 random generation |
+| File I/O | `import rockit.io.file` | Read, write, exists, delete files |
+| Path | `import rockit.io.path` | Join, dir, base, ext, normalize paths |
+| HTTP | `import rockit.net.http` | HTTP/1.1 client (GET/POST/PUT/DELETE, HTTPS via curl) |
+| WebSocket | `import rockit.net.ws` | WebSocket client (RFC 6455) |
+| URL | `import rockit.net.url` | URL parsing, encoding, query parameters |
+| Base64 | `import rockit.encoding.base64` | Base64 encode/decode |
+| DateTime | `import rockit.time.datetime` | Date/time, formatting, epoch conversion |
+| JSON | `import rockit.json` | JSON parse, stringify, pretty-print |
+| Probe | `import rockit.test.probe` | Test assertions for `@Test` annotated functions |
+
+```kotlin
+import rockit.json
+import rockit.net.http
+import rockit.test.probe
+
+// JSON
+val obj = jsonParse("{\"name\": \"Rockit\"}")
+println(jsonGetString(jsonObjectGet(obj, "name")))
+
+// HTTP
+val resp = httpGet("http://example.com/api")
+println(httpBody(resp))
+
+// Testing
+@Test
+fun testExample() {
+    assertEquals(4, 2 + 2, "math works")
+}
+```
+
+See `RockitCompiler/README.md` for the full API reference.
 
 ---
 

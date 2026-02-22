@@ -22,7 +22,7 @@ The installer downloads a prebuilt binary if available, or builds from source as
 
 - `rockit` — compiler and build tool
 - `fuel` — package manager
-- Standard library (`rockit.json`, `rockit.core.*`, `rockit.io.*`)
+- Standard library (14 modules: `rockit.core.*`, `rockit.io.*`, `rockit.net.*`, `rockit.encoding.*`, `rockit.time.*`, `rockit.json`, `rockit.test.*`)
 - C runtime (`rockit_runtime.c`)
 
 **Update:**
@@ -185,22 +185,254 @@ fun main() {
 
 ## Standard Library
 
-The standard library ships under `Stage1/stdlib/rockit/` and is imported with `import rockit.<module>`. Programs using stdlib modules are compiled with `--lib-path`:
-
-```bash
-rockit build-native myapp.rok --lib-path Stage1/stdlib
-```
+The standard library ships under `Stage1/stdlib/rockit/` and is imported with `import rockit.<module>`. 14 modules covering core utilities, networking, encoding, time, I/O, JSON, and testing.
 
 ### Modules
 
 | Module | Import | Description |
 |--------|--------|-------------|
-| `core/collections` | `import rockit.core.collections` | List utilities — map, filter, fold, sort, zip, flatten |
-| `core/math` | `import rockit.core.math` | Integer and floating-point math — clamp, lerp, isPrime |
-| `core/strings` | `import rockit.core.strings` | String utilities — pad, repeat, join, reversed, truncate |
-| `core/result` | `import rockit.core.result` | Result type — Success/Failure with map, orElse |
-| `io/file` | `import rockit.io.file` | File I/O wrappers — readFile, writeFile, appendFile |
-| `json` | `import rockit.json` | JSON encoder/decoder — parse, stringify, pretty-print |
+| **Core** | | |
+| `core/collections` | `import rockit.core.collections` | List utilities — map, filter, fold, sort, zip, flatten, distinct, slice |
+| `core/math` | `import rockit.core.math` | Integer and floating-point math — clamp, lerp, gcd, lcm, trig, log, exp |
+| `core/strings` | `import rockit.core.strings` | String utilities — pad, repeat, join, split, reversed, replace, truncate |
+| `core/result` | `import rockit.core.result` | Result type — Success/Failure sealed class with map, orElse |
+| `core/uuid` | `import rockit.core.uuid` | UUID v4 random generation (RFC 4122) |
+| **I/O** | | |
+| `io/file` | `import rockit.io.file` | File I/O — readFile, writeFile, readLines, writeLines, exists, deleteFile |
+| `io/path` | `import rockit.io.path` | Path manipulation — join, dir, base, ext, normalize, isAbsolute |
+| **Networking** | | |
+| `net/http` | `import rockit.net.http` | HTTP/1.1 client — GET, POST, PUT, DELETE with HTTPS fallback via curl |
+| `net/ws` | `import rockit.net.ws` | WebSocket client (RFC 6455) — connect, send, recv, close with masking |
+| `net/url` | `import rockit.net.url` | URL parser — parse, encode, decode, query params |
+| **Encoding** | | |
+| `encoding/base64` | `import rockit.encoding.base64` | Base64 encode/decode (RFC 4648) |
+| **Time** | | |
+| `time/datetime` | `import rockit.time.datetime` | Date/time — now, dateFromEpoch, formatDate, isLeapYear, dayOfWeek |
+| **Data** | | |
+| `json` | `import rockit.json` | JSON encoder/decoder — parse, stringify, pretty-print, type-safe API |
+| **Testing** | | |
+| `test/probe` | `import rockit.test.probe` | Probe test framework — 12 assertion functions for `@Test` annotated tests |
+
+### rockit.core.collections
+
+```
+listOf1(a)                              Create single-element list
+listOf2(a, b) / listOf3 / listOf4 / listOf5   Create multi-element lists
+listMap(list, transform)                Transform each element
+listFilter(list, predicate)             Keep matching elements
+listFold(list, initial, combine)        Reduce to single value
+listSort(list)                          In-place insertion sort
+listReverse(list)                       Reverse in place
+listSlice(list, start, end)             Sublist extraction
+listZip(a, b)                           Interleave two lists
+listFlatten(lists)                      Flatten list of lists
+listDistinct(list)                      Remove duplicates
+listFind(list, predicate)               First match or -1
+listAny(list, predicate)                Check if any match
+listAll(list, predicate)                Check if all match
+listCount(list, predicate)              Count matches
+listSum(list) / listMax / listMin       Aggregations
+listJoin(list, sep)                     Join as string
+listCopy(list)                          Shallow copy
+listFirst(list) / listLast(list)        Access endpoints
+listIsEmpty(list) / listForEach(list)   Utilities
+```
+
+### rockit.core.math
+
+```
+square(n) / cube(n) / power(base, exp) / factorial(n)   Integer arithmetic
+gcd(a, b) / lcm(a, b)                  Number theory
+clamp(value, lo, hi) / sign(n)         Utilities
+isEven(n) / isOdd(n)                   Parity checks
+PI() / E() / TAU()                      Constants
+sqrt(x) / sin(x) / cos(x) / tan(x)    Trigonometry
+atan2(y, x) / pow(base, exp)           Advanced math
+log(x) / exp(x)                         Logarithms
+floor(x) / ceil(x) / round(x)          Rounding
+absFloat(x) / clampFloat(v, lo, hi)    Float utilities
+toRadians(deg) / toDegrees(rad)         Angle conversion
+lerp(a, b, t)                           Linear interpolation
+```
+
+### rockit.core.strings
+
+```
+padLeft(s, width, ch) / padRight(s, width, ch)  Padding
+repeat(s, count)                        Repeat string
+join(items, sep) / split(s, delim)      Join and split
+reversed(s)                             Reverse string
+toUpper(s) / toLower(s)                 Case conversion
+trim(s)                                 Strip whitespace
+contains(s, sub) / indexOf(s, sub)      Search
+replace(s, old, new)                    Replace all occurrences
+substring(s, start, end)                Extract range
+countOccurrences(s, sub)                Count matches
+truncate(s, maxLen)                     Truncate with "..."
+zeroPad(s, width)                       Left-pad with zeros
+isEmpty(s) / isNotEmpty(s) / length(s)  Properties
+charAtPos(s, index)                     Character access
+```
+
+### rockit.core.result
+
+```
+sealed class Result(val isSuccess: Bool)
+class Success(val value: Int) : Result(true)
+class Failure(val error: String) : Result(false)
+
+resultOrElse(r, default)                Unwrap or default
+resultError(r)                          Get error message
+resultMap(r, transform)                 Transform Success value
+isSuccess(r) / isFailure(r)             Type checks
+```
+
+### rockit.io.file
+
+```
+readFile(path)                          Read entire file as string
+writeFile(path, content)                Write string to file
+readLines(path)                         Read file as list of lines
+writeLines(path, lines)                 Write lines to file
+exists(path)                            Check if file exists
+deleteFile(path)                        Delete file
+```
+
+### rockit.io.path
+
+```
+pathJoin(a, b)                          Join path components
+pathDir(path)                           Directory component
+pathBase(path)                          Filename component
+pathExt(path)                           File extension (.ext)
+pathWithoutExt(path)                    Remove extension
+pathIsAbsolute(path)                    Check if absolute
+pathNormalize(path)                     Resolve . and ..
+```
+
+### rockit.net.http
+
+```
+httpGet(url)                            GET request → response map
+httpPost(url, body, contentType)        POST request
+httpPostJson(url, jsonBody)             POST with JSON content type
+httpPut(url, body, contentType)         PUT request
+httpDelete(url)                         DELETE request
+httpRequest(method, url, headers, body) Full HTTP request
+httpStatus(r) / httpBody(r)             Response accessors
+httpHeader(r, name) / httpHeaders(r)    Header access (case-insensitive)
+httpIsError(r) / httpErrorMessage(r)    Error handling
+```
+
+HTTP uses raw TCP sockets for `http://` URLs and falls back to `curl` for `https://`.
+
+### rockit.net.ws
+
+```
+wsConnect(url)                          Open WebSocket connection → {fd, error}
+wsSend(ws, message)                     Send text frame
+wsSendBinary(ws, data)                  Send binary frame
+wsRecv(ws)                              Receive frame → {type, data}
+wsClose(ws)                             Send close frame and disconnect
+wsIsOpen(ws)                            Check connection status
+WS_TEXT() / WS_BINARY() / WS_CLOSE()   Frame type constants
+WS_PING() / WS_PONG()
+```
+
+### rockit.net.url
+
+```
+urlParse(url)                           Parse URL → {scheme, host, port, path, query, fragment}
+urlScheme(p) / urlHost(p) / urlPort(p)  Component accessors
+urlPath(p) / urlQuery(p) / urlFragment(p)
+urlQueryParams(query)                   Parse query string → Map
+urlQueryParam(query, name)              Get single parameter
+urlEncode(s) / urlDecode(s)             Percent-encoding
+urlToString(parsed)                     Reconstruct URL
+```
+
+### rockit.encoding.base64
+
+```
+base64Encode(s)                         Encode string to base64
+base64Decode(s)                         Decode base64 to string
+```
+
+### rockit.time.datetime
+
+```
+now()                                   Current time (epoch millis)
+epochSeconds()                          Current time (epoch seconds)
+dateFromEpoch(epochMs)                  Epoch → {year, month, day, hour, minute, second, dayOfWeek}
+formatDate(d, pattern)                  Format: "YYYY-MM-DD", "MM/DD/YYYY", "DD.MM.YYYY"
+formatTime(d)                           Format: "HH:MM:SS"
+formatDateTime(d)                       Format: "YYYY-MM-DDTHH:MM:SS"
+isLeapYear(year)                        Leap year check
+daysInMonth(year, month)                Days in month
+dayOfWeek(year, month, day)             0=Sun..6=Sat (Tomohiko Sakamoto)
+```
+
+### rockit.json
+
+```
+jsonParse(input)                        Parse JSON string → value or error
+jsonStringify(v)                        Compact serialization
+jsonStringifyPretty(v, indent)          Pretty-print with indentation
+
+jsonNull() / jsonBool(b) / jsonNumber(n) / jsonString(s)  Constructors
+jsonArray() / jsonObject() / jsonError(msg)
+
+jsonIsNull(v) / jsonIsBool(v) / jsonIsNumber(v)           Type checks
+jsonIsString(v) / jsonIsArray(v) / jsonIsObject(v) / jsonIsError(v)
+
+jsonGetBool(v) / jsonGetInt(v) / jsonGetString(v)         Accessors
+
+jsonArrayAppend(arr, item)              Array operations
+jsonArrayGet(arr, i) / jsonArraySet(arr, i, v) / jsonArrayRemoveAt(arr, i)
+jsonArraySize(arr)
+
+jsonObjectPut(obj, key, val)            Object operations
+jsonObjectGet(obj, key) / jsonObjectRemove(obj, key)
+jsonObjectKeys(obj) / jsonObjectSize(obj) / jsonObjectHas(obj, key)
+
+jsonEquals(a, b)                        Deep equality
+```
+
+### rockit.test.probe
+
+Probe is the Rockit test framework. Write tests with `@Test` annotation and run with `rockit test`.
+
+```kotlin
+import rockit.test.probe
+
+@Test
+fun testMath() {
+    assertEquals(4, 2 + 2, "addition")
+    assertGreaterThan(10, 5)
+}
+
+@Test
+fun testStrings() {
+    assertEqualsStr("hello", "hello")
+    assertStringContains("hello world", "world")
+}
+```
+
+```
+assert(condition, message?)             Generic assertion
+assertTrue(cond, msg?) / assertFalse(cond, msg?)
+assertEquals(expected, actual, msg?)    Int equality
+assertEqualsStr(expected, actual, msg?) String equality
+assertNotEquals(a, b, msg?)             Int inequality
+assertGreaterThan(a, b, msg?)           a > b
+assertLessThan(a, b, msg?)             a < b
+assertStringContains(s, sub, msg?)      Substring check
+assertStartsWith(s, prefix, msg?)       Prefix check
+assertEndsWith(s, suffix, msg?)         Suffix check
+fail(msg?)                              Unconditional failure
+```
+
+Run tests: `rockit test` (discovers `tests/` directory) or `rockit test path/to/file.rok`.
 
 ### JSON Example
 
@@ -342,14 +574,26 @@ RockitCompiler/
 │   ├── llvmgen.rok         # Stage 1 LLVM native codegen
 │   ├── command.rok         # Concatenated compiler source
 │   ├── command             # Stage 1 native binary
-│   └── stdlib/rockit/      # Standard library modules
+│   └── stdlib/rockit/      # Standard library (14 modules)
 │       ├── core/
-│       │   ├── collections.rok  # List map/filter/fold/sort/zip
-│       │   ├── math.rok         # clamp, lerp, isPrime, gcd
-│       │   ├── strings.rok      # pad, repeat, join, reversed
-│       │   └── result.rok       # Result type (Success/Failure)
+│       │   ├── collections.rok  # List map/filter/fold/sort/zip/flatten
+│       │   ├── math.rok         # Integer & float math, trig, constants
+│       │   ├── strings.rok      # pad, repeat, join, split, replace
+│       │   ├── result.rok       # Result type (Success/Failure)
+│       │   └── uuid.rok         # UUID v4 generation
 │       ├── io/
-│       │   └── file.rok         # File I/O wrappers
+│       │   ├── file.rok         # File I/O wrappers
+│       │   └── path.rok         # Path join/dir/base/ext/normalize
+│       ├── net/
+│       │   ├── http.rok         # HTTP/1.1 client (TCP + curl HTTPS)
+│       │   ├── ws.rok           # WebSocket client (RFC 6455)
+│       │   └── url.rok          # URL parser and encoder
+│       ├── encoding/
+│       │   └── base64.rok       # Base64 encode/decode
+│       ├── time/
+│       │   └── datetime.rok     # Date/time utilities
+│       ├── test/
+│       │   └── probe.rok        # Probe test framework (assertions)
 │       └── json.rok             # JSON parser and serializer
 └── Examples/               # 48+ example/test .rok files
 ```

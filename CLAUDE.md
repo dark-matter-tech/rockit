@@ -177,12 +177,20 @@ RockitCompiler/
 │   ├── codegen.rok                  # Stage 1 bytecode codegen + main()
 │   ├── command.rok                  # Concatenated compiler (auto-gen via build.sh)
 │   ├── command                      # Stage 1 native binary
-│   └── stdlib/rockit/               # Standard library modules
+│   └── stdlib/rockit/               # Standard library (14 modules)
 │       ├── core/collections.rok     # List map/filter/fold/sort/zip/flatten
-│       ├── core/math.rok            # clamp, lerp, isPrime, gcd, lcm
-│       ├── core/strings.rok         # pad, repeat, join, reversed, truncate
+│       ├── core/math.rok            # Integer & float math, trig, constants
+│       ├── core/strings.rok         # pad, repeat, join, split, replace
 │       ├── core/result.rok          # Result type (Success/Failure)
+│       ├── core/uuid.rok            # UUID v4 generation
 │       ├── io/file.rok              # File I/O wrappers
+│       ├── io/path.rok              # Path join/dir/base/ext/normalize
+│       ├── net/http.rok             # HTTP/1.1 client (TCP + curl HTTPS)
+│       ├── net/ws.rok               # WebSocket client (RFC 6455)
+│       ├── net/url.rok              # URL parser and encoder
+│       ├── encoding/base64.rok      # Base64 encode/decode
+│       ├── time/datetime.rok        # Date/time utilities
+│       ├── test/probe.rok           # Probe test framework (assertions)
 │       └── json.rok                 # JSON encoder/decoder (parse, stringify, pretty-print)
 ├── Runtime/
 │   ├── rockit_runtime.c             # C runtime (ARC, task scheduler, event loop, actor wrappers)
@@ -208,7 +216,24 @@ RockitKit is a standalone library so it can be imported by other tools (editor p
 
 ## Standard Library
 
-Stdlib modules live in `Stage1/stdlib/rockit/` and are compiled with `--lib-path Stage1/stdlib`. Import via dot-separated paths: `import rockit.json`, `import rockit.core.collections`.
+14 modules in `Stage1/stdlib/rockit/`. Import via dot-separated paths: `import rockit.json`, `import rockit.core.collections`.
+
+| Module | Import | Key Functions |
+|--------|--------|--------------|
+| Collections | `rockit.core.collections` | listMap, listFilter, listFold, listSort, listZip, listFlatten |
+| Math | `rockit.core.math` | gcd, lcm, clamp, lerp, sqrt, sin, cos, PI, pow, log |
+| Strings | `rockit.core.strings` | pad, repeat, join, split, reversed, replace, truncate |
+| Result | `rockit.core.result` | Success/Failure, resultOrElse, resultMap |
+| UUID | `rockit.core.uuid` | uuid4 |
+| File I/O | `rockit.io.file` | readFile, writeFile, readLines, exists, deleteFile |
+| Path | `rockit.io.path` | pathJoin, pathDir, pathBase, pathExt, pathNormalize |
+| HTTP | `rockit.net.http` | httpGet, httpPost, httpPut, httpDelete, httpRequest |
+| WebSocket | `rockit.net.ws` | wsConnect, wsSend, wsRecv, wsClose |
+| URL | `rockit.net.url` | urlParse, urlEncode, urlDecode, urlQueryParams |
+| Base64 | `rockit.encoding.base64` | base64Encode, base64Decode |
+| DateTime | `rockit.time.datetime` | now, dateFromEpoch, formatDate, dayOfWeek |
+| JSON | `rockit.json` | jsonParse, jsonStringify, jsonObject, jsonArray |
+| Probe | `rockit.test.probe` | assertEquals, assertTrue, assertFalse, fail |
 
 ### Key constraints for stdlib development
 
