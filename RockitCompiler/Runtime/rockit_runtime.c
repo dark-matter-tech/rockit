@@ -985,13 +985,15 @@ int64_t mapCreate(void);  // defined after mapCreate_string below
 
 // String-keyed map — hash by string content, not pointer address
 static uint64_t string_hash(RockitString* s) {
+    // Must match Runtime/rockit/string.rok string_hash exactly for bootstrap
     if (!s) return 0;
-    uint64_t h = 14695981039346656037ULL;
+    uint64_t h = 2166136261ULL;
     for (int64_t i = 0; i < s->length; i++) {
-        h ^= (unsigned char)s->chars[i];
-        h *= 1099511628211ULL;
+        h = h * 16777619ULL + (uint64_t)(unsigned char)s->chars[i];
     }
-    return h;
+    int64_t sh = (int64_t)h;
+    if (sh < 0) sh = -sh;
+    return (uint64_t)sh;
 }
 
 static int8_t string_eq(RockitString* a, RockitString* b) {
