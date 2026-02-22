@@ -388,6 +388,23 @@ public final class SymbolTable {
             globalScope.define(Symbol(name: name, type: type, kind: .function))
         }
 
+        // Network, time & random builtins
+        let networkBuiltins: [(String, Type)] = [
+            ("tcpConnect",  .function(parameterTypes: [.string, .int], returnType: .int)),
+            ("tcpSend",     .function(parameterTypes: [.int, .string], returnType: .int)),
+            ("tcpRecv",     .function(parameterTypes: [.int, .int], returnType: .string)),
+            ("tcpClose",    .function(parameterTypes: [.int], returnType: .unit)),
+            ("currentTimeMillis", .function(parameterTypes: [], returnType: .int)),
+            ("sleepMillis", .function(parameterTypes: [.int], returnType: .unit)),
+            ("randomInt",   .function(parameterTypes: [.int], returnType: .int)),
+            ("epochToComponents", .function(parameterTypes: [.int],
+                                            returnType: .classType(name: "Map", typeArguments: []))),
+        ]
+
+        for (name, type) in networkBuiltins {
+            globalScope.define(Symbol(name: name, type: type, kind: .function))
+        }
+
         // Type check builtins
         let typeCheckBuiltins: [(String, Type)] = [
             ("isMap",   .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .bool)),

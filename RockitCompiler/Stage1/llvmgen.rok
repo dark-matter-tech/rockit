@@ -90,6 +90,19 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "systemExec", "i64|ptr")
     mapPut(t, "processExit", "void|i64")
 
+    // Networking
+    mapPut(t, "tcpConnect", "i64|ptr,i64")
+    mapPut(t, "tcpSend", "i64|i64,ptr")
+    mapPut(t, "tcpRecv", "ptr|i64,i64")
+    mapPut(t, "tcpClose", "void|i64")
+    // Time
+    mapPut(t, "currentTimeMillis", "i64|")
+    mapPut(t, "sleepMillis", "void|i64")
+    // Random
+    mapPut(t, "randomInt", "i64|i64")
+    // Date
+    mapPut(t, "epochToComponents", "i64|i64")
+
     // Boolean-returning functions (C returns int8_t = i8)
     mapPut(t, "isMap", "i8|i64")
     mapPut(t, "listContains", "i8|i64,i64")

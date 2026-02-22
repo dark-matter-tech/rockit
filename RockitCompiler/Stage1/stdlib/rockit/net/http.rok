@@ -1,0 +1,427 @@
+// rockit.net.http — HTTP/1.1 client
+// Uses tcpConnect/tcpSend/tcpRecv/tcpClose builtins for HTTP,
+// systemExec + curl for HTTPS fallback.
+
+// ── Core Request ────────────────────────────────────────────────────────
+
+fun httpRequest(method: String, url: String, headers: Map, body: String): Map {
+    // Auto-detect scheme
+    val scheme = httpParseScheme(url)
+    if (scheme == "https") {
+        return httpRequestSecure(method, url, headers, body)
+    }
+    return httpRequestRaw(method, url, headers, body)
+}
+
+// ── Convenience Methods ─────────────────────────────────────────────────
+
+fun httpGet(url: String): Map {
+    val headers = mapCreate()
+    return httpRequest("GET", url, headers, "")
+}
+
+fun httpPost(url: String, body: String, contentType: String): Map {
+    val headers = mapCreate()
+    mapPut(headers, "Content-Type", contentType)
+    return httpRequest("POST", url, headers, body)
+}
+
+fun httpPostJson(url: String, jsonBody: String): Map {
+    return httpPost(url, jsonBody, "application/json")
+}
+
+fun httpPut(url: String, body: String, contentType: String): Map {
+    val headers = mapCreate()
+    mapPut(headers, "Content-Type", contentType)
+    return httpRequest("PUT", url, headers, body)
+}
+
+fun httpDelete(url: String): Map {
+    val headers = mapCreate()
+    return httpRequest("DELETE", url, headers, "")
+}
+
+// ── Response Accessors ──────────────────────────────────────────────────
+
+fun httpStatus(r: Map): Int {
+    val v = mapGet(r, "status")
+    if (v == null) { return 0 }
+    return toInt(v)
+}
+
+fun httpBody(r: Map): String {
+    val v = mapGet(r, "body")
+    if (v == null) { return "" }
+    return toString(v)
+}
+
+fun httpHeader(r: Map, name: String): String {
+    val hdrs = mapGet(r, "headers")
+    if (hdrs == null) { return "" }
+    // Case-insensitive lookup: try exact, then lowercase
+    val v = mapGet(hdrs, name)
+    if (v != null) { return toString(v) }
+    // Try lowercased key
+    val lowerName = httpToLower(name)
+    val keys = mapKeys(hdrs)
+    var i: Int = 0
+    while (i < listSize(keys)) {
+        val k = toString(listGet(keys, i))
+        if (httpToLower(k) == lowerName) {
+            val val2 = mapGet(hdrs, k)
+            if (val2 != null) { return toString(val2) }
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+fun httpHeaders(r: Map): Map {
+    val v = mapGet(r, "headers")
+    if (v == null) { return mapCreate() }
+    return v
+}
+
+fun httpIsError(r: Map): Bool {
+    val v = mapGet(r, "error")
+    if (v == null) { return false }
+    val msg = toString(v)
+    return stringLength(msg) > 0
+}
+
+fun httpErrorMessage(r: Map): String {
+    val v = mapGet(r, "error")
+    if (v == null) { return "" }
+    return toString(v)
+}
+
+// ── Raw HTTP (TCP) ──────────────────────────────────────────────────────
+
+fun httpRequestRaw(method: String, url: String, headers: Map, body: String): Map {
+    val result = mapCreate()
+    val respHeaders = mapCreate()
+    mapPut(result, "headers", respHeaders)
+
+    // Parse URL
+    val host = httpParseHost(url)
+    val port = httpParsePort(url)
+    val path = httpParsePath(url)
+
+    if (stringLength(host) == 0) {
+        mapPut(result, "status", 0)
+        mapPut(result, "body", "")
+        mapPut(result, "error", "Invalid URL: no host")
+        return result
+    }
+
+    // Connect
+    val fd = tcpConnect(host, port)
+    if (fd < 0) {
+        mapPut(result, "status", 0)
+        mapPut(result, "body", "")
+        mapPut(result, "error", stringConcat("Connection failed to ", host))
+        return result
+    }
+
+    // Build request
+    var req: String = stringConcat(stringConcat(method, " "), stringConcat(path, " HTTP/1.1\r\n"))
+    req = stringConcat(req, stringConcat(stringConcat("Host: ", host), "\r\n"))
+
+    // Add custom headers
+    val hdrKeys = mapKeys(headers)
+    var hi: Int = 0
+    while (hi < listSize(hdrKeys)) {
+        val k = toString(listGet(hdrKeys, hi))
+        val v = toString(mapGet(headers, k))
+        req = stringConcat(req, stringConcat(stringConcat(stringConcat(k, ": "), v), "\r\n"))
+        hi = hi + 1
+    }
+
+    // Content-Length for body
+    if (stringLength(body) > 0) {
+        req = stringConcat(req, stringConcat(stringConcat("Content-Length: ", toString(stringLength(body))), "\r\n"))
+    }
+
+    req = stringConcat(req, "Connection: close\r\n")
+    req = stringConcat(req, "\r\n")
+    req = stringConcat(req, body)
+
+    // Send
+    val sent = tcpSend(fd, req)
+    if (sent < 0) {
+        tcpClose(fd)
+        mapPut(result, "status", 0)
+        mapPut(result, "body", "")
+        mapPut(result, "error", "Send failed")
+        return result
+    }
+
+    // Receive response (accumulate chunks)
+    var response: String = ""
+    var done: Bool = false
+    while (done == false) {
+        val chunk = tcpRecv(fd, 8192)
+        if (stringLength(chunk) == 0) {
+            done = true
+        } else {
+            response = stringConcat(response, chunk)
+        }
+    }
+    tcpClose(fd)
+
+    // Parse response
+    httpParseResponse(response, result, respHeaders)
+    return result
+}
+
+// ── HTTPS via curl ──────────────────────────────────────────────────────
+
+fun httpRequestSecure(method: String, url: String, headers: Map, body: String): Map {
+    val result = mapCreate()
+    val respHeaders = mapCreate()
+    mapPut(result, "headers", respHeaders)
+
+    // Build curl command
+    var cmd: String = stringConcat("curl -s -D- -X ", method)
+    cmd = stringConcat(cmd, stringConcat(" '", stringConcat(url, "'")))
+
+    // Add headers
+    val hdrKeys = mapKeys(headers)
+    var i: Int = 0
+    while (i < listSize(hdrKeys)) {
+        val k = toString(listGet(hdrKeys, i))
+        val v = toString(mapGet(headers, k))
+        cmd = stringConcat(cmd, stringConcat(stringConcat(stringConcat(" -H '", k), stringConcat(": ", stringConcat(v, "'"))))
+        i = i + 1
+    }
+
+    // Add body
+    if (stringLength(body) > 0) {
+        cmd = stringConcat(cmd, stringConcat(" -d '", stringConcat(body, "'")))
+    }
+
+    // Write curl output to temp file, read it back
+    val tmpFile = "/tmp/rockit_http_resp.tmp"
+    cmd = stringConcat(cmd, stringConcat(" > ", tmpFile))
+    val exitCode = systemExec(cmd)
+
+    if (exitCode != 0) {
+        mapPut(result, "status", 0)
+        mapPut(result, "body", "")
+        mapPut(result, "error", stringConcat("curl failed with exit code ", toString(exitCode)))
+        return result
+    }
+
+    val response = toString(fileRead(tmpFile))
+    httpParseResponse(response, result, respHeaders)
+    return result
+}
+
+// ── Response Parsing ────────────────────────────────────────────────────
+
+fun httpParseResponse(response: String, result: Map, respHeaders: Map): Unit {
+    val len = stringLength(response)
+    if (len == 0) {
+        mapPut(result, "status", 0)
+        mapPut(result, "body", "")
+        mapPut(result, "error", "Empty response")
+        return
+    }
+
+    // Find end of status line
+    val firstNewline = stringIndexOf(response, "\r\n")
+    if (firstNewline < 0) {
+        mapPut(result, "status", 0)
+        mapPut(result, "body", response)
+        mapPut(result, "error", "Malformed response")
+        return
+    }
+
+    // Parse status code from "HTTP/1.1 200 OK"
+    val statusLine = substring(response, 0, firstNewline)
+    val spaceIdx = stringIndexOf(statusLine, " ")
+    if (spaceIdx >= 0) {
+        val afterSpace = substring(statusLine, spaceIdx + 1, stringLength(statusLine))
+        val spaceIdx2 = stringIndexOf(afterSpace, " ")
+        var statusStr: String = afterSpace
+        if (spaceIdx2 >= 0) {
+            statusStr = substring(afterSpace, 0, spaceIdx2)
+        }
+        mapPut(result, "status", toInt(statusStr))
+    } else {
+        mapPut(result, "status", 0)
+    }
+
+    // Find header/body boundary (\r\n\r\n)
+    val headerEnd = stringIndexOf(response, "\r\n\r\n")
+    if (headerEnd < 0) {
+        mapPut(result, "body", "")
+        return
+    }
+
+    // Parse headers
+    val headerBlock = substring(response, firstNewline + 2, headerEnd)
+    httpParseHeaders(headerBlock, respHeaders)
+
+    // Body is everything after \r\n\r\n
+    val bodyStart = headerEnd + 4
+    if (bodyStart < len) {
+        mapPut(result, "body", substring(response, bodyStart, len))
+    } else {
+        mapPut(result, "body", "")
+    }
+    mapPut(result, "error", "")
+}
+
+fun httpParseHeaders(block: String, headers: Map): Unit {
+    val len = stringLength(block)
+    var pos: Int = 0
+
+    while (pos < len) {
+        // Find \r\n — scan and record first occurrence
+        var lineEnd: Int = len  // default: line extends to end
+        var i: Int = pos
+        while (i < len - 1) {
+            if (lineEnd == len) {
+                if (charCodeAt(block, i) == 13) {
+                    if (charCodeAt(block, i + 1) == 10) {
+                        lineEnd = i
+                    }
+                }
+            }
+            i = i + 1
+        }
+
+        val line = substring(block, pos, lineEnd)
+        val colonIdx = stringIndexOf(line, ": ")
+        if (colonIdx > 0) {
+            val key = substring(line, 0, colonIdx)
+            val value = substring(line, colonIdx + 2, stringLength(line))
+            mapPut(headers, key, value)
+        }
+
+        if (lineEnd < len) {
+            pos = lineEnd + 2  // skip \r\n
+        } else {
+            pos = len  // done
+        }
+    }
+}
+
+// ── Internal URL Parsing (minimal, inline) ──────────────────────────────
+
+fun httpParseScheme(url: String): String {
+    val idx = stringIndexOf(url, "://")
+    if (idx < 0) { return "http" }
+    return substring(url, 0, idx)
+}
+
+fun httpParseHost(url: String): String {
+    val idx = stringIndexOf(url, "://")
+    var start: Int = 0
+    if (idx >= 0) { start = idx + 3 }
+
+    val len = stringLength(url)
+    var hostEnd: Int = len  // default: rest is host
+    var i: Int = start
+    while (i < len) {
+        if (hostEnd == len) {
+            val ch = charCodeAt(url, i)
+            if (ch == 47) { hostEnd = i }
+            else { if (ch == 58) { hostEnd = i }
+            else { if (ch == 63) { hostEnd = i } } }
+        }
+        i = i + 1
+    }
+    return substring(url, start, hostEnd)
+}
+
+fun httpParsePort(url: String): Int {
+    val idx = stringIndexOf(url, "://")
+    var start: Int = 0
+    if (idx >= 0) { start = idx + 3 }
+
+    val len = stringLength(url)
+    // Find positions of first ':', '/', '?' in authority
+    var colonPos: Int = 0 - 1
+    var endPos: Int = len  // first '/' or '?' after start
+    var i: Int = start
+    while (i < len) {
+        val ch = charCodeAt(url, i)
+        if (ch == 58) { if (colonPos < 0) { colonPos = i } }
+        if (ch == 47) { if (endPos == len) { endPos = i } }
+        if (ch == 63) { if (endPos == len) { endPos = i } }
+        i = i + 1
+    }
+
+    if (colonPos < 0) {
+        val scheme = httpParseScheme(url)
+        if (scheme == "https") { return 443 }
+        return 80
+    }
+    if (colonPos >= endPos) {
+        // Colon is in path/query, not authority
+        val scheme = httpParseScheme(url)
+        if (scheme == "https") { return 443 }
+        return 80
+    }
+
+    val portStr = substring(url, colonPos + 1, endPos)
+    if (stringLength(portStr) == 0) { return 80 }
+    return toInt(portStr)
+}
+
+fun httpParsePath(url: String): String {
+    val idx = stringIndexOf(url, "://")
+    var start: Int = 0
+    if (idx >= 0) { start = idx + 3 }
+
+    val len = stringLength(url)
+    // Find first '/' after authority
+    var slashPos: Int = 0 - 1
+    var i: Int = start
+    while (i < len) {
+        if (charCodeAt(url, i) == 47) {
+            if (slashPos < 0) { slashPos = i }
+        }
+        i = i + 1
+    }
+
+    if (slashPos < 0) { return "/" }
+
+    // Find end of path (first '?' or '#' after slash)
+    var pathEnd: Int = len
+    i = slashPos
+    while (i < len) {
+        val ch = charCodeAt(url, i)
+        if (ch == 63) { if (pathEnd == len) { pathEnd = i } }
+        if (ch == 35) { if (pathEnd == len) { pathEnd = i } }
+        i = i + 1
+    }
+
+    return substring(url, slashPos, pathEnd)
+}
+
+// ── Helper ──────────────────────────────────────────────────────────────
+
+fun httpToLower(s: String): String {
+    val len = stringLength(s)
+    var result: String = ""
+    var i: Int = 0
+    while (i < len) {
+        val ch = charCodeAt(s, i)
+        if (ch >= 65) {
+            if (ch <= 90) {
+                result = stringConcat(result, intToChar(ch + 32))
+                i = i + 1
+            } else {
+                result = stringConcat(result, charAt(s, i))
+                i = i + 1
+            }
+        } else {
+            result = stringConcat(result, charAt(s, i))
+            i = i + 1
+        }
+    }
+    return result
+}

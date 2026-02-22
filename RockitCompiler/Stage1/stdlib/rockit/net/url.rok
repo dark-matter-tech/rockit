@@ -1,0 +1,331 @@
+// rockit.net.url — URL parsing and encoding
+// Pure string manipulation, no builtins needed beyond charAt/charCodeAt/substring/stringConcat/stringLength/stringIndexOf
+
+// ── URL Parsing ─────────────────────────────────────────────────────────
+
+fun urlParse(url: String): Map {
+    val m = mapCreate()
+    val len = stringLength(url)
+    if (len == 0) { return m }
+
+    var pos: Int = 0
+
+    // Extract scheme (e.g., "http", "https", "ws")
+    val colonSlash = stringIndexOf(url, "://")
+    var scheme: String = ""
+    if (colonSlash >= 0) {
+        scheme = substring(url, 0, colonSlash)
+        pos = colonSlash + 3
+    }
+    mapPut(m, "scheme", scheme)
+
+    // Extract authority (host:port) up to / or ? or # or end
+    var authEnd: Int = pos
+    while (authEnd < len) {
+        val ch = charCodeAt(url, authEnd)
+        if (ch == 47) { // '/' found — this marks end of authority
+            val authority = substring(url, pos, authEnd)
+            val hostPort = urlSplitHostPort(authority)
+            mapPut(m, "host", toString(mapGet(hostPort, "host")))
+            mapPut(m, "port", mapGet(hostPort, "port"))
+            pos = authEnd
+            authEnd = len + 1  // break
+        } else { if (ch == 63) {
+            val authority = substring(url, pos, authEnd)
+            val hostPort = urlSplitHostPort(authority)
+            mapPut(m, "host", toString(mapGet(hostPort, "host")))
+            mapPut(m, "port", mapGet(hostPort, "port"))
+            pos = authEnd
+            authEnd = len + 1
+        } else { if (ch == 35) {
+            val authority = substring(url, pos, authEnd)
+            val hostPort = urlSplitHostPort(authority)
+            mapPut(m, "host", toString(mapGet(hostPort, "host")))
+            mapPut(m, "port", mapGet(hostPort, "port"))
+            pos = authEnd
+            authEnd = len + 1
+        } else {
+            authEnd = authEnd + 1
+        } } }
+    }
+    // If we reached end without finding separator, whole remainder is authority
+    if (authEnd == len) {
+        val authority = substring(url, pos, len)
+        val hostPort = urlSplitHostPort(authority)
+        mapPut(m, "host", toString(mapGet(hostPort, "host")))
+        mapPut(m, "port", mapGet(hostPort, "port"))
+        pos = len
+    }
+
+    // Extract path
+    var pEnd: Int = pos
+    while (pEnd < len) {
+        val ch = charCodeAt(url, pEnd)
+        if (ch == 63) {
+            mapPut(m, "path", substring(url, pos, pEnd))
+            pos = pEnd + 1
+            pEnd = len + 1
+        } else { if (ch == 35) {
+            mapPut(m, "path", substring(url, pos, pEnd))
+            pos = pEnd + 1
+            pEnd = len + 1
+        } else {
+            pEnd = pEnd + 1
+        } }
+    }
+    if (pEnd == len) {
+        mapPut(m, "path", substring(url, pos, len))
+        pos = len
+    }
+
+    // Extract query
+    if (pos < len) {
+        val ch = charCodeAt(url, pos - 1)
+        if (ch == 63) {
+            // We're past the '?', find '#' or end
+            var qEnd: Int = pos
+            while (qEnd < len) {
+                if (charCodeAt(url, qEnd) == 35) {
+                    mapPut(m, "query", substring(url, pos, qEnd))
+                    pos = qEnd + 1
+                    qEnd = len + 1
+                } else {
+                    qEnd = qEnd + 1
+                }
+            }
+            if (qEnd == len) {
+                mapPut(m, "query", substring(url, pos, len))
+                pos = len
+            }
+        }
+    }
+
+    // Extract fragment
+    if (pos < len) {
+        mapPut(m, "fragment", substring(url, pos, len))
+    } else {
+        mapPut(m, "fragment", "")
+    }
+
+    return m
+}
+
+fun urlSplitHostPort(authority: String): Map {
+    val m = mapCreate()
+    val len = stringLength(authority)
+    // Find last ':' for port (support IPv6 [host]:port)
+    var colonPos: Int = 0 - 1
+    var i: Int = len - 1
+    while (i >= 0) {
+        if (charCodeAt(authority, i) == 58) {  // ':'
+            colonPos = i
+            i = 0 - 1  // break
+        } else {
+            i = i - 1
+        }
+    }
+    if (colonPos > 0) {
+        mapPut(m, "host", substring(authority, 0, colonPos))
+        val portStr = substring(authority, colonPos + 1, len)
+        mapPut(m, "port", toInt(portStr))
+    } else {
+        mapPut(m, "host", authority)
+        mapPut(m, "port", 0)
+    }
+    return m
+}
+
+// ── Accessors ───────────────────────────────────────────────────────────
+
+fun urlScheme(parsed: Map): String {
+    val v = mapGet(parsed, "scheme")
+    if (v == null) { return "" }
+    return toString(v)
+}
+
+fun urlHost(parsed: Map): String {
+    val v = mapGet(parsed, "host")
+    if (v == null) { return "" }
+    return toString(v)
+}
+
+fun urlPort(parsed: Map): Int {
+    val v = mapGet(parsed, "port")
+    if (v == null) { return 0 }
+    return toInt(v)
+}
+
+fun urlPath(parsed: Map): String {
+    val v = mapGet(parsed, "path")
+    if (v == null) { return "" }
+    return toString(v)
+}
+
+fun urlQuery(parsed: Map): String {
+    val v = mapGet(parsed, "query")
+    if (v == null) { return "" }
+    return toString(v)
+}
+
+fun urlFragment(parsed: Map): String {
+    val v = mapGet(parsed, "fragment")
+    if (v == null) { return "" }
+    return toString(v)
+}
+
+// ── Query Parameter Parsing ─────────────────────────────────────────────
+
+fun urlQueryParams(query: String): Map {
+    val params = mapCreate()
+    val len = stringLength(query)
+    if (len == 0) { return params }
+
+    var pos: Int = 0
+    while (pos < len) {
+        // Find next '&' — scan and record first occurrence
+        var pairEnd: Int = len  // default: pair extends to end
+        var i: Int = pos
+        while (i < len) {
+            if (charCodeAt(query, i) == 38) {  // '&'
+                if (pairEnd == len) { pairEnd = i }
+            }
+            i = i + 1
+        }
+
+        // Find '=' within pair
+        val pair = substring(query, pos, pairEnd)
+        val eqIdx = stringIndexOf(pair, "=")
+        if (eqIdx >= 0) {
+            val key = urlDecode(substring(pair, 0, eqIdx))
+            val value = urlDecode(substring(pair, eqIdx + 1, stringLength(pair)))
+            mapPut(params, key, value)
+        } else {
+            if (stringLength(pair) > 0) {
+                mapPut(params, urlDecode(pair), "")
+            }
+        }
+
+        pos = pairEnd + 1
+    }
+    return params
+}
+
+fun urlQueryParam(query: String, name: String): String {
+    val params = urlQueryParams(query)
+    val v = mapGet(params, name)
+    if (v == null) { return "" }
+    return toString(v)
+}
+
+// ── URL Encoding/Decoding ───────────────────────────────────────────────
+
+fun urlEncode(s: String): String {
+    val len = stringLength(s)
+    var result: String = ""
+    var i: Int = 0
+    while (i < len) {
+        val code = charCodeAt(s, i)
+        if (urlIsUnreserved(code) == 1) {
+            result = stringConcat(result, charAt(s, i))
+        } else {
+            // Percent-encode: %XX
+            result = stringConcat(result, "%")
+            result = stringConcat(result, urlHexChar(code / 16))
+            result = stringConcat(result, urlHexChar(code - (code / 16) * 16))
+        }
+        i = i + 1
+    }
+    return result
+}
+
+fun urlDecode(s: String): String {
+    val len = stringLength(s)
+    var result: String = ""
+    var i: Int = 0
+    while (i < len) {
+        val ch = charCodeAt(s, i)
+        if (ch == 37) {  // '%'
+            if (i + 2 < len) {
+                val hi = urlHexVal(charCodeAt(s, i + 1))
+                val lo = urlHexVal(charCodeAt(s, i + 2))
+                if (hi >= 0) {
+                    if (lo >= 0) {
+                        result = stringConcat(result, intToChar(hi * 16 + lo))
+                        i = i + 3
+                    } else {
+                        result = stringConcat(result, "%")
+                        i = i + 1
+                    }
+                } else {
+                    result = stringConcat(result, "%")
+                    i = i + 1
+                }
+            } else {
+                result = stringConcat(result, "%")
+                i = i + 1
+            }
+        } else { if (ch == 43) {  // '+' → space
+            result = stringConcat(result, " ")
+            i = i + 1
+        } else {
+            result = stringConcat(result, charAt(s, i))
+            i = i + 1
+        } }
+    }
+    return result
+}
+
+// ── URL Reconstruction ──────────────────────────────────────────────────
+
+fun urlToString(parsed: Map): String {
+    var result: String = ""
+    val scheme = urlScheme(parsed)
+    if (stringLength(scheme) > 0) {
+        result = stringConcat(result, scheme)
+        result = stringConcat(result, "://")
+    }
+    result = stringConcat(result, urlHost(parsed))
+    val port = urlPort(parsed)
+    if (port > 0) {
+        result = stringConcat(result, ":")
+        result = stringConcat(result, toString(port))
+    }
+    result = stringConcat(result, urlPath(parsed))
+    val query = urlQuery(parsed)
+    if (stringLength(query) > 0) {
+        result = stringConcat(result, "?")
+        result = stringConcat(result, query)
+    }
+    val frag = urlFragment(parsed)
+    if (stringLength(frag) > 0) {
+        result = stringConcat(result, "#")
+        result = stringConcat(result, frag)
+    }
+    return result
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+fun urlIsUnreserved(code: Int): Int {
+    // A-Z, a-z, 0-9, '-', '.', '_', '~'
+    if (code >= 65) { if (code <= 90) { return 1 } }
+    if (code >= 97) { if (code <= 122) { return 1 } }
+    if (code >= 48) { if (code <= 57) { return 1 } }
+    if (code == 45) { return 1 }   // '-'
+    if (code == 46) { return 1 }   // '.'
+    if (code == 95) { return 1 }   // '_'
+    if (code == 126) { return 1 }  // '~'
+    return 0
+}
+
+fun urlHexChar(nibble: Int): String {
+    if (nibble < 10) { return intToChar(48 + nibble) }
+    return intToChar(65 + nibble - 10)
+}
+
+fun urlHexVal(ch: Int): Int {
+    if (ch >= 48) { if (ch <= 57) { return ch - 48 } }      // 0-9
+    if (ch >= 65) { if (ch <= 70) { return ch - 65 + 10 } } // A-F
+    if (ch >= 97) { if (ch <= 102) { return ch - 97 + 10 } } // a-f
+    return 0 - 1  // invalid
+}

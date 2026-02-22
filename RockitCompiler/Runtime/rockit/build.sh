@@ -27,6 +27,7 @@ cat \
     exception.rok \
     file.rok \
     process.rok \
+    network.rok \
     concurrency.rok \
     > rockit_runtime.rok
 

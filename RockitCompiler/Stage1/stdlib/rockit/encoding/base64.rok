@@ -1,0 +1,114 @@
+// rockit.encoding.base64 — Base64 encode/decode
+// Pure string/character arithmetic, no builtins needed beyond charCodeAt/intToChar/stringConcat
+
+// ── Lookup Tables ──────────────────────────────────────────────────────
+
+fun b64EncodeChar(index: Int): String {
+    // ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
+    if (index < 26) { return intToChar(65 + index) }    // A-Z
+    if (index < 52) { return intToChar(97 + index - 26) } // a-z
+    if (index < 62) { return intToChar(48 + index - 52) } // 0-9
+    if (index == 62) { return "+" }
+    return "/"
+}
+
+fun b64DecodeChar(ch: Int): Int {
+    // Returns 0-63 for valid base64 chars, -1 for padding '=', -2 for invalid
+    if (ch >= 65) {
+        if (ch <= 90) { return ch - 65 }       // A-Z → 0-25
+    }
+    if (ch >= 97) {
+        if (ch <= 122) { return ch - 97 + 26 }  // a-z → 26-51
+    }
+    if (ch >= 48) {
+        if (ch <= 57) { return ch - 48 + 52 }   // 0-9 → 52-61
+    }
+    if (ch == 43) { return 62 }                  // +
+    if (ch == 47) { return 63 }                  // /
+    if (ch == 61) { return 0 - 1 }              // = (padding)
+    return 0 - 2                                 // invalid
+}
+
+// ── Encode ──────────────────────────────────────────────────────────────
+
+fun base64Encode(s: String): String {
+    val len = stringLength(s)
+    if (len == 0) { return "" }
+
+    var result: String = ""
+    var i: Int = 0
+
+    while (i + 2 < len) {
+        val b0 = charCodeAt(s, i)
+        val b1 = charCodeAt(s, i + 1)
+        val b2 = charCodeAt(s, i + 2)
+
+        result = stringConcat(result, b64EncodeChar(b0 / 4))
+        result = stringConcat(result, b64EncodeChar((b0 - (b0 / 4) * 4) * 16 + b1 / 16))
+        result = stringConcat(result, b64EncodeChar((b1 - (b1 / 16) * 16) * 4 + b2 / 64))
+        result = stringConcat(result, b64EncodeChar(b2 - (b2 / 64) * 64))
+
+        i = i + 3
+    }
+
+    val remaining = len - i
+    if (remaining == 1) {
+        val b0 = charCodeAt(s, i)
+        result = stringConcat(result, b64EncodeChar(b0 / 4))
+        result = stringConcat(result, b64EncodeChar((b0 - (b0 / 4) * 4) * 16))
+        result = stringConcat(result, "==")
+    }
+    if (remaining == 2) {
+        val b0 = charCodeAt(s, i)
+        val b1 = charCodeAt(s, i + 1)
+        result = stringConcat(result, b64EncodeChar(b0 / 4))
+        result = stringConcat(result, b64EncodeChar((b0 - (b0 / 4) * 4) * 16 + b1 / 16))
+        result = stringConcat(result, b64EncodeChar((b1 - (b1 / 16) * 16) * 4))
+        result = stringConcat(result, "=")
+    }
+
+    return result
+}
+
+// ── Decode ──────────────────────────────────────────────────────────────
+
+fun base64Decode(s: String): String {
+    val len = stringLength(s)
+    if (len == 0) { return "" }
+
+    var result: String = ""
+    var i: Int = 0
+
+    while (i + 3 < len) {
+        val c0 = b64DecodeChar(charCodeAt(s, i))
+        val c1 = b64DecodeChar(charCodeAt(s, i + 1))
+        val c2 = b64DecodeChar(charCodeAt(s, i + 2))
+        val c3 = b64DecodeChar(charCodeAt(s, i + 3))
+
+        // Skip invalid characters
+        if (c0 < 0 - 1) {
+            i = i + 1
+        } else {
+            val v1 = if (c1 == 0 - 1) { 0 } else { c1 }
+            val v2 = if (c2 == 0 - 1) { 0 } else { c2 }
+            val v3 = if (c3 == 0 - 1) { 0 } else { c3 }
+
+            // First byte always present
+            result = stringConcat(result, intToChar(c0 * 4 + v1 / 16))
+
+            // Second byte (skip if c2 is padding)
+            if (c2 != 0 - 1) {
+                result = stringConcat(result, intToChar((v1 - (v1 / 16) * 16) * 16 + v2 / 4))
+            }
+
+            // Third byte (skip if c3 is padding)
+            if (c3 != 0 - 1) {
+                result = stringConcat(result, intToChar((v2 - (v2 / 4) * 4) * 64 + v3))
+            }
+
+            i = i + 4
+        }
+    }
+
+    return result
+}

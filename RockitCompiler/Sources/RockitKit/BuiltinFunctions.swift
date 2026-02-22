@@ -566,6 +566,7 @@ public final class BuiltinRegistry {
         registerHeapAwareStringBuiltins(heap: heap)
         registerProcessBuiltins(heap: heap)
         registerFileIOBuiltins(heap: heap)
+        registerNetworkBuiltins(heap: heap)
         registerTypeCheckBuiltins(heap: heap)
         registerCompilerBuiltins()
     }
@@ -1061,6 +1062,120 @@ public final class BuiltinRegistry {
             let listObj = try heap.get(listId)
             listObj.listStorage = utf8Bytes.map { .int(Int64($0)) }
             return .objectRef(listId)
+        }
+    }
+
+    // MARK: Network, Time & Random Builtins
+
+    private func registerNetworkBuiltins(heap: Heap) {
+        register(name: "tcpConnect") { args in
+            guard args.count >= 2,
+                  case .string(let host) = args[0],
+                  case .int(let port) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, Int", actual: "invalid args", operation: "tcpConnect")
+            }
+            var hints = addrinfo()
+            hints.ai_socktype = SOCK_STREAM
+            var result: UnsafeMutablePointer<addrinfo>?
+            let portStr = String(port)
+            let ret = getaddrinfo(host, portStr, &hints, &result)
+            guard ret == 0, let addrInfo = result else {
+                if let r = result { freeaddrinfo(r) }
+                return .int(-1)
+            }
+            let fd = socket(Int32(addrInfo.pointee.ai_family),
+                           Int32(addrInfo.pointee.ai_socktype),
+                           Int32(addrInfo.pointee.ai_protocol))
+            guard fd >= 0 else {
+                freeaddrinfo(addrInfo)
+                return .int(-1)
+            }
+            let connResult = connect(fd, addrInfo.pointee.ai_addr,
+                                     addrInfo.pointee.ai_addrlen)
+            freeaddrinfo(addrInfo)
+            guard connResult == 0 else {
+                close(fd)
+                return .int(-1)
+            }
+            return .int(Int64(fd))
+        }
+
+        register(name: "tcpSend") { args in
+            guard args.count >= 2,
+                  case .int(let fd) = args[0],
+                  case .string(let data) = args[1] else {
+                throw VMError.typeMismatch(expected: "Int, String", actual: "invalid args", operation: "tcpSend")
+            }
+            let bytes = Array(data.utf8)
+            let sent = bytes.withUnsafeBufferPointer { buf in
+                send(Int32(fd), buf.baseAddress, buf.count, 0)
+            }
+            return .int(Int64(sent))
+        }
+
+        register(name: "tcpRecv") { args in
+            guard args.count >= 2,
+                  case .int(let fd) = args[0],
+                  case .int(let maxBytes) = args[1] else {
+                throw VMError.typeMismatch(expected: "Int, Int", actual: "invalid args", operation: "tcpRecv")
+            }
+            var buffer = [UInt8](repeating: 0, count: Int(maxBytes))
+            let n = buffer.withUnsafeMutableBufferPointer { buf in
+                recv(Int32(fd), buf.baseAddress, buf.count, 0)
+            }
+            if n <= 0 { return .string("") }
+            return .string(String(bytes: buffer[0..<n], encoding: .utf8) ?? "")
+        }
+
+        register(name: "tcpClose") { args in
+            guard case .int(let fd) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "tcpClose")
+            }
+            close(Int32(fd))
+            return .unit
+        }
+
+        register(name: "currentTimeMillis") { _ in
+            let ms = Int64(Date().timeIntervalSince1970 * 1000)
+            return .int(ms)
+        }
+
+        register(name: "sleepMillis") { args in
+            guard case .int(let ms) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "sleepMillis")
+            }
+            usleep(UInt32(ms * 1000))
+            return .unit
+        }
+
+        register(name: "randomInt") { args in
+            guard case .int(let bound) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "randomInt")
+            }
+            if bound <= 0 { return .int(0) }
+            return .int(Int64.random(in: 0..<bound))
+        }
+
+        register(name: "epochToComponents") { args in
+            guard case .int(let epochSec) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "epochToComponents")
+            }
+            let date = Date(timeIntervalSince1970: TimeInterval(epochSec))
+            let cal = Calendar(identifier: .gregorian)
+            let tz = TimeZone(identifier: "UTC")!
+            let comps = cal.dateComponents(in: tz, from: date)
+            let mapId = heap.allocate(typeName: "HashMap")
+            let mapObj = try heap.get(mapId)
+            mapObj.mapStorage = [:]
+            mapObj.mapStorage?[.string("year")] = .int(Int64(comps.year ?? 1970))
+            mapObj.mapStorage?[.string("month")] = .int(Int64(comps.month ?? 1))
+            mapObj.mapStorage?[.string("day")] = .int(Int64(comps.day ?? 1))
+            mapObj.mapStorage?[.string("hour")] = .int(Int64(comps.hour ?? 0))
+            mapObj.mapStorage?[.string("minute")] = .int(Int64(comps.minute ?? 0))
+            mapObj.mapStorage?[.string("second")] = .int(Int64(comps.second ?? 0))
+            // 1=Sunday in Calendar, convert to 0=Sunday
+            mapObj.mapStorage?[.string("dayOfWeek")] = .int(Int64((comps.weekday ?? 1) - 1))
+            return .objectRef(mapId)
         }
     }
 

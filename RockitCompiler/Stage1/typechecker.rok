@@ -179,6 +179,22 @@ fun registerBuiltins(tc: Map): Unit {
     registerFn(fns, "processExit", 1, "Unit")
     registerFn(fns, "getEnv", 1, "String")
 
+    // Networking
+    registerFn(fns, "tcpConnect", 2, "Int")
+    registerFn(fns, "tcpSend", 2, "Int")
+    registerFn(fns, "tcpRecv", 2, "String")
+    registerFn(fns, "tcpClose", 1, "Unit")
+
+    // Time
+    registerFn(fns, "currentTimeMillis", 0, "Int")
+    registerFn(fns, "sleepMillis", 1, "Unit")
+
+    // Random
+    registerFn(fns, "randomInt", 1, "Int")
+
+    // Date components
+    registerFn(fns, "epochToComponents", 1, "Map")
+
     // Misc
     registerFn(fns, "panic", 1, "Unit")
     registerFn(fns, "typeOf", 1, "String")

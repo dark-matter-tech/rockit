@@ -1,0 +1,390 @@
+// rockit.net.ws — WebSocket client (RFC 6455)
+// Uses tcpConnect/tcpSend/tcpRecv/tcpClose, randomInt, and inline base64
+
+// ── Frame Types ─────────────────────────────────────────────────────────
+
+fun WS_TEXT(): Int     { return 1 }
+fun WS_BINARY(): Int   { return 2 }
+fun WS_CLOSE(): Int    { return 8 }
+fun WS_PING(): Int     { return 9 }
+fun WS_PONG(): Int     { return 10 }
+
+// ── Connection ──────────────────────────────────────────────────────────
+
+fun wsConnect(url: String): Map {
+    val result = mapCreate()
+
+    // Parse ws://host:port/path
+    val host = wsParseHost(url)
+    val port = wsParsePort(url)
+    val path = wsParsePath(url)
+
+    if (stringLength(host) == 0) {
+        mapPut(result, "fd", 0 - 1)
+        mapPut(result, "error", "Invalid WebSocket URL")
+        return result
+    }
+
+    // TCP connect
+    val fd = tcpConnect(host, port)
+    if (fd < 0) {
+        mapPut(result, "fd", 0 - 1)
+        mapPut(result, "error", stringConcat("Connection failed to ", host))
+        return result
+    }
+
+    // Generate random WebSocket key (16 bytes → base64)
+    val key = wsGenerateKey()
+
+    // Send HTTP upgrade request
+    var req: String = stringConcat("GET ", stringConcat(path, " HTTP/1.1\r\n"))
+    req = stringConcat(req, stringConcat("Host: ", stringConcat(host, "\r\n")))
+    req = stringConcat(req, "Upgrade: websocket\r\n")
+    req = stringConcat(req, "Connection: Upgrade\r\n")
+    req = stringConcat(req, stringConcat("Sec-WebSocket-Key: ", stringConcat(key, "\r\n")))
+    req = stringConcat(req, "Sec-WebSocket-Version: 13\r\n")
+    req = stringConcat(req, "\r\n")
+
+    val sent = tcpSend(fd, req)
+    if (sent < 0) {
+        tcpClose(fd)
+        mapPut(result, "fd", 0 - 1)
+        mapPut(result, "error", "Failed to send upgrade request")
+        return result
+    }
+
+    // Read response
+    val response = tcpRecv(fd, 4096)
+    if (stringLength(response) == 0) {
+        tcpClose(fd)
+        mapPut(result, "fd", 0 - 1)
+        mapPut(result, "error", "No response to upgrade request")
+        return result
+    }
+
+    // Verify 101 response
+    val statusIdx = stringIndexOf(response, "101")
+    if (statusIdx < 0) {
+        tcpClose(fd)
+        mapPut(result, "fd", 0 - 1)
+        mapPut(result, "error", stringConcat("Upgrade rejected: ", substring(response, 0, if (stringLength(response) > 80) { 80 } else { stringLength(response) })))
+        return result
+    }
+
+    mapPut(result, "fd", fd)
+    mapPut(result, "error", "")
+    return result
+}
+
+fun wsClose(ws: Map): Unit {
+    val fd = toInt(mapGet(ws, "fd"))
+    if (fd >= 0) {
+        // Send close frame (opcode 0x88)
+        wsSendFrame(fd, WS_CLOSE(), "")
+        tcpClose(fd)
+    }
+}
+
+fun wsIsOpen(ws: Map): Bool {
+    val fd = toInt(mapGet(ws, "fd"))
+    return fd >= 0
+}
+
+// ── Messaging ───────────────────────────────────────────────────────────
+
+fun wsSend(ws: Map, message: String): Bool {
+    val fd = toInt(mapGet(ws, "fd"))
+    if (fd < 0) { return false }
+    return wsSendFrame(fd, WS_TEXT(), message)
+}
+
+fun wsSendBinary(ws: Map, data: String): Bool {
+    val fd = toInt(mapGet(ws, "fd"))
+    if (fd < 0) { return false }
+    return wsSendFrame(fd, WS_BINARY(), data)
+}
+
+fun wsRecv(ws: Map): Map {
+    val result = mapCreate()
+    val fd = toInt(mapGet(ws, "fd"))
+    if (fd < 0) {
+        mapPut(result, "type", 0 - 1)
+        mapPut(result, "data", "")
+        return result
+    }
+
+    // Read frame header (at least 2 bytes)
+    val header = tcpRecv(fd, 2)
+    if (stringLength(header) < 2) {
+        mapPut(result, "type", 0 - 1)
+        mapPut(result, "data", "")
+        return result
+    }
+
+    val byte0 = charCodeAt(header, 0)
+    val byte1 = charCodeAt(header, 1)
+
+    val opcode = byte0 - (byte0 / 16) * 16  // byte0 & 0x0F
+    val masked = byte1 / 128                  // (byte1 >> 7) & 1
+    var payloadLen: Int = byte1 - masked * 128  // byte1 & 0x7F
+
+    // Handle extended payload length
+    if (payloadLen == 126) {
+        val extLen = tcpRecv(fd, 2)
+        if (stringLength(extLen) >= 2) {
+            payloadLen = charCodeAt(extLen, 0) * 256 + charCodeAt(extLen, 1)
+        }
+    }
+    // 8-byte length (payloadLen == 127) not fully supported in v1
+    if (payloadLen == 127) {
+        val extLen = tcpRecv(fd, 8)
+        if (stringLength(extLen) >= 8) {
+            // Read lower 4 bytes only (sufficient for most messages)
+            payloadLen = charCodeAt(extLen, 4) * 16777216 +
+                         charCodeAt(extLen, 5) * 65536 +
+                         charCodeAt(extLen, 6) * 256 +
+                         charCodeAt(extLen, 7)
+        }
+    }
+
+    // Read masking key if present
+    var maskKey: String = ""
+    if (masked == 1) {
+        maskKey = tcpRecv(fd, 4)
+    }
+
+    // Read payload
+    var payload: String = ""
+    if (payloadLen > 0) {
+        payload = tcpRecv(fd, payloadLen)
+    }
+
+    // Unmask if needed
+    if (masked == 1) {
+        if (stringLength(maskKey) >= 4) {
+            payload = wsUnmask(payload, maskKey)
+        }
+    }
+
+    // Handle control frames
+    if (opcode == WS_PING()) {
+        // Auto-respond with pong
+        wsSendFrame(fd, WS_PONG(), payload)
+        // Recurse to get actual data frame
+        return wsRecv(ws)
+    }
+
+    mapPut(result, "type", opcode)
+    mapPut(result, "data", payload)
+    return result
+}
+
+// ── Frame Encoding ──────────────────────────────────────────────────────
+
+fun wsSendFrame(fd: Int, opcode: Int, payload: String): Bool {
+    val payloadLen = stringLength(payload)
+
+    // Build frame header
+    // Byte 0: FIN(1) + opcode
+    val byte0 = 128 + opcode  // 0x80 | opcode (FIN bit set)
+
+    // Byte 1: MASK(1) + payload length (client must mask)
+    var header: String = ""
+    header = stringConcat(header, intToChar(byte0))
+
+    if (payloadLen < 126) {
+        header = stringConcat(header, intToChar(128 + payloadLen))  // 0x80 | len
+    } else {
+        if (payloadLen < 65536) {
+            header = stringConcat(header, intToChar(128 + 126))     // 0x80 | 126
+            header = stringConcat(header, intToChar(payloadLen / 256))
+            header = stringConcat(header, intToChar(payloadLen - (payloadLen / 256) * 256))
+        } else {
+            // 8-byte length
+            header = stringConcat(header, intToChar(128 + 127))     // 0x80 | 127
+            var k: Int = 0
+            while (k < 4) {
+                header = stringConcat(header, intToChar(0))
+                k = k + 1
+            }
+            header = stringConcat(header, intToChar(payloadLen / 16777216))
+            header = stringConcat(header, intToChar((payloadLen / 65536) - (payloadLen / 16777216) * 256))
+            header = stringConcat(header, intToChar((payloadLen / 256) - (payloadLen / 65536) * 256))
+            header = stringConcat(header, intToChar(payloadLen - (payloadLen / 256) * 256))
+        }
+    }
+
+    // Generate 4-byte masking key
+    val m0 = randomInt(256)
+    val m1 = randomInt(256)
+    val m2 = randomInt(256)
+    val m3 = randomInt(256)
+    header = stringConcat(header, intToChar(m0))
+    header = stringConcat(header, intToChar(m1))
+    header = stringConcat(header, intToChar(m2))
+    header = stringConcat(header, intToChar(m3))
+
+    // Mask payload
+    var masked: String = ""
+    var i: Int = 0
+    while (i < payloadLen) {
+        val b = charCodeAt(payload, i)
+        val maskByte = if (i - (i / 4) * 4 == 0) { m0 }
+                       else { if (i - (i / 4) * 4 == 1) { m1 }
+                       else { if (i - (i / 4) * 4 == 2) { m2 }
+                       else { m3 } } }
+        masked = stringConcat(masked, intToChar(wsXor(b, maskByte)))
+        i = i + 1
+    }
+
+    // Send header + masked payload
+    val frame = stringConcat(header, masked)
+    val sent = tcpSend(fd, frame)
+    return sent >= 0
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+fun wsUnmask(data: String, maskKey: String): String {
+    val len = stringLength(data)
+    var result: String = ""
+    var i: Int = 0
+    while (i < len) {
+        val b = charCodeAt(data, i)
+        val m = charCodeAt(maskKey, i - (i / 4) * 4)
+        result = stringConcat(result, intToChar(wsXor(b, m)))
+        i = i + 1
+    }
+    return result
+}
+
+fun wsXor(a: Int, b: Int): Int {
+    // Bitwise XOR using arithmetic (for 8-bit values)
+    var result: Int = 0
+    var bit: Int = 1
+    var va: Int = a
+    var vb: Int = b
+    var n: Int = 0
+    while (n < 8) {
+        val aBit = va - (va / 2) * 2
+        val bBit = vb - (vb / 2) * 2
+        if (aBit != bBit) {
+            result = result + bit
+        }
+        va = va / 2
+        vb = vb / 2
+        bit = bit * 2
+        n = n + 1
+    }
+    return result
+}
+
+fun wsGenerateKey(): String {
+    // Generate 16 random bytes and base64-encode them
+    var raw: String = ""
+    var i: Int = 0
+    while (i < 16) {
+        raw = stringConcat(raw, intToChar(randomInt(256)))
+        i = i + 1
+    }
+    return wsBase64Encode(raw)
+}
+
+// Minimal inline base64 for WebSocket handshake key
+fun wsBase64Encode(s: String): String {
+    val len = stringLength(s)
+    var result: String = ""
+    var i: Int = 0
+
+    while (i + 2 < len) {
+        val b0 = charCodeAt(s, i)
+        val b1 = charCodeAt(s, i + 1)
+        val b2 = charCodeAt(s, i + 2)
+        result = stringConcat(result, wsB64Char(b0 / 4))
+        result = stringConcat(result, wsB64Char((b0 - (b0 / 4) * 4) * 16 + b1 / 16))
+        result = stringConcat(result, wsB64Char((b1 - (b1 / 16) * 16) * 4 + b2 / 64))
+        result = stringConcat(result, wsB64Char(b2 - (b2 / 64) * 64))
+        i = i + 3
+    }
+
+    val rem = len - i
+    if (rem == 1) {
+        val b0 = charCodeAt(s, i)
+        result = stringConcat(result, wsB64Char(b0 / 4))
+        result = stringConcat(result, wsB64Char((b0 - (b0 / 4) * 4) * 16))
+        result = stringConcat(result, "==")
+    }
+    if (rem == 2) {
+        val b0 = charCodeAt(s, i)
+        val b1 = charCodeAt(s, i + 1)
+        result = stringConcat(result, wsB64Char(b0 / 4))
+        result = stringConcat(result, wsB64Char((b0 - (b0 / 4) * 4) * 16 + b1 / 16))
+        result = stringConcat(result, wsB64Char((b1 - (b1 / 16) * 16) * 4))
+        result = stringConcat(result, "=")
+    }
+    return result
+}
+
+fun wsB64Char(index: Int): String {
+    if (index < 26) { return intToChar(65 + index) }
+    if (index < 52) { return intToChar(97 + index - 26) }
+    if (index < 62) { return intToChar(48 + index - 52) }
+    if (index == 62) { return "+" }
+    return "/"
+}
+
+// ── URL Parsing (minimal inline) ────────────────────────────────────────
+
+fun wsParseHost(url: String): String {
+    val idx = stringIndexOf(url, "://")
+    var start: Int = 0
+    if (idx >= 0) { start = idx + 3 }
+    val len = stringLength(url)
+    var hostEnd: Int = len  // default: rest is host
+    var i: Int = start
+    while (i < len) {
+        if (hostEnd == len) {
+            val ch = charCodeAt(url, i)
+            if (ch == 47) { hostEnd = i }
+            else { if (ch == 58) { hostEnd = i } }
+        }
+        i = i + 1
+    }
+    return substring(url, start, hostEnd)
+}
+
+fun wsParsePort(url: String): Int {
+    val idx = stringIndexOf(url, "://")
+    var start: Int = 0
+    if (idx >= 0) { start = idx + 3 }
+    val len = stringLength(url)
+    var colonPos: Int = 0 - 1
+    var endPos: Int = len
+    var i: Int = start
+    while (i < len) {
+        val ch = charCodeAt(url, i)
+        if (ch == 58) { if (colonPos < 0) { colonPos = i } }
+        if (ch == 47) { if (endPos == len) { endPos = i } }
+        i = i + 1
+    }
+    if (colonPos < 0) { return 80 }
+    if (colonPos >= endPos) { return 80 }
+    val portStr = substring(url, colonPos + 1, endPos)
+    if (stringLength(portStr) == 0) { return 80 }
+    return toInt(portStr)
+}
+
+fun wsParsePath(url: String): String {
+    val idx = stringIndexOf(url, "://")
+    var start: Int = 0
+    if (idx >= 0) { start = idx + 3 }
+    val len = stringLength(url)
+    var i: Int = start
+    while (i < len) {
+        if (charCodeAt(url, i) == 47) {
+            return substring(url, i, len)
+        }
+        i = i + 1
+    }
+    return "/"
+}

@@ -1,0 +1,120 @@
+// rockit.time.datetime — Date and time utilities
+// Uses currentTimeMillis and epochToComponents builtins
+
+fun now(): Int {
+    return currentTimeMillis()
+}
+
+fun epochSeconds(): Int {
+    return currentTimeMillis() / 1000
+}
+
+fun dateFromEpoch(epochMs: Int): Map {
+    return epochToComponents(epochMs / 1000)
+}
+
+fun formatDate(d: Map, pattern: String): String {
+    val year = toInt(mapGet(d, "year"))
+    val month = toInt(mapGet(d, "month"))
+    val day = toInt(mapGet(d, "day"))
+
+    if (pattern == "YYYY-MM-DD") {
+        return stringConcat(stringConcat(stringConcat(stringConcat(
+            dtZeroPad(toString(year), 4), "-"),
+            dtZeroPad(toString(month), 2)), "-"),
+            dtZeroPad(toString(day), 2))
+    }
+    if (pattern == "MM/DD/YYYY") {
+        return stringConcat(stringConcat(stringConcat(stringConcat(
+            dtZeroPad(toString(month), 2), "/"),
+            dtZeroPad(toString(day), 2)), "/"),
+            dtZeroPad(toString(year), 4))
+    }
+    if (pattern == "DD.MM.YYYY") {
+        return stringConcat(stringConcat(stringConcat(stringConcat(
+            dtZeroPad(toString(day), 2), "."),
+            dtZeroPad(toString(month), 2)), "."),
+            dtZeroPad(toString(year), 4))
+    }
+    // Default: YYYY-MM-DD
+    return stringConcat(stringConcat(stringConcat(stringConcat(
+        dtZeroPad(toString(year), 4), "-"),
+        dtZeroPad(toString(month), 2)), "-"),
+        dtZeroPad(toString(day), 2))
+}
+
+fun formatTime(d: Map): String {
+    val hour = toInt(mapGet(d, "hour"))
+    val minute = toInt(mapGet(d, "minute"))
+    val second = toInt(mapGet(d, "second"))
+
+    return stringConcat(stringConcat(stringConcat(stringConcat(
+        dtZeroPad(toString(hour), 2), ":"),
+        dtZeroPad(toString(minute), 2)), ":"),
+        dtZeroPad(toString(second), 2))
+}
+
+fun formatDateTime(d: Map): String {
+    return stringConcat(stringConcat(formatDate(d, "YYYY-MM-DD"), "T"), formatTime(d))
+}
+
+fun isLeapYear(year: Int): Bool {
+    if (year - (year / 400) * 400 == 0) { return true }
+    if (year - (year / 100) * 100 == 0) { return false }
+    if (year - (year / 4) * 4 == 0) { return true }
+    return false
+}
+
+fun daysInMonth(year: Int, month: Int): Int {
+    if (month == 1) { return 31 }
+    if (month == 2) {
+        if (isLeapYear(year)) { return 29 }
+        return 28
+    }
+    if (month == 3) { return 31 }
+    if (month == 4) { return 30 }
+    if (month == 5) { return 31 }
+    if (month == 6) { return 30 }
+    if (month == 7) { return 31 }
+    if (month == 8) { return 31 }
+    if (month == 9) { return 30 }
+    if (month == 10) { return 31 }
+    if (month == 11) { return 30 }
+    if (month == 12) { return 31 }
+    return 0
+}
+
+fun dayOfWeek(year: Int, month: Int, day: Int): Int {
+    // Tomohiko Sakamoto's algorithm: 0=Sunday..6=Saturday
+    val tTable = listCreate()
+    listAppend(tTable, 0)
+    listAppend(tTable, 3)
+    listAppend(tTable, 2)
+    listAppend(tTable, 5)
+    listAppend(tTable, 0)
+    listAppend(tTable, 3)
+    listAppend(tTable, 5)
+    listAppend(tTable, 1)
+    listAppend(tTable, 4)
+    listAppend(tTable, 6)
+    listAppend(tTable, 2)
+    listAppend(tTable, 4)
+
+    var y: Int = year
+    if (month < 3) { y = y - 1 }
+
+    val t = toInt(listGet(tTable, month - 1))
+    val result = y + y / 4 - y / 100 + y / 400 + t + day
+    // Modulo 7
+    return result - (result / 7) * 7
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+fun dtZeroPad(s: String, width: Int): String {
+    var result: String = s
+    while (stringLength(result) < width) {
+        result = stringConcat("0", result)
+    }
+    return result
+}

@@ -1,0 +1,46 @@
+// rockit.core.uuid — UUID v4 generation
+// Uses randomInt builtin
+
+fun uuid4(): String {
+    // Generate 16 random bytes as a v4 UUID
+    // Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    // where y is one of 8, 9, a, b
+
+    var result: String = ""
+    var i: Int = 0
+    while (i < 16) {
+        var b: Int = randomInt(256)
+
+        // Set version field (byte 6): high nibble = 4
+        if (i == 6) {
+            b = 64 + (b - (b / 16) * 16)  // 0x40 | (b & 0x0F)
+        }
+        // Set variant field (byte 8): high 2 bits = 10
+        if (i == 8) {
+            b = 128 + (b - (b / 64) * 64)  // 0x80 | (b & 0x3F)
+        }
+
+        result = stringConcat(result, uuidHexByte(b))
+
+        // Add dashes after bytes 3, 5, 7, 9
+        if (i == 3) { result = stringConcat(result, "-") }
+        if (i == 5) { result = stringConcat(result, "-") }
+        if (i == 7) { result = stringConcat(result, "-") }
+        if (i == 9) { result = stringConcat(result, "-") }
+
+        i = i + 1
+    }
+
+    return result
+}
+
+fun uuidHexByte(b: Int): String {
+    val hi = b / 16
+    val lo = b - hi * 16
+    return stringConcat(uuidHexDigit(hi), uuidHexDigit(lo))
+}
+
+fun uuidHexDigit(n: Int): String {
+    if (n < 10) { return intToChar(48 + n) }   // '0'-'9'
+    return intToChar(97 + n - 10)                // 'a'-'f'
+}

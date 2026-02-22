@@ -1,0 +1,103 @@
+// test_stdlib_http.rok — Integration test for stdlib Foundation modules
+import rockit.net.http
+import rockit.net.url
+import rockit.encoding.base64
+import rockit.time.datetime
+import rockit.core.uuid
+import rockit.io.path
+
+fun check(label: String, ok: Bool): Unit {
+    if (ok) {
+        println(stringConcat("  PASS: ", label))
+    } else {
+        println(stringConcat("  FAIL: ", label))
+    }
+}
+
+fun main() {
+    println("=== Rockit Foundation Tests ===")
+
+    // ── Base64 ──────────────────────────────────────────────
+    println("\n--- Base64 ---")
+    val encoded = base64Encode("Hello, World!")
+    println(stringConcat("Encoded: ", encoded))
+    val decoded = base64Decode(encoded)
+    println(stringConcat("Decoded: ", decoded))
+    check("roundtrip", decoded == "Hello, World!")
+    check("empty", base64Encode("") == "")
+    check("1 byte", base64Encode("a") == "YQ==")
+    check("2 bytes", base64Encode("ab") == "YWI=")
+    check("3 bytes", base64Encode("abc") == "YWJj")
+
+    // ── URL Parser ──────────────────────────────────────────
+    println("\n--- URL Parser ---")
+    val parsed = urlParse("http://example.com:8080/path?key=value&foo=bar#section")
+    println(stringConcat("Scheme: ", urlScheme(parsed)))
+    println(stringConcat("Host: ", urlHost(parsed)))
+    println(stringConcat("Port: ", toString(urlPort(parsed))))
+    println(stringConcat("Path: ", urlPath(parsed)))
+    println(stringConcat("Query: ", urlQuery(parsed)))
+    println(stringConcat("Fragment: ", urlFragment(parsed)))
+    check("scheme", urlScheme(parsed) == "http")
+    check("host", urlHost(parsed) == "example.com")
+    check("port", urlPort(parsed) == 8080)
+    check("path", urlPath(parsed) == "/path")
+    check("fragment", urlFragment(parsed) == "section")
+
+    val urlEncoded = urlEncode("hello world&foo=bar")
+    println(stringConcat("URL Encoded: ", urlEncoded))
+    val urlDecoded = urlDecode(urlEncoded)
+    check("url roundtrip", urlDecoded == "hello world&foo=bar")
+
+    // ── Path Utils ──────────────────────────────────────────
+    println("\n--- Path Utils ---")
+    check("join", pathJoin("/usr", "local") == "/usr/local")
+    check("join trailing", pathJoin("/usr/", "local") == "/usr/local")
+    check("dir", pathDir("/usr/local/bin") == "/usr/local")
+    check("base", pathBase("/usr/local/bin") == "bin")
+    check("ext", pathExt("file.txt") == ".txt")
+    check("no ext", pathExt("Makefile") == "")
+    check("without ext", pathWithoutExt("file.txt") == "file")
+    check("absolute", pathIsAbsolute("/usr") == true)
+    check("relative", pathIsAbsolute("usr") == false)
+    check("normalize", pathNormalize("/usr/local/../bin") == "/usr/bin")
+
+    // ── DateTime ────────────────────────────────────────────
+    println("\n--- DateTime ---")
+    val ms = now()
+    println(stringConcat("Current time (ms): ", toString(ms)))
+    val d = dateFromEpoch(ms)
+    println(stringConcat("Formatted: ", formatDateTime(d)))
+    check("leap 2024", isLeapYear(2024) == true)
+    check("no leap 2023", isLeapYear(2023) == false)
+    check("leap 2000", isLeapYear(2000) == true)
+    check("no leap 1900", isLeapYear(1900) == false)
+    check("feb 2024", daysInMonth(2024, 2) == 29)
+    check("feb 2023", daysInMonth(2023, 2) == 28)
+
+    // ── UUID ────────────────────────────────────────────────
+    println("\n--- UUID ---")
+    val id1 = uuid4()
+    val id2 = uuid4()
+    println(stringConcat("UUID 1: ", id1))
+    println(stringConcat("UUID 2: ", id2))
+    check("uuid length", stringLength(id1) == 36)
+    check("uuid unique", id1 != id2)
+    check("uuid version", charAt(id1, 14) == "4")
+
+    // ── HTTP (only if network available) ────────────────────
+    println("\n--- HTTP ---")
+    println("HTTP GET http://httpbin.org/get ...")
+    val resp = httpGet("http://httpbin.org/get")
+    val status = httpStatus(resp)
+    println(stringConcat("Status: ", toString(status)))
+    if (httpIsError(resp)) {
+        println(stringConcat("Error: ", httpErrorMessage(resp)))
+    } else {
+        val body = httpBody(resp)
+        println(stringConcat("Body length: ", toString(stringLength(body))))
+        check("http 200", status == 200)
+    }
+
+    println("\n=== All Foundation Tests Complete ===")
+}

@@ -540,6 +540,18 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare double @toFloat(i64)")
         externalDecls.insert("declare void @listSetFloat(ptr, i64, double)")
         externalDecls.insert("declare double @listGetFloat(ptr, i64)")
+        // Networking
+        externalDecls.insert("declare i64 @tcpConnect(ptr, i64)")
+        externalDecls.insert("declare i64 @tcpSend(i64, ptr)")
+        externalDecls.insert("declare ptr @tcpRecv(i64, i64)")
+        externalDecls.insert("declare void @tcpClose(i64)")
+        // Time
+        externalDecls.insert("declare i64 @currentTimeMillis()")
+        externalDecls.insert("declare void @sleepMillis(i64)")
+        // Random
+        externalDecls.insert("declare i64 @randomInt(i64)")
+        // Date
+        externalDecls.insert("declare i64 @epochToComponents(i64)")
     }
 
     /// Scan emitted IR for `call` instructions and auto-declare any functions

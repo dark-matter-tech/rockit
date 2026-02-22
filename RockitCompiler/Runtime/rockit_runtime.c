@@ -1429,3 +1429,105 @@ double rockit_math_log(double x)   { return log(x); }
 double rockit_math_exp(double x)   { return exp(x); }
 double rockit_math_abs(double x)   { return fabs(x); }
 double rockit_math_atan2(double y, double x) { return atan2(y, x); }
+
+// ── Networking, Time & Random (Foundation builtins) ────────────────────────
+
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <sys/time.h>
+
+static int random_seeded = 0;
+
+int64_t randomInt(int64_t bound) {
+    if (!random_seeded) {
+        srand((unsigned int)time(NULL));
+        random_seeded = 1;
+    }
+    if (bound <= 0) return 0;
+    return (int64_t)(rand() % (int)bound);
+}
+
+int64_t currentTimeMillis(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int64_t)tv.tv_sec * 1000 + (int64_t)tv.tv_usec / 1000;
+}
+
+void sleepMillis(int64_t ms) {
+    usleep((useconds_t)(ms * 1000));
+}
+
+int64_t epochToComponents(int64_t epochSec) {
+    // Returns a Rockit Map with year, month, day, hour, minute, second
+    // Use the runtime's mapCreate/mapPut
+    int64_t map = mapCreate();
+    time_t t = (time_t)epochSec;
+    struct tm *tm = gmtime(&t);
+    if (tm) {
+        mapPut(map, rockit_string_new("year"), (int64_t)(tm->tm_year + 1900));
+        mapPut(map, rockit_string_new("month"), (int64_t)(tm->tm_mon + 1));
+        mapPut(map, rockit_string_new("day"), (int64_t)tm->tm_mday);
+        mapPut(map, rockit_string_new("hour"), (int64_t)tm->tm_hour);
+        mapPut(map, rockit_string_new("minute"), (int64_t)tm->tm_min);
+        mapPut(map, rockit_string_new("second"), (int64_t)tm->tm_sec);
+    }
+    return map;
+}
+
+int64_t tcpConnect(const char *host_str, int64_t port) {
+    // host_str is a Rockit string pointer — extract chars
+    if (!host_str) return -1;
+    int64_t *hdr = (int64_t *)host_str;
+    int64_t len = hdr[1];
+    char *chars = (char *)hdr[2];
+
+    // Null-terminate the hostname
+    char hostname[256];
+    if (len >= 256) len = 255;
+    memcpy(hostname, chars, len);
+    hostname[len] = '\0';
+
+    char portstr[16];
+    snprintf(portstr, sizeof(portstr), "%d", (int)port);
+
+    struct addrinfo hints = {0}, *res;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo(hostname, portstr, &hints, &res) != 0) return -1;
+
+    int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (fd < 0) { freeaddrinfo(res); return -1; }
+
+    if (connect(fd, res->ai_addr, res->ai_addrlen) < 0) {
+        close(fd);
+        freeaddrinfo(res);
+        return -1;
+    }
+    freeaddrinfo(res);
+    return (int64_t)fd;
+}
+
+int64_t tcpSend(int64_t fd, const char *msg_str) {
+    if (!msg_str) return 0;
+    int64_t *hdr = (int64_t *)msg_str;
+    int64_t len = hdr[1];
+    char *chars = (char *)hdr[2];
+    ssize_t sent = send((int)fd, chars, (size_t)len, 0);
+    return (int64_t)sent;
+}
+
+RockitString *tcpRecv(int64_t fd, int64_t maxBytes) {
+    char *buf = malloc(maxBytes + 1);
+    if (!buf) return rockit_string_new("");
+    ssize_t n = recv((int)fd, buf, (size_t)maxBytes, 0);
+    if (n <= 0) { free(buf); return rockit_string_new(""); }
+    buf[n] = '\0';
+    RockitString *result = rockit_string_new(buf);
+    free(buf);
+    return result;
+}
+
+void tcpClose(int64_t fd) {
+    close((int)fd);
+}
