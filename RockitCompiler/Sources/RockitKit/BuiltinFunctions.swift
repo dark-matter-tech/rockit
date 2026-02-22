@@ -1075,7 +1075,11 @@ public final class BuiltinRegistry {
                 throw VMError.typeMismatch(expected: "String, Int", actual: "invalid args", operation: "tcpConnect")
             }
             var hints = addrinfo()
+            #if os(Linux)
+            hints.ai_socktype = Int32(SOCK_STREAM.rawValue)
+            #else
             hints.ai_socktype = SOCK_STREAM
+            #endif
             var result: UnsafeMutablePointer<addrinfo>?
             let portStr = String(port)
             let ret = getaddrinfo(host, portStr, &hints, &result)
