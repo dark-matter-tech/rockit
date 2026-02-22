@@ -428,12 +428,14 @@ RockitMap* rockit_map_create(void) {
 }
 
 static int64_t map_hash(int64_t key, int64_t capacity) {
-    // Simple hash — works for ints, pointers cast to int
-    uint64_t h = (uint64_t)key;
-    h ^= h >> 33;
-    h *= 0xff51afd7ed558ccd;
-    h ^= h >> 33;
-    return (int64_t)(h % (uint64_t)capacity);
+    // Must match Runtime/rockit/map.rok int_hash exactly for bootstrap
+    int64_t h = key;
+    if (h < 0) h = -h;
+    uint64_t uh = (uint64_t)h;
+    uh = uh + uh * 65599ULL;
+    h = (int64_t)uh;
+    if (h < 0) h = -h;
+    return h % capacity;
 }
 
 static void map_grow(RockitMap* map) {
@@ -550,8 +552,8 @@ RockitList* rockit_map_values(RockitMap* map) {
 
 void rockit_map_remove(RockitMap* map, int64_t key) {
     if (!map || map->size == 0) return;
-    uint64_t h = ((uint64_t)key * 2654435761ULL) % (uint64_t)map->capacity;
-    uint64_t start = h;
+    int64_t h = map_hash(key, map->capacity);
+    int64_t start = h;
     while (map->entries[h].occupied) {
         if (map->entries[h].key == key) {
             map->entries[h].occupied = 0;
@@ -560,7 +562,7 @@ void rockit_map_remove(RockitMap* map, int64_t key) {
             map->size--;
             return;
         }
-        h = (h + 1) % (uint64_t)map->capacity;
+        h = (h + 1) % map->capacity;
         if (h == start) break;
     }
 }
