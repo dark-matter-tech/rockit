@@ -35,9 +35,15 @@ public final class AnalysisEngine {
 
         // Phase 2: Parse
         let parser = Parser(tokens: tokens, diagnostics: diagnosticEngine)
-        let ast = parser.parse()
+        let parsedAst = parser.parse()
 
-        // Phase 3: Type check (skip import resolution for single-file mode)
+        // Phase 2.5: Resolve imports (load stdlib modules)
+        let sourceDir = (path as NSString).deletingLastPathComponent
+        let stdlibPaths = findStdlibDir().map { [$0] } ?? []
+        let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: stdlibPaths, diagnostics: diagnosticEngine)
+        let ast = importResolver.resolve(parsedAst)
+
+        // Phase 3: Type check
         let checker = TypeChecker(ast: ast, diagnostics: diagnosticEngine)
         let typeResult = checker.check()
 
@@ -74,5 +80,55 @@ public final class AnalysisEngine {
             )
         }
         return analyze(uri: uri)
+    }
+
+    /// Find the stdlib directory for import resolution.
+    private func findStdlibDir() -> String? {
+        let fm = FileManager.default
+
+        // 1. ROCKIT_STDLIB_DIR environment variable
+        if let envDir = ProcessInfo.processInfo.environment["ROCKIT_STDLIB_DIR"],
+           fm.fileExists(atPath: envDir) {
+            return envDir
+        }
+
+        // 2. Stage1/stdlib relative to CWD (development)
+        let cwd = fm.currentDirectoryPath
+        let cwdStdlib = (cwd as NSString).appendingPathComponent("Stage1/stdlib")
+        if fm.fileExists(atPath: (cwdStdlib as NSString).appendingPathComponent("rockit")) {
+            return cwdStdlib
+        }
+
+        // 3. Walk up from CWD to find Stage1/stdlib
+        var dir = cwd
+        while dir != "/" {
+            let candidate = (dir as NSString).appendingPathComponent("Stage1/stdlib")
+            if fm.fileExists(atPath: (candidate as NSString).appendingPathComponent("rockit")) {
+                return candidate
+            }
+            dir = (dir as NSString).deletingLastPathComponent
+        }
+
+        // 4. Relative to the executable (installed: share/rockit/stdlib)
+        let execPath = CommandLine.arguments[0]
+        let execDir = (execPath as NSString).deletingLastPathComponent
+        let installedStdlib = (execDir as NSString).appendingPathComponent("../share/rockit/stdlib")
+        if fm.fileExists(atPath: (installedStdlib as NSString).appendingPathComponent("rockit")) {
+            return installedStdlib
+        }
+
+        // 5. Common install locations
+        let home = NSHomeDirectory()
+        let locations = [
+            (home as NSString).appendingPathComponent(".local/share/rockit/stdlib"),
+            "/usr/local/share/rockit/stdlib",
+        ]
+        for loc in locations {
+            if fm.fileExists(atPath: (loc as NSString).appendingPathComponent("rockit")) {
+                return loc
+            }
+        }
+
+        return nil
     }
 }
