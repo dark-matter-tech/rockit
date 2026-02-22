@@ -252,6 +252,29 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
         }
     }
 
+    /**
+     * Find the rockit binary. Checks well-known locations before falling back to PATH.
+     */
+    private fun findRockitBinary(workDir: File?): String {
+        // 1. ~/.local/bin/rockit (standard user install)
+        val home = System.getProperty("user.home")
+        val localBin = File(home, ".local/bin/rockit")
+        if (localBin.exists() && localBin.canExecute()) return localBin.absolutePath
+
+        // 2. Project .build/debug/rockit (development build)
+        if (workDir != null) {
+            val debugBuild = File(workDir, ".build/debug/rockit")
+            if (debugBuild.exists() && debugBuild.canExecute()) return debugBuild.absolutePath
+        }
+
+        // 3. /usr/local/bin/rockit
+        val usrLocal = File("/usr/local/bin/rockit")
+        if (usrLocal.exists() && usrLocal.canExecute()) return usrLocal.absolutePath
+
+        // 4. Fall back to PATH
+        return "rockit"
+    }
+
     private fun runTest(element: PsiElement, filePath: String, testName: String) {
         val project = element.project
 
@@ -274,16 +297,21 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
                     dir = dir.parentFile
                 }
 
+                val rockitBin = findRockitBinary(workDir)
                 val commandLine = GeneralCommandLine(
-                    "rockit", "test", filePath, "--filter", testName, "--detailed"
+                    rockitBin, "test", filePath, "--filter", testName, "--detailed"
                 ).withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
                 if (workDir != null) {
                     commandLine.withWorkDirectory(workDir)
                 }
 
                 val process = commandLine.createProcess()
+                // Read stdout and stderr concurrently to avoid deadlocks
+                val stderrFuture = java.util.concurrent.CompletableFuture.supplyAsync {
+                    process.errorStream.bufferedReader().readText()
+                }
                 val output = process.inputStream.bufferedReader().readText()
-                val stderr = process.errorStream.bufferedReader().readText()
+                val stderr = stderrFuture.get()
                 val finished = process.waitFor(30, TimeUnit.SECONDS)
 
                 if (!finished) {
@@ -339,13 +367,25 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
                 }
 
                 if (!found) {
-                    fileStates.remove(testName)
-                    val debugMsg = buildString {
-                        append("$testName: no result parsed.\n")
-                        if (output.isNotBlank()) append("stdout: ${output.take(300)}\n")
-                        if (stderr.isNotBlank()) append("stderr: ${stderr.take(300)}")
+                    // Check for compilation error format (no ::testName in output)
+                    val compileError = output.lines().any { it.contains("compilation error") }
+                    if (compileError) {
+                        fileStates[testName] = TestState.FAILED
+                        val errors = output.lines()
+                            .filter { it.contains("error:") }
+                            .take(3)
+                            .joinToString("\n")
+                        notify(project, "$testName failed to compile:\n$errors", NotificationType.WARNING)
+                    } else {
+                        fileStates.remove(testName)
+                        val debugMsg = buildString {
+                            append("$testName: no result parsed.\n")
+                            append("Binary: $rockitBin\n")
+                            if (output.isNotBlank()) append("stdout: ${output.take(300)}\n")
+                            if (stderr.isNotBlank()) append("stderr: ${stderr.take(300)}")
+                        }
+                        notify(project, debugMsg, NotificationType.WARNING)
                     }
-                    notify(project, debugMsg, NotificationType.WARNING)
                 }
 
                 // Refresh gutter icons
