@@ -811,12 +811,18 @@ public final class LSPServer {
             return
         }
 
-        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+        guard let result = analysisEngine.getOrAnalyze(uri: uri),
+              let source = documentManager.getText(uri) else {
             sendResult(id: id, result: [Any]())
             return
         }
 
-        let lenses = CodeLensProvider.codeLenses(for: result, uri: uri)
+        let filePath = uriToPath(uri)
+        let lenses = CodeLensProvider.codeLenses(
+            for: result, uri: uri,
+            source: source, filePath: filePath,
+            workspaceRoot: workspaceRoot
+        )
         sendResult(id: id, result: lenses.map { $0.toJSON() })
     }
 

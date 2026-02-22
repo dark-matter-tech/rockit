@@ -5,7 +5,8 @@
 import Foundation
 import RockitKit
 
-/// Provides CodeLens items for @Test functions, showing inline pass/fail indicators
+/// Provides CodeLens items for @Test functions, showing inline pass/fail indicators.
+/// Tests run automatically when the file is first opened and again on each save.
 public final class CodeLensProvider {
 
     /// Result of running a single test function
@@ -21,18 +22,29 @@ public final class CodeLensProvider {
     // MARK: - Public API
 
     /// Return CodeLens items for all @Test functions in the document.
-    /// Uses cached test results if available, otherwise shows "Run Test".
+    /// Runs tests immediately if no cached results exist (first open or after save).
     public static func codeLenses(
         for result: AnalysisResult,
-        uri: String
+        uri: String,
+        source: String,
+        filePath: String,
+        workspaceRoot: String?
     ) -> [LSPCodeLens] {
-        var lenses: [LSPCodeLens] = []
+        // Discover @Test functions from the AST
+        let testFunctionNames = discoverTestFunctions(ast: result.ast)
+        guard !testFunctionNames.isEmpty else { return [] }
+
+        // Run tests if we don't have cached results
+        if testResultsCache[uri] == nil {
+            runTests(source: source, filePath: filePath, uri: uri, workspaceRoot: workspaceRoot)
+        }
+
         let cached = testResultsCache[uri] ?? [:]
+        var lenses: [LSPCodeLens] = []
 
         for decl in result.ast.declarations {
             guard case .function(let fn) = decl else { continue }
-            let hasTestAnnotation = fn.annotations.contains { $0.name == "Test" }
-            guard hasTestAnnotation else { continue }
+            guard fn.annotations.contains(where: { $0.name == "Test" }) else { continue }
 
             let line = fn.span.start.line - 1  // Convert to 0-indexed
             let range = LSPRange(
@@ -45,26 +57,26 @@ public final class CodeLensProvider {
                 switch testResult {
                 case .pass:
                     command = LSPCommand(
-                        title: "$(pass) \(fn.name)",
+                        title: "\u{2705} \(fn.name) passed",
                         command: "rockit.runTest",
                         arguments: [fn.name]
                     )
                 case .fail(let message):
                     command = LSPCommand(
-                        title: "$(error) \(fn.name) — \(message)",
+                        title: "\u{274C} \(fn.name) — \(message)",
                         command: "rockit.runTest",
                         arguments: [fn.name]
                     )
                 case .compileError(let message):
                     command = LSPCommand(
-                        title: "$(warning) \(fn.name) — \(message)",
+                        title: "\u{26A0}\u{FE0F} \(fn.name) — \(message)",
                         command: "rockit.runTest",
                         arguments: [fn.name]
                     )
                 }
             } else {
                 command = LSPCommand(
-                    title: "$(testing) Run Test",
+                    title: "\u{25B6}\u{FE0F} Run Test",
                     command: "rockit.runTest",
                     arguments: [fn.name]
                 )
@@ -77,7 +89,6 @@ public final class CodeLensProvider {
     }
 
     /// Run all @Test functions in a file and cache results.
-    /// Called from the didSave handler.
     public static func runTests(
         source: String,
         filePath: String,
@@ -103,7 +114,6 @@ public final class CodeLensProvider {
         guard !testFunctions.isEmpty else { return }
 
         if diagnostics.hasErrors {
-            // All tests get compile error
             var results: [String: TestResult] = [:]
             for testFn in testFunctions {
                 results[testFn] = .compileError("compile error")
