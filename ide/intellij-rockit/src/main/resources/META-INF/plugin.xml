@@ -74,6 +74,10 @@
                 language="Rockit"
                 implementationClass="com.darkmatter.rockit.RockitTestLineMarkerProvider"/>
 
+        <notificationGroup id="Rockit Test Runner"
+                           displayType="BALLOON"
+                           isLogByDefault="true"/>
+
         <!-- Color scheme addons — provide distinct default colors per theme -->
         <additionalTextAttributesScheme scheme="Darcula" file="colorSchemes/RockitDarcula.xml"/>
         <additionalTextAttributesScheme scheme="Default" file="colorSchemes/RockitDefault.xml"/>
