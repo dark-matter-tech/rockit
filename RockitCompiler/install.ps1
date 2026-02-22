@@ -351,6 +351,9 @@ if ($downloaded) {
     Copy-Item "$extracted\bin\fuel.exe" "$INSTALL_DIR\fuel.exe" -Force
     Copy-Item "$extracted\share\rockit\rockit_runtime.c" "$SHARE_DIR\rockit_runtime.c" -Force
     Copy-Item "$extracted\share\rockit\rockit_runtime.h" "$SHARE_DIR\rockit_runtime.h" -Force
+    if (Test-Path "$extracted\share\rockit\stdlib") {
+        Copy-Item "$extracted\share\rockit\stdlib" "$SHARE_DIR\stdlib" -Recurse -Force
+    }
 
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
     Write-Ok "Installed Rockit $VERSION ($platform)"
@@ -421,6 +424,9 @@ if ($downloaded) {
     }
     Copy-Item "$tmp\moon\RockitCompiler\Runtime\rockit_runtime.c" "$SHARE_DIR\rockit_runtime.c" -Force
     Copy-Item "$tmp\moon\RockitCompiler\Runtime\rockit_runtime.h" "$SHARE_DIR\rockit_runtime.h" -Force
+    if (Test-Path "$tmp\moon\RockitCompiler\Stage1\stdlib") {
+        Copy-Item "$tmp\moon\RockitCompiler\Stage1\stdlib" "$SHARE_DIR\stdlib" -Recurse -Force
+    }
 
     $ErrorActionPreference = $savedEAP
 

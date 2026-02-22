@@ -73,9 +73,8 @@ install_binary() {
         sudo cp "${extracted}/bin/fuel" "${BIN_DIR}/fuel"
         sudo chmod +x "${BIN_DIR}/rockit" "${BIN_DIR}/fuel"
         sudo cp "${extracted}/share/rockit/rockit_runtime.o" "${SHARE_DIR}/rockit_runtime.o"
-        if [ -d "${extracted}/share/rockit/rockit" ]; then
-            sudo mkdir -p "${SHARE_DIR}/rockit"
-            sudo cp "${extracted}/share/rockit/rockit/"* "${SHARE_DIR}/rockit/"
+        if [ -d "${extracted}/share/rockit/stdlib" ]; then
+            sudo cp -r "${extracted}/share/rockit/stdlib" "${SHARE_DIR}/stdlib"
         fi
 
         rm -rf "$tmp"
@@ -123,6 +122,10 @@ install_source() {
     if [ -d Runtime/rockit ]; then
         cd Runtime/rockit && bash build.sh && cd ../..
         sudo cp Runtime/rockit_runtime.o "${SHARE_DIR}/rockit_runtime.o"
+    fi
+    # Install standard library
+    if [ -d Stage1/stdlib ]; then
+        sudo cp -r Stage1/stdlib "${SHARE_DIR}/stdlib"
     fi
 
     rm -rf "$tmp"
