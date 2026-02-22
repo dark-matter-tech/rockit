@@ -1438,6 +1438,7 @@ double rockit_math_atan2(double y, double x) { return atan2(y, x); }
 #include <netdb.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <time.h>
 
 static int random_seeded = 0;
 
