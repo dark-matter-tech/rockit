@@ -10,6 +10,9 @@ jobs:
   build-and-test:
     runs-on: ubuntu-22.04
     container: swift:5.10.1-jammy
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: 🔧 Install dependencies
@@ -113,6 +116,7 @@ jobs:
       - name: 🧪 Run unit tests
         working-directory: RockitCompiler
         run: |
+          set -eo pipefail
           echo ""
           echo "┌─────────────────────────────────────────────┐"
           echo "│  🧪  STAGE 1/4 — UNIT TESTS                 │"
@@ -147,6 +151,7 @@ jobs:
       - name: 🏗️ Build Stage 0 (Swift)
         working-directory: RockitCompiler
         run: |
+          set -eo pipefail
           echo ""
           echo "┌─────────────────────────────────────────────┐"
           echo "│  🏗️  STAGE 2/4 — BUILD STAGE 0 COMPILER     │"
@@ -191,25 +196,29 @@ jobs:
       - name: 🧫 Run Probe test suites
         working-directory: RockitCompiler
         run: |
+          set -eo pipefail
           echo ""
           echo "┌─────────────────────────────────────────────┐"
           echo "│  🧫  STAGE 2.5/4 — PROBE TEST RUNNER         │"
           echo "└─────────────────────────────────────────────┘"
           echo ""
           ROCKIT=.build/release/rockit
+          if [ ! -f "$ROCKIT" ]; then
+            echo "  ⚠️  Binary not found at $ROCKIT — skipping Probe tests"
+            exit 1
+          fi
+          if [ ! -d "tests" ]; then
+            echo "  ⚠️  No tests/ directory — skipping Probe tests"
+            exit 0
+          fi
           START=$(date +%s)
 
           # Run test suite — tests/ directory with recursive discovery,
           # class-based test suites, setUp/tearDown lifecycle
           echo "  Running Probe test suite (tests/ recursive)..."
-          if $ROCKIT test 2>&1 | tee probe-output.log; then
-            echo ""
-            echo "  ✅ Probe test suite passed"
-          else
-            echo ""
-            echo "  ❌ Probe test suite had failures"
-            exit 1
-          fi
+          $ROCKIT test 2>&1 | tee probe-output.log
+          echo ""
+          echo "  ✅ Probe test suite passed"
 
           END=$(date +%s)
           ELAPSED=$((END - START))
