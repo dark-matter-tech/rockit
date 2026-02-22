@@ -559,6 +559,42 @@ public struct LSPDocumentLink {
     }
 }
 
+// MARK: - LSP Command
+
+public struct LSPCommand {
+    public let title: String
+    public let command: String
+    public let arguments: [Any]?
+
+    func toJSON() -> [String: Any] {
+        var json: [String: Any] = [
+            "title": title,
+            "command": command
+        ]
+        if let arguments = arguments {
+            json["arguments"] = arguments
+        }
+        return json
+    }
+}
+
+// MARK: - LSP Code Lens
+
+public struct LSPCodeLens {
+    public let range: LSPRange
+    public let command: LSPCommand?
+
+    func toJSON() -> [String: Any] {
+        var json: [String: Any] = [
+            "range": range.toJSON()
+        ]
+        if let command = command {
+            json["command"] = command.toJSON()
+        }
+        return json
+    }
+}
+
 // MARK: - Position Conversion
 
 /// Convert LSP position (0-indexed line, 0-indexed character) to Rockit SourceLocation (1-indexed line, 0-indexed column)

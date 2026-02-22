@@ -56,6 +56,16 @@ public final class LSPServer {
             // Re-analyze on save
             if let uri = extractURI(msg.params) {
                 analyzeAndPublishDiagnostics(uri: uri)
+                // Run @Test functions and cache results for CodeLens
+                if let source = documentManager.getText(uri) {
+                    let filePath = uriToPath(uri)
+                    CodeLensProvider.runTests(
+                        source: source,
+                        filePath: filePath,
+                        uri: uri,
+                        workspaceRoot: workspaceRoot
+                    )
+                }
             }
 
         // Language Features
@@ -113,6 +123,8 @@ public final class LSPServer {
             handleTypeHierarchySubtypes(msg)
         case "textDocument/rangeFormatting":
             handleRangeFormatting(msg)
+        case "textDocument/codeLens":
+            handleCodeLens(msg)
 
         default:
             if let id = msg.id {
@@ -181,7 +193,10 @@ public final class LSPServer {
             ] as [String: Any],
             "callHierarchyProvider": true,
             "typeHierarchyProvider": true,
-            "documentRangeFormattingProvider": true
+            "documentRangeFormattingProvider": true,
+            "codeLensProvider": [
+                "resolveProvider": false
+            ] as [String: Any]
         ]
 
         let result: [String: Any] = [
@@ -236,6 +251,9 @@ public final class LSPServer {
                 documentManager.update(uri: uri, text: text, version: version)
             }
         }
+
+        // Invalidate test results cache — tests re-run on next save
+        CodeLensProvider.invalidateCache(uri: uri)
 
         analyzeAndPublishDiagnostics(uri: uri)
     }
@@ -782,6 +800,24 @@ public final class LSPServer {
 
         let subtypes = TypeHierarchyProvider.subtypes(item: item, uri: item.uri, analysisResult: result)
         sendResult(id: id, result: subtypes.map { $0.toJSON() })
+    }
+
+    // MARK: - Code Lens
+
+    private func handleCodeLens(_ msg: JSONRPCMessage) {
+        guard let id = msg.id,
+              let uri = extractURI(msg.params) else {
+            if let id = msg.id { sendResult(id: id, result: [Any]()) }
+            return
+        }
+
+        guard let result = analysisEngine.getOrAnalyze(uri: uri) else {
+            sendResult(id: id, result: [Any]())
+            return
+        }
+
+        let lenses = CodeLensProvider.codeLenses(for: result, uri: uri)
+        sendResult(id: id, result: lenses.map { $0.toJSON() })
     }
 
     // MARK: - Range Formatting
