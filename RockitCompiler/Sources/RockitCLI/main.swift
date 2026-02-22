@@ -972,6 +972,7 @@ func testCommand(file: String?, filter: String? = nil, detailed: Bool = false, s
 
 // MARK: - Watch Test Command
 
+#if os(macOS)
 func watchTestCommand(file: String?, filter: String? = nil, detailed: Bool = false, scheme: String? = nil) {
     let fm = FileManager.default
 
@@ -1036,6 +1037,12 @@ func watchTestCommand(file: String?, filter: String? = nil, detailed: Bool = fal
     // Keep the process alive
     dispatchMain()
 }
+#else
+func watchTestCommand(file: String?, filter: String? = nil, detailed: Bool = false, scheme: String? = nil) {
+    print("error: --watch is only supported on macOS")
+    exit(1)
+}
+#endif
 
 // MARK: - Benchmark Command
 
