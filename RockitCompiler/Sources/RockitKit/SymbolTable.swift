@@ -257,13 +257,20 @@ public final class SymbolTable {
             ("typeOf", .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .string)),
 
             // Probe Test Framework — Assertions
-            ("assert",          .function(parameterTypes: [.bool], returnType: .unit)),
-            ("assertEquals",    .function(parameterTypes: [.typeParameter(name: "T", bound: nil), .typeParameter(name: "T", bound: nil)], returnType: .unit)),
-            ("assertNotEquals", .function(parameterTypes: [.typeParameter(name: "T", bound: nil), .typeParameter(name: "T", bound: nil)], returnType: .unit)),
-            ("assertTrue",      .function(parameterTypes: [.bool], returnType: .unit)),
-            ("assertFalse",     .function(parameterTypes: [.bool], returnType: .unit)),
-            ("assertNull",      .function(parameterTypes: [.nullable(.typeParameter(name: "T", bound: nil))], returnType: .unit)),
-            ("assertNotNull",   .function(parameterTypes: [.nullable(.typeParameter(name: "T", bound: nil))], returnType: .unit)),
+            ("assert",              .function(parameterTypes: [.bool], returnType: .unit)),
+            ("assertEquals",        .function(parameterTypes: [.typeParameter(name: "T", bound: nil), .typeParameter(name: "T", bound: nil)], returnType: .unit)),
+            ("assertNotEquals",     .function(parameterTypes: [.typeParameter(name: "T", bound: nil), .typeParameter(name: "T", bound: nil)], returnType: .unit)),
+            ("assertTrue",          .function(parameterTypes: [.bool], returnType: .unit)),
+            ("assertFalse",         .function(parameterTypes: [.bool], returnType: .unit)),
+            ("assertNull",          .function(parameterTypes: [.nullable(.typeParameter(name: "T", bound: nil))], returnType: .unit)),
+            ("assertNotNull",       .function(parameterTypes: [.nullable(.typeParameter(name: "T", bound: nil))], returnType: .unit)),
+            ("assertEqualsStr",     .function(parameterTypes: [.string, .string], returnType: .unit)),
+            ("assertGreaterThan",   .function(parameterTypes: [.int, .int], returnType: .unit)),
+            ("assertLessThan",      .function(parameterTypes: [.int, .int], returnType: .unit)),
+            ("assertStringContains", .function(parameterTypes: [.string, .string], returnType: .unit)),
+            ("assertStartsWith",    .function(parameterTypes: [.string, .string], returnType: .unit)),
+            ("assertEndsWith",      .function(parameterTypes: [.string, .string], returnType: .unit)),
+            ("fail",                .function(parameterTypes: [], returnType: .unit)),
 
             // Collection constructors
             ("listOf",  .function(parameterTypes: [], returnType: .classType(name: "List", typeArguments: []))),

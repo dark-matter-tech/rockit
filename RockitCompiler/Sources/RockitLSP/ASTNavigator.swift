@@ -97,7 +97,9 @@ public final class ASTNavigator {
             // Add common ones that might not be in the AST
             let builtinNames = ["println", "print", "readLine", "toString", "toInt",
                                "listOf", "mapOf", "setOf", "mutableListOf", "mutableMapOf",
-                               "assert", "assertEquals", "assertTrue", "assertFalse",
+                               "assert", "assertEquals", "assertNotEquals", "assertTrue", "assertFalse",
+                               "assertEqualsStr", "assertGreaterThan", "assertLessThan",
+                               "assertStringContains", "assertStartsWith", "assertEndsWith", "fail",
                                "panic", "typeOf", "abs", "min", "max"]
             for name in builtinNames {
                 if let sym = typeCheckResult.symbolTable.lookup(name),
