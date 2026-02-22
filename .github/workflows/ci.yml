@@ -188,6 +188,34 @@ jobs:
           echo "  📍 .build/release/rockit"
           echo ""
 
+      - name: 🧫 Run Probe test suites
+        working-directory: RockitCompiler
+        run: |
+          echo ""
+          echo "┌─────────────────────────────────────────────┐"
+          echo "│  🧫  STAGE 2.5/4 — PROBE TEST RUNNER         │"
+          echo "└─────────────────────────────────────────────┘"
+          echo ""
+          ROCKIT=.build/release/rockit
+          START=$(date +%s)
+
+          # Run test suite — tests/ directory with recursive discovery,
+          # class-based test suites, setUp/tearDown lifecycle
+          echo "  Running Probe test suite (tests/ recursive)..."
+          if $ROCKIT test 2>&1 | tee probe-output.log; then
+            echo ""
+            echo "  ✅ Probe test suite passed"
+          else
+            echo ""
+            echo "  ❌ Probe test suite had failures"
+            exit 1
+          fi
+
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+          echo "  ⏱️  Probe tests completed in ${ELAPSED}s"
+          echo ""
+
       - name: 🎯 Run native feature tests
         working-directory: RockitCompiler
         run: |

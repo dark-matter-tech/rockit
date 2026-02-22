@@ -16,6 +16,9 @@ Language support for the **Rockit** programming language (`.rok` files) in JetBr
 - Annotation highlighting (@Capability, @State, etc.)
 - Xcode/Swift-inspired color palette with light and dark theme support
 - Fully configurable via Settings > Editor > Color Scheme > Rockit
+- Gutter play buttons for `@Test` functions (run individual tests, see pass/fail icons)
+- Class-level play buttons for test suite classes (runs all `@Test` methods in the class)
+- Per-assertion pass/fail icons in the gutter after running tests
 <!-- Plugin description end -->
 
 ---

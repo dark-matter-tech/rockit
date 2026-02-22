@@ -79,8 +79,24 @@ rockit launch
 # Create a new project
 rockit init myproject
 
-# Run tests
+# Run tests (recursive discovery in tests/)
 rockit test
+
+# Run tests with filter
+rockit test --filter testAdd             # match function name
+rockit test --filter MathTests           # match class (all tests)
+rockit test --filter MathTests::testAdd  # match exact method
+
+# Run tests in watch mode (re-run on file change)
+rockit test --watch
+
+# Run a named test scheme from fuel.toml
+rockit test --scheme unit
+
+# Run benchmarks
+rockit bench                              # run all Benchmarks/*.rok
+rockit bench Benchmarks/bench_fib.rok     # run a single benchmark
+rockit bench Benchmarks/ --save           # save results to history
 
 # Update to latest version
 rockit update
@@ -125,7 +141,29 @@ version = "0.1.0"
 json = "^1.0.0"
 http = { version = "~2.1", git = "https://rustygits.com/Dark-Matter/http.git" }
 utils = { path = "../my-utils" }
+
+[test]
+directory = "tests"
+recursive = true
+timeout = 30
+
+[test.scheme.unit]
+include = ["core", "types", "functions"]
+
+[test.scheme.integration]
+include = ["stdlib"]
+
+[test.scheme.all]
+include = ["*"]
+exclude = ["advanced"]
 ```
+
+The `[test]` section configures the test runner:
+- `directory` — test directory (default: `tests`)
+- `recursive` — scan subdirectories (default: `true`)
+- `timeout` — per-test timeout in seconds (default: `30`)
+
+Test schemes define named subsets: `rockit test --scheme unit` runs only tests in the `core`, `types`, and `functions` subdirectories.
 
 Dependencies can be:
 - **Simple**: `name = "version-constraint"` (requires git URL via `fuel add`)
@@ -402,6 +440,8 @@ jsonEquals(a, b)                        Deep equality
 
 Probe is the Rockit test framework. Write tests with `@Test` annotation and run with `rockit test`.
 
+**Top-level tests** (backward compatible):
+
 ```kotlin
 import rockit.test.probe
 
@@ -410,13 +450,33 @@ fun testMath() {
     assertEquals(4, 2 + 2, "addition")
     assertGreaterThan(10, 5)
 }
-
-@Test
-fun testStrings() {
-    assertEqualsStr("hello", "hello")
-    assertStringContains("hello world", "world")
-}
 ```
+
+**Class-based test suites** — classes containing `@Test` methods act as test suites (like Kotlin/Swift). Optional `setUp()` and `tearDown()` lifecycle methods run before/after each test:
+
+```kotlin
+import rockit.test.probe
+
+class MathTests {
+    fun setUp() { /* runs before each @Test */ }
+    fun tearDown() { /* runs after each @Test */ }
+
+    @Test fun testAdd() { assertEquals(4, 2 + 2, "addition") }
+    @Test fun testSub() { assertEquals(1, 3 - 2, "subtraction") }
+}
+
+// Top-level @Test functions still work alongside class suites
+@Test fun testStandalone() { assertTrue(true, "standalone") }
+```
+
+Output format:
+```
+  PASS  test_math.rok::MathTests::testAdd
+  PASS  test_math.rok::MathTests::testSub
+  PASS  test_math.rok::testStandalone
+```
+
+**Assertions:**
 
 ```
 assert(condition, message?)             Generic assertion
@@ -432,7 +492,17 @@ assertEndsWith(s, suffix, msg?)         Suffix check
 fail(msg?)                              Unconditional failure
 ```
 
-Run tests: `rockit test` (discovers `tests/` directory) or `rockit test path/to/file.rok`.
+**Running tests:**
+
+```bash
+rockit test                              # discover tests/ recursively
+rockit test path/to/file.rok             # run a specific file
+rockit test --filter testAdd             # match function name
+rockit test --filter MathTests           # all tests in class
+rockit test --filter MathTests::testAdd  # exact class::method
+rockit test --watch                      # re-run on file changes
+rockit test --scheme unit                # run named scheme from fuel.toml
+```
 
 ### JSON Example
 
@@ -526,6 +596,52 @@ All benchmarks run on Apple M1, best of 3 runs.
 Rockit beats Go on 7 of 11 benchmarks. Rockit outperforms Node.js 3-15x across all measured benchmarks.
 
 Run the full suite: `bash Benchmarks/run_benchmarks.sh`
+
+### Built-in Benchmark Runner
+
+`rockit bench` provides built-in benchmarking with history tracking and regression detection.
+
+**Whole-file benchmarks** — any `.rok` file in `Benchmarks/` is treated as a benchmark:
+
+```bash
+rockit bench Benchmarks/bench_fib.rok         # single file
+rockit bench Benchmarks/                       # all benchmarks in directory
+rockit bench                                   # default: Benchmarks/ directory
+```
+
+**`@Benchmark` annotated functions** — fine-grained benchmarks within a file:
+
+```kotlin
+import rockit.test.probe
+
+fun fib(n: Int): Int {
+    if (n <= 1) { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+@Benchmark
+fun benchFib30() {
+    val result = fib(30)
+}
+```
+
+**Options:**
+
+```bash
+rockit bench --runs 10                # measurement runs (default: 5)
+rockit bench --warmup 3               # warmup runs (default: 2)
+rockit bench --save                   # save to .rockit/bench_history.json
+```
+
+**Regression detection** — when history exists, results are compared against the previous run:
+
+```
+  bench_fib       145ms avg    +2.1ms (+1.5%)
+  bench_monkey    892ms avg    -30ms  (-3.3%)  ✓ faster
+  bench_matrix    355ms avg    +14ms  (+4.1%)  ⚠ regression (>3%)
+```
+
+Results are stored in `.rockit/bench_history.json` with commit hash and timestamp for tracking performance over time.
 
 ---
 

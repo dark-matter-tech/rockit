@@ -689,6 +689,11 @@ func initCommand(name: String) {
         version = "0.1.0"
 
         [dependencies]
+
+        [test]
+        directory = "tests"
+        recursive = true
+        timeout = 30
         """
         try fuelToml.write(toFile: Platform.pathJoin(projectDir, "fuel.toml"), atomically: true, encoding: .utf8)
 
@@ -702,17 +707,28 @@ func initCommand(name: String) {
 
         // tests/test_main.rok
         let testRok = """
+        import rockit.test.probe
+
+        // Top-level @Test functions
         @Test
         fun testHello() {
             val expected = "Hello, Rockit!"
             assertEquals(expected, "Hello, Rockit!")
         }
 
-        @Test
-        fun testArithmetic() {
-            assertEquals(2 + 2, 4)
-            assertTrue(10 > 5)
-            assertFalse(1 == 2)
+        // Class-based test suite — setUp/tearDown run before/after each @Test
+        class ArithmeticTests {
+            fun setUp() { }
+            fun tearDown() { }
+
+            @Test fun testAddition() {
+                assertEquals(2 + 2, 4)
+            }
+
+            @Test fun testComparisons() {
+                assertTrue(10 > 5)
+                assertFalse(1 == 2)
+            }
         }
         """
         try testRok.write(toFile: Platform.pathJoin(projectDir, "tests", "test_main.rok"), atomically: true, encoding: .utf8)

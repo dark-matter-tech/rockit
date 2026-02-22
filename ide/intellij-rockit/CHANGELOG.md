@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added
+- Class-level play button for test suite classes containing `@Test` methods
+  - Click to run all tests in the class via `rockit test --filter <ClassName>`
+  - Aggregated state: green (all pass), red (any fail), yellow (running)
+- Per-assertion pass/fail gutter icons after running tests with `--detailed`
 - Full syntax highlighting for all 47 Rockit keywords
 - Distinct color categories: declaration, control flow, Rockit-specific, and literal keywords
 - Built-in type and function highlighting

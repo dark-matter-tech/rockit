@@ -384,9 +384,20 @@ rockit run-native <file>     Compile to native and execute
 rockit emit-llvm <file>      Emit LLVM IR (.ll) for inspection
 rockit launch                Start interactive REPL
 rockit init [name]           Create a new Rockit project
-rockit test [file]           Run tests
+rockit test [file]           Run tests (class suites, recursive discovery)
+rockit bench [file|dir]      Run benchmarks and track performance
 rockit update                Update rockit to the latest version
 rockit version               Print version
+
+Test options:
+  --filter <name>            Filter by function, ClassName, or ClassName::method
+  --watch                    Re-run tests on file changes
+  --scheme <name>            Run a named test scheme from fuel.toml
+
+Bench options:
+  --runs <n>                 Measurement runs (default: 5)
+  --warmup <n>               Warmup runs (default: 2)
+  --save                     Save results to .rockit/bench_history.json
 ```
 
 ---
