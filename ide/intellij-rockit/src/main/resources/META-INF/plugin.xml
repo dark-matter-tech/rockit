@@ -70,6 +70,10 @@
                 language="Rockit"
                 implementationClass="com.darkmatter.rockit.RockitStructureViewFactory"/>
 
+        <codeInsight.lineMarkerProvider
+                language="Rockit"
+                implementationClass="com.darkmatter.rockit.RockitTestLineMarkerProvider"/>
+
         <!-- Color scheme addons — provide distinct default colors per theme -->
         <additionalTextAttributesScheme scheme="Darcula" file="colorSchemes/RockitDarcula.xml"/>
         <additionalTextAttributesScheme scheme="Default" file="colorSchemes/RockitDefault.xml"/>
