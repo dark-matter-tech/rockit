@@ -33,8 +33,6 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
     companion object {
         // Cache: filePath -> (testFunctionName -> state)
         val testStates = ConcurrentHashMap<String, ConcurrentHashMap<String, TestState>>()
-        // Track which files are currently running tests (prevent double-runs)
-        val runningFiles = ConcurrentHashMap.newKeySet<String>()
         private const val NOTIFICATION_GROUP = "Rockit Test Runner"
     }
 
@@ -52,7 +50,7 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
             element.textRange,
             icon,
             { tooltip },
-            { _, elt -> runTest(elt, filePath) },
+            { _, elt -> runTest(elt, filePath, testFunctionName) },
             GutterIconRenderer.Alignment.CENTER,
             { tooltip }
         )
@@ -124,33 +122,12 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
         }
     }
 
-    /**
-     * Collect all @Test function names in the file by scanning the document text.
-     */
-    private fun collectAllTestNames(element: PsiElement): List<String> {
-        val document = PsiDocumentManager.getInstance(element.project)
-            .getDocument(element.containingFile) ?: return emptyList()
-        val text = document.text
-        val names = mutableListOf<String>()
-        val pattern = Regex("""@Test\s+fun\s+(\w+)""")
-        for (match in pattern.findAll(text)) {
-            names.add(match.groupValues[1])
-        }
-        return names
-    }
-
-    private fun runTest(element: PsiElement, filePath: String) {
-        // Prevent double-runs
-        if (!runningFiles.add(filePath)) return
-
+    private fun runTest(element: PsiElement, filePath: String, testName: String) {
         val project = element.project
 
-        // Set all tests in this file to RUNNING and refresh gutters immediately
-        val allTestNames = collectAllTestNames(element)
+        // Set this test to RUNNING and refresh gutters immediately
         val fileStates = testStates.getOrPut(filePath) { ConcurrentHashMap() }
-        for (name in allTestNames) {
-            fileStates[name] = TestState.RUNNING
-        }
+        fileStates[testName] = TestState.RUNNING
         ApplicationManager.getApplication().invokeLater {
             DaemonCodeAnalyzer.getInstance(project).restart()
         }
@@ -167,8 +144,9 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
                     dir = dir.parentFile
                 }
 
-                val commandLine = GeneralCommandLine("rockit", "test", filePath)
-                    .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+                val commandLine = GeneralCommandLine(
+                    "rockit", "test", filePath, "--filter", testName
+                ).withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
                 if (workDir != null) {
                     commandLine.withWorkDirectory(workDir)
                 }
@@ -180,59 +158,52 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
 
                 if (!finished) {
                     process.destroyForcibly()
-                    notify(project, "Rockit test timed out after 30s", NotificationType.WARNING)
-                    // Reset running states back to play button
-                    testStates.remove(filePath)
+                    notify(project, "$testName timed out", NotificationType.WARNING)
+                    fileStates.remove(testName)
                     return@executeOnPooledThread
                 }
 
-                // Parse results
+                // Parse result for this specific test
                 val passPattern = Regex("""PASS\s+\S+::(\w+)""")
                 val failPattern = Regex("""FAIL\s+\S+::(\w+)""")
-                var passed = 0
-                var failed = 0
+                var found = false
 
                 for (line in output.lines()) {
                     passPattern.find(line)?.let { match ->
-                        fileStates[match.groupValues[1]] = TestState.PASSED
-                        passed++
+                        if (match.groupValues[1] == testName) {
+                            fileStates[testName] = TestState.PASSED
+                            notify(project, "$testName passed", NotificationType.INFORMATION)
+                            found = true
+                        }
                     }
                     failPattern.find(line)?.let { match ->
-                        fileStates[match.groupValues[1]] = TestState.FAILED
-                        failed++
+                        if (match.groupValues[1] == testName) {
+                            fileStates[testName] = TestState.FAILED
+                            // Extract error message after " — "
+                            val errorMsg = line.substringAfter(" — ", "").take(200)
+                            notify(project, "$testName failed: $errorMsg", NotificationType.WARNING)
+                            found = true
+                        }
                     }
                 }
 
-                // Any test still in RUNNING state had no output — mark unknown
-                for ((name, state) in fileStates) {
-                    if (state == TestState.RUNNING) {
-                        fileStates.remove(name)
-                    }
-                }
-
-                if (passed + failed > 0) {
-                    val msg = if (failed == 0) "$passed test(s) passed" else "$passed passed, $failed failed"
-                    val type = if (failed == 0) NotificationType.INFORMATION else NotificationType.WARNING
-                    notify(project, msg, type)
-                } else {
+                if (!found) {
+                    fileStates.remove(testName)
                     val debugMsg = buildString {
-                        append("No test results parsed.\n")
-                        if (output.isNotBlank()) append("stdout: ${output.take(500)}\n")
-                        if (stderr.isNotBlank()) append("stderr: ${stderr.take(500)}\n")
-                        append("exit code: ${process.exitValue()}")
+                        append("$testName: no result parsed.\n")
+                        if (output.isNotBlank()) append("stdout: ${output.take(300)}\n")
+                        if (stderr.isNotBlank()) append("stderr: ${stderr.take(300)}")
                     }
                     notify(project, debugMsg, NotificationType.WARNING)
                 }
 
-                // Refresh gutter icons with final results
+                // Refresh gutter icons
                 ApplicationManager.getApplication().invokeLater {
                     DaemonCodeAnalyzer.getInstance(project).restart()
                 }
             } catch (e: Exception) {
-                notify(project, "Failed to run tests: ${e.message}", NotificationType.ERROR)
-                testStates.remove(filePath)
-            } finally {
-                runningFiles.remove(filePath)
+                notify(project, "Failed to run $testName: ${e.message}", NotificationType.ERROR)
+                fileStates.remove(testName)
             }
         }
     }

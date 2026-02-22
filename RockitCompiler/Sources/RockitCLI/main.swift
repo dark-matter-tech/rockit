@@ -720,7 +720,7 @@ func initCommand(name: String) {
 
 // MARK: - Test Command (Probe Test Framework)
 
-func testCommand(file: String?) {
+func testCommand(file: String?, filter: String? = nil) {
     let fm = FileManager.default
     let stdlibPaths: [String] = findStdlibDir().map { [$0] } ?? []
 
@@ -782,10 +782,15 @@ func testCommand(file: String?) {
         }
 
         // Discover @Test annotated functions
-        let testFunctions = discoverTestFunctions(ast: ast)
+        var testFunctions = discoverTestFunctions(ast: ast)
 
-        if testFunctions.isEmpty {
-            // No @Test functions — run file as a whole (legacy mode)
+        // Apply --filter if provided
+        if let filter = filter {
+            testFunctions = testFunctions.filter { $0 == filter }
+        }
+
+        if testFunctions.isEmpty && filter == nil {
+            // No @Test functions and no filter — run file as a whole (legacy mode)
             let lowering = MIRLowering(typeCheckResult: typeResult)
             let mir = lowering.lower()
             let optimizer = MIROptimizer()
@@ -1399,8 +1404,12 @@ case "init":
     initCommand(name: name)
 
 case "test":
-    let file = args.count >= 3 ? args[2] : nil
-    testCommand(file: file)
+    let file = args.count >= 3 && !args[2].hasPrefix("--") ? args[2] : nil
+    var testFilter: String? = nil
+    if let filterIdx = args.firstIndex(of: "--filter"), filterIdx + 1 < args.count {
+        testFilter = args[filterIdx + 1]
+    }
+    testCommand(file: file, filter: testFilter)
 
 case "update":
     updateCommand()
