@@ -402,6 +402,7 @@ public final class SymbolTable {
             ("tcpRecv",     .function(parameterTypes: [.int, .int], returnType: .string)),
             ("tcpClose",    .function(parameterTypes: [.int], returnType: .unit)),
             ("currentTimeMillis", .function(parameterTypes: [], returnType: .int)),
+            ("currentTimeNanos", .function(parameterTypes: [], returnType: .int)),
             ("sleepMillis", .function(parameterTypes: [.int], returnType: .unit)),
             ("randomInt",   .function(parameterTypes: [.int], returnType: .int)),
             ("epochToComponents", .function(parameterTypes: [.int],

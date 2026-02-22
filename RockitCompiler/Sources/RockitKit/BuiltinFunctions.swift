@@ -1144,6 +1144,12 @@ public final class BuiltinRegistry {
             return .int(ms)
         }
 
+        register(name: "currentTimeNanos") { _ in
+            var ts = timespec()
+            clock_gettime(CLOCK_MONOTONIC, &ts)
+            return .int(Int64(ts.tv_sec) * 1_000_000_000 + Int64(ts.tv_nsec))
+        }
+
         register(name: "sleepMillis") { args in
             guard case .int(let ms) = args.first else {
                 throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "sleepMillis")

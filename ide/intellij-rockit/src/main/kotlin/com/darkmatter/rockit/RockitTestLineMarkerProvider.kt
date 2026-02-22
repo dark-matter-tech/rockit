@@ -40,6 +40,8 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
     companion object {
         // Cache: filePath -> (testFunctionName -> state)
         val testStates = ConcurrentHashMap<String, ConcurrentHashMap<String, TestState>>()
+        // Cache: filePath -> (className -> state) for class-level aggregation
+        val classStates = ConcurrentHashMap<String, ConcurrentHashMap<String, TestState>>()
         // Cache: filePath -> (testFunctionName -> list of per-assertion results)
         val assertionResults = ConcurrentHashMap<String, ConcurrentHashMap<String, List<AssertionResult>>>()
         private const val NOTIFICATION_GROUP = "Rockit Test Runner"
@@ -70,6 +72,28 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
                 { _, elt -> runTest(elt, filePath, testFunctionName) },
                 GutterIconRenderer.Alignment.CENTER,
                 { tooltip }
+            )
+        }
+
+        // @Test class play buttons — show on class keyword if body contains @Test
+        if (type == RockitTokenTypes.KW_CLASS) {
+            val className = findClassName(element) ?: return null
+            val filePath = element.containingFile.virtualFile?.path ?: return null
+
+            // Scan forward from the class keyword to check if its body contains @Test
+            if (!classContainsTests(element)) return null
+
+            val classIcon = getClassIcon(filePath, className)
+            val classTooltip = getClassTooltip(filePath, className)
+
+            return LineMarkerInfo(
+                element,
+                element.textRange,
+                classIcon,
+                { classTooltip },
+                { _, elt -> runTestClass(elt, filePath, className) },
+                GutterIconRenderer.Alignment.CENTER,
+                { classTooltip }
             )
         }
 
@@ -273,6 +297,164 @@ class RockitTestLineMarkerProvider : LineMarkerProvider {
 
         // 4. Fall back to PATH
         return "rockit"
+    }
+
+    /**
+     * Extract the class name from a KW_CLASS element by finding the next IDENTIFIER sibling.
+     */
+    private fun findClassName(classElement: PsiElement): String? {
+        var sibling = classElement.nextSibling
+        while (sibling != null) {
+            val type = sibling.node.elementType
+            if (type == RockitTokenTypes.IDENTIFIER) {
+                return sibling.text
+            }
+            if (type != RockitTokenTypes.WHITE_SPACE && type != RockitTokenTypes.NEWLINE) break
+            sibling = sibling.nextSibling
+        }
+        return null
+    }
+
+    /**
+     * Check if a class body contains any @Test annotations by scanning the text
+     * from the class keyword to the matching closing brace.
+     */
+    private fun classContainsTests(classElement: PsiElement): Boolean {
+        val document = PsiDocumentManager.getInstance(classElement.project)
+            .getDocument(classElement.containingFile) ?: return false
+        val startOffset = classElement.textOffset
+        val text = document.text
+        // Find the opening brace of the class
+        var idx = startOffset
+        var depth = 0
+        while (idx < text.length) {
+            if (text[idx] == '{') {
+                depth++
+                break
+            }
+            idx++
+        }
+        if (depth == 0) return false
+        // Scan the class body for @Test
+        val bodyStart = idx
+        while (idx < text.length) {
+            if (text[idx] == '{') depth++
+            else if (text[idx] == '}') {
+                depth--
+                if (depth == 0) break
+            }
+            idx++
+        }
+        val bodyText = text.substring(bodyStart, minOf(idx + 1, text.length))
+        return bodyText.contains("@Test")
+    }
+
+    private fun getClassIcon(filePath: String, className: String): Icon {
+        val states = classStates[filePath] ?: return AllIcons.RunConfigurations.TestState.Run
+        return when (states[className]) {
+            TestState.RUNNING -> AllIcons.RunConfigurations.TestState.Yellow2
+            TestState.PASSED -> AllIcons.RunConfigurations.TestState.Green2
+            TestState.FAILED -> AllIcons.RunConfigurations.TestState.Red2
+            null -> AllIcons.RunConfigurations.TestState.Run
+        }
+    }
+
+    private fun getClassTooltip(filePath: String, className: String): String {
+        val states = classStates[filePath] ?: return "Run all tests in $className"
+        return when (states[className]) {
+            TestState.RUNNING -> "Running $className tests..."
+            TestState.PASSED -> "$className — all tests passed"
+            TestState.FAILED -> "$className — some tests failed"
+            null -> "Run all tests in $className"
+        }
+    }
+
+    /**
+     * Run all @Test methods in a class by invoking `rockit test <file> --filter <ClassName>`.
+     */
+    private fun runTestClass(element: PsiElement, filePath: String, className: String) {
+        val project = element.project
+
+        // Set class to RUNNING
+        val fileClassStates = classStates.getOrPut(filePath) { ConcurrentHashMap() }
+        fileClassStates[className] = TestState.RUNNING
+        ApplicationManager.getApplication().invokeLater {
+            DaemonCodeAnalyzer.getInstance(project).restart()
+        }
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                var workDir: File? = null
+                var dir = File(filePath).parentFile
+                while (dir != null) {
+                    if (File(dir, "Stage1/stdlib/rockit").exists()) {
+                        workDir = dir
+                        break
+                    }
+                    dir = dir.parentFile
+                }
+
+                val rockitBin = findRockitBinary(workDir)
+                val commandLine = GeneralCommandLine(
+                    rockitBin, "test", filePath, "--filter", className
+                ).withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+                if (workDir != null) {
+                    commandLine.withWorkDirectory(workDir)
+                }
+
+                val process = commandLine.createProcess()
+                val stderrFuture = java.util.concurrent.CompletableFuture.supplyAsync {
+                    process.errorStream.bufferedReader().readText()
+                }
+                val output = process.inputStream.bufferedReader().readText()
+                stderrFuture.get()
+                val finished = process.waitFor(30, TimeUnit.SECONDS)
+
+                if (!finished) {
+                    process.destroyForcibly()
+                    notify(project, "$className tests timed out", NotificationType.WARNING)
+                    fileClassStates.remove(className)
+                    return@executeOnPooledThread
+                }
+
+                // Parse results: check for any FAIL lines for this class
+                val passPattern = Regex("""PASS\s+\S+::${Regex.escape(className)}::(\w+)""")
+                val failPattern = Regex("""FAIL\s+\S+::${Regex.escape(className)}::(\w+)""")
+                var anyFailed = false
+                var anyFound = false
+                val fileStates = testStates.getOrPut(filePath) { ConcurrentHashMap() }
+
+                for (line in output.lines()) {
+                    passPattern.find(line)?.let { match ->
+                        val methodName = match.groupValues[1]
+                        fileStates[methodName] = TestState.PASSED
+                        anyFound = true
+                    }
+                    failPattern.find(line)?.let { match ->
+                        val methodName = match.groupValues[1]
+                        fileStates[methodName] = TestState.FAILED
+                        anyFailed = true
+                        anyFound = true
+                    }
+                }
+
+                if (anyFound) {
+                    fileClassStates[className] = if (anyFailed) TestState.FAILED else TestState.PASSED
+                    val msg = if (anyFailed) "$className — some tests failed" else "$className — all tests passed"
+                    notify(project, msg, if (anyFailed) NotificationType.WARNING else NotificationType.INFORMATION)
+                } else {
+                    fileClassStates.remove(className)
+                    notify(project, "$className: no test results parsed", NotificationType.WARNING)
+                }
+
+                ApplicationManager.getApplication().invokeLater {
+                    DaemonCodeAnalyzer.getInstance(project).restart()
+                }
+            } catch (e: Exception) {
+                notify(project, "Failed to run $className tests: ${e.message}", NotificationType.ERROR)
+                fileClassStates.remove(className)
+            }
+        }
     }
 
     private fun runTest(element: PsiElement, filePath: String, testName: String) {

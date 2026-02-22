@@ -187,6 +187,7 @@ fun registerBuiltins(tc: Map): Unit {
 
     // Time
     registerFn(fns, "currentTimeMillis", 0, "Int")
+    registerFn(fns, "currentTimeNanos", 0, "Int")
     registerFn(fns, "sleepMillis", 1, "Unit")
 
     // Random

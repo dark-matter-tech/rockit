@@ -24,7 +24,8 @@ func printUsage() {
         emit-llvm <file>      Emit LLVM IR (.ll) for inspection
         launch                Start interactive REPL
         init [name]           Create a new Rockit project
-        test [file]           Run tests
+        test [file]           Run tests (supports class-based test suites)
+        bench [file|dir]      Run benchmarks and track performance
         update                Update rockit to the latest version
         lsp                   Start Language Server Protocol server
         setup-editors         Install editor plugins (VS Code, Vim, Neovim, JetBrains)
@@ -33,6 +34,17 @@ func printUsage() {
         check <file.rok>      Type-check and report diagnostics
         lower <file.rok>      Lower to MIR and dump
         version               Print version
+
+    TEST OPTIONS:
+        --filter <name>       Filter tests (function, ClassName, or ClassName::method)
+        --detailed            Show per-assertion results
+        --watch               Watch for file changes and re-run tests
+        --scheme <name>       Run a named test scheme from fuel.toml
+
+    BENCH OPTIONS:
+        --runs <n>            Number of measurement runs (default: 5)
+        --warmup <n>          Number of warmup runs (default: 2)
+        --save                Save results to .rockit/bench_history.json
 
     OPTIONS:
         --dump-tokens         Show token stream (with lex)
@@ -720,7 +732,7 @@ func initCommand(name: String) {
 
 // MARK: - Test Command (Probe Test Framework)
 
-func testCommand(file: String?, filter: String? = nil, detailed: Bool = false) {
+func testCommand(file: String?, filter: String? = nil, detailed: Bool = false, scheme: String? = nil) {
     let fm = FileManager.default
     let stdlibPaths: [String] = findStdlibDir().map { [$0] } ?? []
 
@@ -733,19 +745,60 @@ func testCommand(file: String?, filter: String? = nil, detailed: Bool = false) {
         }
         testFiles = [file]
     } else {
-        // Find all .rok files in tests/ directory
-        let testsDir = Platform.pathJoin(fm.currentDirectoryPath, "tests")
+        // Determine test directory and settings from fuel.toml
+        let fuelPath = Platform.pathJoin(fm.currentDirectoryPath, "fuel.toml")
+        let fuelConfig = parseFuelToml(fuelPath)
+        let testDir = fuelConfig.testDirectory ?? "tests"
+        let testsDir = Platform.pathJoin(fm.currentDirectoryPath, testDir)
+
         guard fm.fileExists(atPath: testsDir) else {
-            print("error: no tests/ directory found")
+            print("error: no \(testDir)/ directory found")
             exit(1)
         }
-        if let items = try? fm.contentsOfDirectory(atPath: testsDir) {
-            testFiles = items.filter { $0.hasSuffix(".rok") }
-                             .sorted()
-                             .map { Platform.pathJoin(testsDir, $0) }
+
+        // If a scheme is specified, filter by scheme include/exclude patterns
+        if let scheme = scheme, let schemeConfig = fuelConfig.testSchemes[scheme] {
+            for include in schemeConfig.include {
+                if include == "*" {
+                    // Include all subdirectories
+                    if let enumerator = fm.enumerator(atPath: testsDir) {
+                        while let item = enumerator.nextObject() as? String {
+                            if item.hasSuffix(".rok") {
+                                let subdir = (item as NSString).deletingLastPathComponent
+                                let excluded = schemeConfig.exclude.contains(where: { subdir.hasPrefix($0) })
+                                if !excluded {
+                                    testFiles.append(Platform.pathJoin(testsDir, item))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let subDir = Platform.pathJoin(testsDir, include)
+                    if fm.fileExists(atPath: subDir) {
+                        if let enumerator = fm.enumerator(atPath: subDir) {
+                            while let item = enumerator.nextObject() as? String {
+                                if item.hasSuffix(".rok") {
+                                    testFiles.append(Platform.pathJoin(subDir, item))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // No scheme — find all .rok files recursively
+            if let enumerator = fm.enumerator(atPath: testsDir) {
+                while let item = enumerator.nextObject() as? String {
+                    if item.hasSuffix(".rok") {
+                        testFiles.append(Platform.pathJoin(testsDir, item))
+                    }
+                }
+            }
         }
+        testFiles.sort()
+
         if testFiles.isEmpty {
-            print("No test files found in tests/")
+            print("No test files found in \(testDir)/")
             exit(0)
         }
     }
@@ -781,15 +834,23 @@ func testCommand(file: String?, filter: String? = nil, detailed: Bool = false) {
             continue
         }
 
-        // Discover @Test annotated functions
-        var testFunctions = discoverTestFunctions(ast: ast)
+        // Discover @Test annotated functions (top-level and class members)
+        var tests = discoverTests(ast: ast)
 
         // Apply --filter if provided
         if let filter = filter {
-            testFunctions = testFunctions.filter { $0 == filter }
+            if filter.contains("::") {
+                // Exact match: "ClassName::methodName"
+                tests = tests.filter { $0.qualifiedName == filter }
+            } else {
+                // Match class name (all tests in class) OR function name
+                tests = tests.filter {
+                    $0.className == filter || $0.functionName == filter
+                }
+            }
         }
 
-        if testFunctions.isEmpty && filter == nil {
+        if tests.isEmpty && filter == nil {
             // No @Test functions and no filter — run file as a whole (legacy mode)
             let lowering = MIRLowering(typeCheckResult: typeResult)
             let mir = lowering.lower()
@@ -814,15 +875,27 @@ func testCommand(file: String?, filter: String? = nil, detailed: Bool = false) {
             let fileName = (testFile as NSString).lastPathComponent
             // Strip existing main() to allow test wrapper main
             let sourceWithoutMain = stripMainFunction(source)
-            for testFn in testFunctions {
+            for test in tests {
                 // Generate a wrapper main() that calls this test function
+                let callCode: String
+                if let cls = test.className {
+                    // Class method: instantiate, optionally call setUp/tearDown
+                    var body = "    val __t = \(cls)()\n"
+                    if test.hasSetUp { body += "    __t.setUp()\n" }
+                    body += "    __t.\(test.functionName)()\n"
+                    if test.hasTearDown { body += "    __t.tearDown()\n" }
+                    callCode = body
+                } else {
+                    callCode = "    \(test.functionName)()\n"
+                }
+
                 let wrapperSource: String
                 if detailed {
                     // Recording mode: assertions record P/F instead of panicking
                     wrapperSource = sourceWithoutMain
                         + "\nfun main() {\n"
                         + "    __probeRecording = 1\n"
-                        + "    \(testFn)()\n"
+                        + callCode
                         + "    println(\"__PROBE_RESULTS_BEGIN\")\n"
                         + "    println(__probeResults)\n"
                         + "    println(\"__PROBE_RESULTS_END\")\n"
@@ -831,8 +904,10 @@ func testCommand(file: String?, filter: String? = nil, detailed: Bool = false) {
                         + "    }\n"
                         + "}\n"
                 } else {
-                    wrapperSource = sourceWithoutMain + "\nfun main() { \(testFn)() }\n"
+                    wrapperSource = sourceWithoutMain + "\nfun main() {\n" + callCode + "}\n"
                 }
+
+                let displayName = "\(fileName)::\(test.qualifiedName)"
 
                 let wDiag = DiagnosticEngine()
                 let wLexer = Lexer(source: wrapperSource, fileName: testFile, diagnostics: wDiag)
@@ -845,7 +920,7 @@ func testCommand(file: String?, filter: String? = nil, detailed: Bool = false) {
                 let wResult = wChecker.check()
 
                 if wDiag.hasErrors {
-                    print("  FAIL  \(fileName)::\(testFn) (compilation error)")
+                    print("  FAIL  \(displayName) (compilation error)")
                     totalFailed += 1
                     continue
                 }
@@ -860,13 +935,13 @@ func testCommand(file: String?, filter: String? = nil, detailed: Bool = false) {
 
                 do {
                     try vm.run()
-                    print("  PASS  \(fileName)::\(testFn)")
+                    print("  PASS  \(displayName)")
                     totalPassed += 1
                 } catch {
                     if let vmErr = error as? VMError {
-                        print("  FAIL  \(fileName)::\(testFn) — \(vmErr)")
+                        print("  FAIL  \(displayName) — \(vmErr)")
                     } else {
-                        print("  FAIL  \(fileName)::\(testFn) — \(error)")
+                        print("  FAIL  \(displayName) — \(error)")
                     }
                     totalFailed += 1
                 }
@@ -877,6 +952,359 @@ func testCommand(file: String?, filter: String? = nil, detailed: Bool = false) {
     let total = totalPassed + totalFailed + totalSkipped
     print("\n\(total) test(s): \(totalPassed) passed, \(totalFailed) failed, \(totalSkipped) skipped")
     if totalFailed > 0 { exit(1) }
+}
+
+// MARK: - Watch Test Command
+
+func watchTestCommand(file: String?, filter: String? = nil, detailed: Bool = false, scheme: String? = nil) {
+    let fm = FileManager.default
+
+    // Determine which directory to watch
+    let watchDir: String
+    if let file = file {
+        watchDir = (file as NSString).deletingLastPathComponent
+    } else {
+        let fuelConfig = parseFuelToml(Platform.pathJoin(fm.currentDirectoryPath, "fuel.toml"))
+        let testDir = fuelConfig.testDirectory ?? "tests"
+        watchDir = Platform.pathJoin(fm.currentDirectoryPath, testDir)
+    }
+
+    guard fm.fileExists(atPath: watchDir) else {
+        print("error: watch directory not found: \(watchDir)")
+        exit(1)
+    }
+
+    print("Watching \(watchDir) for changes... (Ctrl+C to stop)\n")
+
+    // Run tests once initially
+    testCommand(file: file, filter: filter, detailed: detailed, scheme: scheme)
+
+    // Watch for changes using DispatchSource (macOS FSEvents)
+    let fd = open(watchDir, O_EVTONLY)
+    guard fd >= 0 else {
+        print("error: could not watch directory: \(watchDir)")
+        exit(1)
+    }
+
+    let queue = DispatchQueue(label: "rockit.watch", qos: .default)
+    let source = DispatchSource.makeFileSystemObjectSource(
+        fileDescriptor: fd,
+        eventMask: [.write, .rename, .delete],
+        queue: queue
+    )
+
+    // Debounce: wait for changes to settle before re-running
+    var lastRunTime = Date()
+    let debounceInterval: TimeInterval = 0.5
+
+    source.setEventHandler {
+        let now = Date()
+        guard now.timeIntervalSince(lastRunTime) > debounceInterval else { return }
+        lastRunTime = now
+
+        // Clear terminal and re-run
+        DispatchQueue.main.async {
+            print("\u{1B}[2J\u{1B}[H")  // ANSI clear screen + cursor home
+            print("File change detected. Re-running tests...\n")
+            testCommand(file: file, filter: filter, detailed: detailed, scheme: scheme)
+            print("\nWatching for changes... (Ctrl+C to stop)")
+        }
+    }
+
+    source.setCancelHandler {
+        close(fd)
+    }
+
+    source.resume()
+
+    // Keep the process alive
+    dispatchMain()
+}
+
+// MARK: - Benchmark Command
+
+/// Discover functions with @Benchmark annotation in the AST.
+func discoverBenchmarkFunctions(ast: SourceFile) -> [String] {
+    var benchmarks: [String] = []
+    for decl in ast.declarations {
+        if case .function(let fn) = decl {
+            if fn.annotations.contains(where: { $0.name == "Benchmark" }) {
+                benchmarks.append(fn.name)
+            }
+        }
+    }
+    return benchmarks
+}
+
+func benchCommand(target: String?, runs: Int, warmup: Int, save: Bool) {
+    let fm = FileManager.default
+    let stdlibPaths: [String] = findStdlibDir().map { [$0] } ?? []
+
+    var benchFiles: [String] = []
+
+    if let target = target {
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: target, isDirectory: &isDir) else {
+            print("error: not found: \(target)")
+            exit(1)
+        }
+        if isDir.boolValue {
+            // Directory: find all bench_*.rok or *.rok files
+            if let enumerator = fm.enumerator(atPath: target) {
+                while let item = enumerator.nextObject() as? String {
+                    if item.hasSuffix(".rok") {
+                        benchFiles.append(Platform.pathJoin(target, item))
+                    }
+                }
+            }
+            benchFiles.sort()
+        } else {
+            benchFiles = [target]
+        }
+    } else {
+        // Default: look for Benchmarks/ directory
+        let benchDir = Platform.pathJoin(fm.currentDirectoryPath, "Benchmarks")
+        if fm.fileExists(atPath: benchDir) {
+            if let enumerator = fm.enumerator(atPath: benchDir) {
+                while let item = enumerator.nextObject() as? String {
+                    if item.hasSuffix(".rok") {
+                        benchFiles.append(Platform.pathJoin(benchDir, item))
+                    }
+                }
+            }
+            benchFiles.sort()
+        }
+        if benchFiles.isEmpty {
+            print("error: no benchmark files found. Provide a file/directory or create Benchmarks/")
+            exit(1)
+        }
+    }
+
+    // Load previous results for comparison
+    let historyPath = Platform.pathJoin(fm.currentDirectoryPath, ".rockit", "bench_history.json")
+    let previousResults = loadBenchHistory(path: historyPath)
+
+    var allResults: [String: BenchResult] = [:]
+
+    for benchFile in benchFiles {
+        guard let source = try? String(contentsOfFile: benchFile, encoding: .utf8) else {
+            print("  SKIP  \(benchFile) (could not read)")
+            continue
+        }
+
+        let benchName = ((benchFile as NSString).lastPathComponent as NSString).deletingPathExtension
+
+        // Check for @Benchmark functions
+        let diagnostics = DiagnosticEngine()
+        let lexer = Lexer(source: source, fileName: benchFile, diagnostics: diagnostics)
+        let tokens = lexer.tokenize()
+        let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+        let parsedAST = parser.parse()
+
+        let sourceDir = (benchFile as NSString).deletingLastPathComponent
+        let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: stdlibPaths, diagnostics: diagnostics)
+        let ast = importResolver.resolve(parsedAST)
+
+        let benchFunctions = discoverBenchmarkFunctions(ast: ast)
+
+        if benchFunctions.isEmpty {
+            // Whole-file benchmark mode
+            let result = runWholeFileBenchmark(
+                source: source, fileName: benchFile, sourceDir: sourceDir,
+                stdlibPaths: stdlibPaths, warmup: warmup, runs: runs
+            )
+            if let result = result {
+                allResults[benchName] = result
+                printBenchResult(name: benchName, result: result, previous: previousResults?[benchName])
+            }
+        } else {
+            // @Benchmark function mode
+            let sourceWithoutMain = stripMainFunction(source)
+            for benchFn in benchFunctions {
+                let wrapperSource = sourceWithoutMain + "\nfun main() { \(benchFn)() }\n"
+                let result = runWholeFileBenchmark(
+                    source: wrapperSource, fileName: benchFile, sourceDir: sourceDir,
+                    stdlibPaths: stdlibPaths, warmup: warmup, runs: runs
+                )
+                let name = "\(benchName)::\(benchFn)"
+                if let result = result {
+                    allResults[name] = result
+                    printBenchResult(name: name, result: result, previous: previousResults?[name])
+                }
+            }
+        }
+    }
+
+    if allResults.isEmpty {
+        print("No benchmarks were run.")
+        exit(1)
+    }
+
+    // Save results if --save
+    if save {
+        saveBenchHistory(path: historyPath, results: allResults)
+        print("\nResults saved to \(historyPath)")
+    }
+}
+
+struct BenchResult {
+    let times: [Double]  // in milliseconds
+
+    var min: Double { times.min() ?? 0 }
+    var max: Double { times.max() ?? 0 }
+    var avg: Double { times.isEmpty ? 0 : times.reduce(0, +) / Double(times.count) }
+    var median: Double {
+        guard !times.isEmpty else { return 0 }
+        let sorted = times.sorted()
+        let mid = sorted.count / 2
+        return sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2.0 : sorted[mid]
+    }
+}
+
+func runWholeFileBenchmark(
+    source: String, fileName: String, sourceDir: String,
+    stdlibPaths: [String], warmup: Int, runs: Int
+) -> BenchResult? {
+    // Compile once
+    let diagnostics = DiagnosticEngine()
+    let lexer = Lexer(source: source, fileName: fileName, diagnostics: diagnostics)
+    let tokens = lexer.tokenize()
+    let parser = Parser(tokens: tokens, diagnostics: diagnostics)
+    let parsedAST = parser.parse()
+    let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: stdlibPaths, diagnostics: diagnostics)
+    let ast = importResolver.resolve(parsedAST)
+    let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
+    let typeResult = checker.check()
+
+    if diagnostics.hasErrors {
+        print("  ERROR \(fileName) (compilation errors)")
+        diagnostics.dump()
+        return nil
+    }
+
+    let lowering = MIRLowering(typeCheckResult: typeResult)
+    let mir = lowering.lower()
+    let optimizer = MIROptimizer()
+    let optimized = optimizer.optimize(mir)
+    let codeGen = CodeGen()
+    let module = codeGen.generate(optimized)
+
+    // Create silent builtins to suppress output during benchmark runs
+    let silentBuiltins = BuiltinRegistry()
+    silentBuiltins.register(name: "println") { _ in .unit }
+    silentBuiltins.register(name: "print") { _ in .unit }
+
+    // Warmup runs (discard)
+    for _ in 0..<warmup {
+        let vm = VM(module: module, builtins: silentBuiltins)
+        _ = try? vm.run()
+    }
+
+    // Measurement runs
+    var times: [Double] = []
+    for _ in 0..<runs {
+        let vm = VM(module: module, builtins: silentBuiltins)
+        let start = ProcessInfo.processInfo.systemUptime
+        _ = try? vm.run()
+        let elapsed = ProcessInfo.processInfo.systemUptime - start
+        times.append(elapsed * 1000.0)  // convert to ms
+    }
+
+    return BenchResult(times: times)
+}
+
+func printBenchResult(name: String, result: BenchResult, previous: BenchResult?) {
+    let avgStr = String(format: "%.0fms", result.avg)
+    let minStr = String(format: "%.0fms", result.min)
+    let maxStr = String(format: "%.0fms", result.max)
+
+    var line = "  \(name.padding(toLength: 24, withPad: " ", startingAt: 0)) \(avgStr) avg    min: \(minStr)  max: \(maxStr)"
+
+    if let prev = previous {
+        let diff = result.avg - prev.avg
+        let pct = prev.avg > 0 ? (diff / prev.avg) * 100.0 : 0
+        let sign = diff >= 0 ? "+" : ""
+        let diffStr = String(format: "%@%.1fms (%@%.1f%%)", sign, diff, sign, pct)
+        line += "    \(diffStr)"
+        if pct > 3.0 {
+            line += "  \u{26A0} regression"
+        } else if pct < -1.0 {
+            line += "  \u{2713} faster"
+        }
+    }
+
+    print(line)
+}
+
+func loadBenchHistory(path: String) -> [String: BenchResult]? {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+          let last = json.last,
+          let results = last["results"] as? [String: [String: Any]] else {
+        return nil
+    }
+
+    var benchResults: [String: BenchResult] = [:]
+    for (name, info) in results {
+        if let avg = info["avg"] as? Double {
+            benchResults[name] = BenchResult(times: [avg])
+        }
+    }
+    return benchResults
+}
+
+func saveBenchHistory(path: String, results: [String: BenchResult]) {
+    let fm = FileManager.default
+    let dir = (path as NSString).deletingLastPathComponent
+    try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+    // Load existing history
+    var history: [[String: Any]] = []
+    if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+       let existing = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+        history = existing
+    }
+
+    // Get current git commit hash
+    let commitProcess = Process()
+    commitProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    commitProcess.arguments = ["rev-parse", "--short", "HEAD"]
+    let pipe = Pipe()
+    commitProcess.standardOutput = pipe
+    commitProcess.standardError = FileHandle.nullDevice
+    var commit = "unknown"
+    if (try? commitProcess.run()) != nil {
+        commitProcess.waitUntilExit()
+        if let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
+            commit = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    // Build results dict
+    var resultsDict: [String: [String: Any]] = [:]
+    for (name, result) in results {
+        resultsDict[name] = [
+            "min": result.min,
+            "avg": result.avg,
+            "max": result.max,
+            "median": result.median,
+            "unit": "ms"
+        ]
+    }
+
+    let formatter = ISO8601DateFormatter()
+    let entry: [String: Any] = [
+        "date": formatter.string(from: Date()),
+        "commit": commit,
+        "results": resultsDict
+    ]
+
+    history.append(entry)
+
+    // Write back
+    if let data = try? JSONSerialization.data(withJSONObject: history, options: [.prettyPrinted, .sortedKeys]) {
+        try? data.write(to: URL(fileURLWithPath: path))
+    }
 }
 
 // MARK: - Update Command
@@ -1060,15 +1488,43 @@ func updateCommand() {
     try? fm.removeItem(atPath: tmpExtract)
 }
 
-/// Parse a simple fuel.toml file into a dictionary of key-value pairs.
-func parseFuelToml(_ path: String) -> [String: String] {
+/// Test scheme configuration from fuel.toml [test.scheme.*] sections.
+struct TestSchemeConfig {
+    let include: [String]
+    let exclude: [String]
+}
+
+/// Parsed fuel.toml configuration with section awareness.
+struct FuelConfig {
+    var topLevel: [String: String] = [:]
+    var testDirectory: String? = nil
+    var testRecursive: Bool = true
+    var testTimeout: Int = 30
+    var testSchemes: [String: TestSchemeConfig] = [:]
+
+    subscript(key: String) -> String? { topLevel[key] }
+}
+
+/// Parse a fuel.toml file into a section-aware configuration.
+func parseFuelToml(_ path: String) -> FuelConfig {
     guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
-        return [:]
+        return FuelConfig()
     }
-    var result: [String: String] = [:]
+    var config = FuelConfig()
+    var currentSection = ""
+    var sectionValues: [String: [String: String]] = [:]
+
     for line in contents.components(separatedBy: "\n") {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty || trimmed.hasPrefix("#") || trimmed.hasPrefix("[") { continue }
+        if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+
+        // Section header
+        if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+            currentSection = String(trimmed.dropFirst().dropLast())
+                .trimmingCharacters(in: .whitespaces)
+            continue
+        }
+
         let parts = trimmed.components(separatedBy: "=")
         if parts.count >= 2 {
             let key = parts[0].trimmingCharacters(in: .whitespaces)
@@ -1078,10 +1534,51 @@ func parseFuelToml(_ path: String) -> [String: String] {
             if value.hasPrefix("\"") && value.hasSuffix("\"") {
                 value = String(value.dropFirst().dropLast())
             }
-            result[key] = value
+
+            if currentSection.isEmpty {
+                config.topLevel[key] = value
+            } else {
+                if sectionValues[currentSection] == nil {
+                    sectionValues[currentSection] = [:]
+                }
+                sectionValues[currentSection]?[key] = value
+            }
         }
     }
-    return result
+
+    // Process [test] section
+    if let testSection = sectionValues["test"] {
+        if let dir = testSection["directory"] { config.testDirectory = dir }
+        if let rec = testSection["recursive"] { config.testRecursive = rec == "true" }
+        if let timeout = testSection["timeout"], let t = Int(timeout) { config.testTimeout = t }
+    }
+
+    // Process [test.scheme.*] sections
+    for (section, values) in sectionValues {
+        if section.hasPrefix("test.scheme.") {
+            let schemeName = String(section.dropFirst("test.scheme.".count))
+            let include = parseTomlArray(values["include"] ?? "")
+            let exclude = parseTomlArray(values["exclude"] ?? "")
+            config.testSchemes[schemeName] = TestSchemeConfig(include: include, exclude: exclude)
+        }
+    }
+
+    return config
+}
+
+/// Parse a TOML-style array like `["core", "types"]` into a Swift array.
+func parseTomlArray(_ value: String) -> [String] {
+    let trimmed = value.trimmingCharacters(in: .whitespaces)
+    guard trimmed.hasPrefix("[") && trimmed.hasSuffix("]") else { return [] }
+    let inner = String(trimmed.dropFirst().dropLast())
+    return inner.components(separatedBy: ",")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .map { item in
+            var s = item
+            if s.hasPrefix("\"") && s.hasSuffix("\"") { s = String(s.dropFirst().dropLast()) }
+            return s
+        }
+        .filter { !$0.isEmpty }
 }
 
 /// Strip the main() function from source code (for test wrapper injection).
@@ -1115,18 +1612,68 @@ func stripMainFunction(_ source: String) -> String {
     return String(before) + String(after)
 }
 
-/// Discover functions with @Test annotation in the AST.
-func discoverTestFunctions(ast: SourceFile) -> [String] {
-    var testFunctions: [String] = []
+/// A discovered test: either a top-level @Test function or a @Test method inside a class.
+struct DiscoveredTest {
+    let functionName: String
+    let className: String?       // nil for top-level
+    let hasSetUp: Bool           // class has setUp() method
+    let hasTearDown: Bool        // class has tearDown() method
+
+    var qualifiedName: String {
+        if let cls = className {
+            return "\(cls)::\(functionName)"
+        }
+        return functionName
+    }
+}
+
+/// Discover functions with @Test annotation in the AST, including class members.
+func discoverTests(ast: SourceFile) -> [DiscoveredTest] {
+    var tests: [DiscoveredTest] = []
+
     for decl in ast.declarations {
-        if case .function(let fn) = decl {
-            let hasTestAnnotation = fn.annotations.contains { $0.name == "Test" }
-            if hasTestAnnotation {
-                testFunctions.append(fn.name)
+        switch decl {
+        case .function(let fn):
+            if fn.annotations.contains(where: { $0.name == "Test" }) {
+                tests.append(DiscoveredTest(
+                    functionName: fn.name, className: nil,
+                    hasSetUp: false, hasTearDown: false
+                ))
             }
+
+        case .classDecl(let cls):
+            // Check if this class contains any @Test methods
+            var classTests: [String] = []
+            var hasSetUp = false
+            var hasTearDown = false
+
+            for member in cls.members {
+                if case .function(let fn) = member {
+                    if fn.annotations.contains(where: { $0.name == "Test" }) {
+                        classTests.append(fn.name)
+                    }
+                    if fn.name == "setUp" { hasSetUp = true }
+                    if fn.name == "tearDown" { hasTearDown = true }
+                }
+            }
+
+            for testFn in classTests {
+                tests.append(DiscoveredTest(
+                    functionName: testFn, className: cls.name,
+                    hasSetUp: hasSetUp, hasTearDown: hasTearDown
+                ))
+            }
+
+        default:
+            break
         }
     }
-    return testFunctions
+    return tests
+}
+
+/// Backward-compatible wrapper: returns just function names (for CodeLensProvider etc.)
+func discoverTestFunctions(ast: SourceFile) -> [String] {
+    return discoverTests(ast: ast).filter { $0.className == nil }.map { $0.functionName }
 }
 
 // MARK: - Build Native
@@ -1426,7 +1973,26 @@ case "test":
         testFilter = args[filterIdx + 1]
     }
     let detailed = args.contains("--detailed")
-    testCommand(file: file, filter: testFilter, detailed: detailed)
+    var testScheme: String? = nil
+    if let schemeIdx = args.firstIndex(of: "--scheme"), schemeIdx + 1 < args.count {
+        testScheme = args[schemeIdx + 1]
+    }
+    if args.contains("--watch") {
+        watchTestCommand(file: file, filter: testFilter, detailed: detailed, scheme: testScheme)
+    } else {
+        testCommand(file: file, filter: testFilter, detailed: detailed, scheme: testScheme)
+    }
+
+case "bench":
+    let benchTarget = args.count >= 3 && !args[2].hasPrefix("--") ? args[2] : nil
+    var benchRuns = 5
+    if let runsIdx = args.firstIndex(of: "--runs"), runsIdx + 1 < args.count,
+       let n = Int(args[runsIdx + 1]) { benchRuns = n }
+    var benchWarmup = 2
+    if let warmIdx = args.firstIndex(of: "--warmup"), warmIdx + 1 < args.count,
+       let n = Int(args[warmIdx + 1]) { benchWarmup = n }
+    let benchSave = args.contains("--save")
+    benchCommand(target: benchTarget, runs: benchRuns, warmup: benchWarmup, save: benchSave)
 
 case "update":
     updateCommand()
