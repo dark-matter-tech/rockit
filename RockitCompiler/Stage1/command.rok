@@ -4877,6 +4877,8 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "rockit_object_set_field", "void|ptr,i32,i64")
     mapPut(t, "rockit_object_is_type", "i64|ptr,ptr")
     mapPut(t, "rockit_object_get_type_name", "ptr|ptr")
+    mapPut(t, "rockit_retain_value", "void|i64")
+    mapPut(t, "rockit_release_value", "void|i64")
 
     // Async runtime
     mapPut(t, "rockit_task_schedule", "void|ptr,ptr,i64")
@@ -6060,9 +6062,16 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val nameIdx = llvmReadU16(bc, ip + 1)
             val src = llvmReadU16(bc, ip + 3)
             val globalName = llvmPoolString(compiler, nameIdx)
+            // ARC write barrier: release old, retain new, store
+            val oldVal = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(oldVal, stringConcat(" = load i64, ptr @", globalName))))
             val tval = llvmNextSSA(state)
             llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  call void @rockit_release_value(i64 ", stringConcat(oldVal, ")")))
+            llvmLine(buf, stringConcat("  call void @rockit_retain_value(i64 ", stringConcat(tval, ")")))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr @", globalName))))
+            mapPut(usedExterns, "rockit_release_value", true)
+            mapPut(usedExterns, "rockit_retain_value", true)
             ip = ip + 5
         } else if (op == 144) {
             // OP_TYPE_CHECK: dest(u16) + src(u16) + typeIdx(u16)
@@ -6602,9 +6611,16 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             val nameIdx = llvmReadU16(bc, ip + 1)
             val src = llvmReadU16(bc, ip + 3)
             val globalName = llvmPoolString(compiler, nameIdx)
+            // ARC write barrier: release old, retain new, store
+            val oldVal = llvmNextSSA(rState)
+            llvmLine(buf, stringConcat("  ", stringConcat(oldVal, stringConcat(" = load i64, ptr @", globalName))))
             val tval = llvmNextSSA(rState)
             llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(src)))))
+            llvmLine(buf, stringConcat("  call void @rockit_release_value(i64 ", stringConcat(oldVal, ")")))
+            llvmLine(buf, stringConcat("  call void @rockit_retain_value(i64 ", stringConcat(tval, ")")))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr @", globalName))))
+            mapPut(rExterns, "rockit_release_value", true)
+            mapPut(rExterns, "rockit_retain_value", true)
             ip = ip + 5
         } else if (op == 96) {
             // OP_GET_FIELD

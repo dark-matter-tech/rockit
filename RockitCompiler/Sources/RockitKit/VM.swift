@@ -374,7 +374,11 @@ public final class VM {
                 case .storeGlobal:
                     let nameIdx = readUInt16(bytecode, frame: frameIdx)
                     let src = readUInt16(bytecode, frame: frameIdx)
-                    globals[nameIdx] = callStack[frameIdx].registers[Int(src)]
+                    let newValue = callStack[frameIdx].registers[Int(src)]
+                    if let oldValue = globals[nameIdx] {
+                        arc.release(oldValue)
+                    }
+                    globals[nameIdx] = newValue
 
                 // MARK: Arithmetic
                 case .add:

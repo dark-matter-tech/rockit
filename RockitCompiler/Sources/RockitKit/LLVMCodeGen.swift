@@ -1435,6 +1435,43 @@ public final class LLVMCodeGen {
         case .store(let dest, let src):
             let srcType = typeOf(src)
             let tmp = nextSSA()
+
+            // ARC write barrier for global stores of heap types
+            if dest.hasPrefix("global."), srcType == "ptr" {
+                let kind = tempHeapKinds[src] ?? .unknown
+                let oldTmp = nextSSA()
+                var result: [String] = []
+                // Load old value
+                result.append("\(oldTmp) = load ptr, ptr \(addrOf(dest))")
+                // Release old value (type-specific when known)
+                switch kind {
+                case .string:
+                    result.append(contentsOf: emitInlineStringRelease(oldTmp))
+                case .object:
+                    result.append("call void @rockit_release(ptr \(oldTmp))")
+                default:
+                    let oldI64 = nextSSA()
+                    result.append("\(oldI64) = ptrtoint ptr \(oldTmp) to i64")
+                    result.append("call void @rockit_release_value(i64 \(oldI64))")
+                }
+                // Load and retain new value
+                result.append("\(tmp) = load ptr, ptr \(addrOf(src))")
+                switch kind {
+                case .string:
+                    result.append(contentsOf: emitInlineStringRetain(tmp))
+                case .object:
+                    result.append("call void @rockit_retain(ptr \(tmp))")
+                default:
+                    let newI64 = nextSSA()
+                    result.append("\(newI64) = ptrtoint ptr \(tmp) to i64")
+                    result.append("call void @rockit_retain_value(i64 \(newI64))")
+                }
+                // Store new value
+                result.append("store ptr \(tmp), ptr \(addrOf(dest))")
+                trackHeapTemp(dest, kind: kind)
+                return result
+            }
+
             if srcType == "ptr", let flagName = arcFlags[dest], arcFlags[src] != nil {
                 // ARC write barrier: release old value, retain new, store.
                 // Prevents leaks when ptr-typed locals are reassigned in loops.
