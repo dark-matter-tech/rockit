@@ -264,6 +264,205 @@ fun assertEndsWith(s: String, suffix: String, message: String = ""): Unit {
     panic(msg)
 }
 
+// ── Bool equality ───────────────────────────────────────────────────────
+
+fun assertEqualsBool(expected: Bool, actual: Bool, message: String = ""): Unit {
+    if (__probeRecording == 1) {
+        if (expected == actual) {
+            __probeResults = __probeResults + "P\n"
+        } else {
+            __probeFailed = __probeFailed + 1
+            val exp = if (expected) { "true" } else { "false" }
+            val act = if (actual) { "true" } else { "false" }
+            val msg = "expected " + exp + " but got " + act
+            if (stringLength(message) > 0) {
+                __probeResults = __probeResults + "F:" + msg + " — " + message + "\n"
+            } else {
+                __probeResults = __probeResults + "F:" + msg + "\n"
+            }
+        }
+        return
+    }
+    if (expected == actual) { return }
+    val exp = if (expected) { "true" } else { "false" }
+    val act = if (actual) { "true" } else { "false" }
+    val msg = "ASSERTION FAILED: expected " + exp + " but got " + act
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+// ── String inequality ──────────────────────────────────────────────────
+
+fun assertNotEqualsStr(a: String, b: String, message: String = ""): Unit {
+    if (__probeRecording == 1) {
+        if (a != b) {
+            __probeResults = __probeResults + "P\n"
+        } else {
+            __probeFailed = __probeFailed + 1
+            val msg = "expected strings to differ, both are \"" + a + "\""
+            if (stringLength(message) > 0) {
+                __probeResults = __probeResults + "F:" + msg + " — " + message + "\n"
+            } else {
+                __probeResults = __probeResults + "F:" + msg + "\n"
+            }
+        }
+        return
+    }
+    if (a != b) { return }
+    val msg = "ASSERTION FAILED: expected strings to differ, both are \"" + a + "\""
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+// ── Comparison assertions (>= / <=) ────────────────────────────────────
+
+fun assertGreaterThanOrEqual(a: Int, b: Int, message: String = ""): Unit {
+    if (__probeRecording == 1) {
+        if (a >= b) {
+            __probeResults = __probeResults + "P\n"
+        } else {
+            __probeFailed = __probeFailed + 1
+            val msg = "expected " + toString(a) + " >= " + toString(b)
+            if (stringLength(message) > 0) {
+                __probeResults = __probeResults + "F:" + msg + " — " + message + "\n"
+            } else {
+                __probeResults = __probeResults + "F:" + msg + "\n"
+            }
+        }
+        return
+    }
+    if (a >= b) { return }
+    val msg = "ASSERTION FAILED: expected " + toString(a) + " >= " + toString(b)
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+fun assertLessThanOrEqual(a: Int, b: Int, message: String = ""): Unit {
+    if (__probeRecording == 1) {
+        if (a <= b) {
+            __probeResults = __probeResults + "P\n"
+        } else {
+            __probeFailed = __probeFailed + 1
+            val msg = "expected " + toString(a) + " <= " + toString(b)
+            if (stringLength(message) > 0) {
+                __probeResults = __probeResults + "F:" + msg + " — " + message + "\n"
+            } else {
+                __probeResults = __probeResults + "F:" + msg + "\n"
+            }
+        }
+        return
+    }
+    if (a <= b) { return }
+    val msg = "ASSERTION FAILED: expected " + toString(a) + " <= " + toString(b)
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+// ── Range assertion ────────────────────────────────────────────────────
+
+fun assertBetween(value: Int, low: Int, high: Int, message: String = ""): Unit {
+    if (__probeRecording == 1) {
+        if (value >= low && value <= high) {
+            __probeResults = __probeResults + "P\n"
+        } else {
+            __probeFailed = __probeFailed + 1
+            val msg = "expected " + toString(value) + " to be between " + toString(low) + " and " + toString(high)
+            if (stringLength(message) > 0) {
+                __probeResults = __probeResults + "F:" + msg + " — " + message + "\n"
+            } else {
+                __probeResults = __probeResults + "F:" + msg + "\n"
+            }
+        }
+        return
+    }
+    if (value >= low && value <= high) { return }
+    val msg = "ASSERTION FAILED: expected " + toString(value) + " to be between " + toString(low) + " and " + toString(high)
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+// ── String length / empty ──────────────────────────────────────────────
+
+fun assertStringEmpty(s: String, message: String = ""): Unit {
+    if (__probeRecording == 1) {
+        if (stringLength(s) == 0) {
+            __probeResults = __probeResults + "P\n"
+        } else {
+            __probeFailed = __probeFailed + 1
+            val msg = "expected empty string but got \"" + s + "\""
+            if (stringLength(message) > 0) {
+                __probeResults = __probeResults + "F:" + msg + " — " + message + "\n"
+            } else {
+                __probeResults = __probeResults + "F:" + msg + "\n"
+            }
+        }
+        return
+    }
+    if (stringLength(s) == 0) { return }
+    val msg = "ASSERTION FAILED: expected empty string but got \"" + s + "\""
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+fun assertStringNotEmpty(s: String, message: String = ""): Unit {
+    if (__probeRecording == 1) {
+        if (stringLength(s) > 0) {
+            __probeResults = __probeResults + "P\n"
+        } else {
+            __probeFailed = __probeFailed + 1
+            val msg = "expected non-empty string"
+            if (stringLength(message) > 0) {
+                __probeResults = __probeResults + "F:" + msg + " — " + message + "\n"
+            } else {
+                __probeResults = __probeResults + "F:" + msg + "\n"
+            }
+        }
+        return
+    }
+    if (stringLength(s) > 0) { return }
+    val msg = "ASSERTION FAILED: expected non-empty string"
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
+fun assertStringLength(s: String, expected: Int, message: String = ""): Unit {
+    val actual = stringLength(s)
+    if (__probeRecording == 1) {
+        if (actual == expected) {
+            __probeResults = __probeResults + "P\n"
+        } else {
+            __probeFailed = __probeFailed + 1
+            val msg = "expected string length " + toString(expected) + " but got " + toString(actual) + " for \"" + s + "\""
+            if (stringLength(message) > 0) {
+                __probeResults = __probeResults + "F:" + msg + " — " + message + "\n"
+            } else {
+                __probeResults = __probeResults + "F:" + msg + "\n"
+            }
+        }
+        return
+    }
+    if (actual == expected) { return }
+    val msg = "ASSERTION FAILED: expected string length " + toString(expected) + " but got " + toString(actual) + " for \"" + s + "\""
+    if (stringLength(message) > 0) {
+        panic(msg + " — " + message)
+    }
+    panic(msg)
+}
+
 // ── Unconditional failure ───────────────────────────────────────────────
 
 fun fail(message: String = "test failed"): Unit {
