@@ -233,7 +233,7 @@ RockitKit is a standalone library so it can be imported by other tools (editor p
 | Base64 | `rockit.encoding.base64` | base64Encode, base64Decode |
 | DateTime | `rockit.time.datetime` | now, dateFromEpoch, formatDate, dayOfWeek |
 | JSON | `rockit.json` | jsonParse, jsonStringify, jsonObject, jsonArray |
-| Probe | `rockit.test.probe` | assertEquals, assertTrue, assertFalse, fail |
+| Probe | `rockit.test.probe` | 20 assertions: assertEquals, assertEqualsStr, assertEqualsBool, assertNotEquals, assertNotEqualsStr, assertTrue, assertFalse, assertGreaterThan, assertLessThan, assertGreaterThanOrEqual, assertLessThanOrEqual, assertBetween, assertStringContains, assertStartsWith, assertEndsWith, assertStringEmpty, assertStringNotEmpty, assertStringLength, assert, fail |
 
 ### Key constraints for stdlib development
 

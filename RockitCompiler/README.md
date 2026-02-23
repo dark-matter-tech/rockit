@@ -249,7 +249,7 @@ The standard library ships under `Stage1/stdlib/rockit/` and is imported with `i
 | **Data** | | |
 | `json` | `import rockit.json` | JSON encoder/decoder — parse, stringify, pretty-print, type-safe API |
 | **Testing** | | |
-| `test/probe` | `import rockit.test.probe` | Probe test framework — 12 assertion functions for `@Test` annotated tests |
+| `test/probe` | `import rockit.test.probe` | Probe test framework — 20 assertion functions for `@Test` annotated tests |
 
 ### rockit.core.collections
 
