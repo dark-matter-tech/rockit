@@ -1524,6 +1524,31 @@ public final class LLVMCodeGen {
                 if knownIntTemps.contains(src) {
                     knownIntTemps.insert(dest)
                 }
+                // ARC write barrier on load from global: retain the loaded value
+                // and release the dest temp's old value (if any). This ensures the
+                // value survives if the global is overwritten, and handles loops
+                // where the dest temp is reused (each iteration releases the old).
+                if src.hasPrefix("global."), srcType == "ptr" {
+                    let kind = tempHeapKinds[src] ?? .unknown
+                    var result = emitOldTempRelease(dest: dest, kind: kind)
+                    result.append("\(tmp) = load \(srcType), ptr \(addrOf(src))")
+                    switch kind {
+                    case .string:
+                        result.append(contentsOf: emitInlineStringRetain(tmp))
+                    case .object:
+                        result.append("call void @rockit_retain(ptr \(tmp))")
+                    default:
+                        let tmpI64 = nextSSA()
+                        result.append("\(tmpI64) = ptrtoint ptr \(tmp) to i64")
+                        result.append("call void @rockit_retain_value(i64 \(tmpI64))")
+                    }
+                    result.append("store \(srcType) \(tmp), ptr \(addrOf(dest))")
+                    if let flag = arcFlags[dest] {
+                        result.append("store i1 1, ptr \(flag)")
+                    }
+                    trackHeapTemp(dest, kind: kind)
+                    return result
+                }
                 return [
                     "\(tmp) = load \(srcType), ptr \(addrOf(src))",
                     "store \(srcType) \(tmp), ptr \(addrOf(dest))"
@@ -2927,6 +2952,15 @@ public final class LLVMCodeGen {
                     if callee == "toString" {
                         dests.insert(dest)
                     }
+                case .load(let dest, let src):
+                    // Loading a ptr-typed global into a temp needs ARC tracking
+                    // so emitOldTempRelease can release the old value in loops.
+                    if src.hasPrefix("global.") {
+                        let srcType = registerTypes[src] ?? moduleGlobals[src] ?? "i64"
+                        if srcType == "ptr" {
+                            dests.insert(dest)
+                        }
+                    }
                 case .store(let dest, let src):
                     // If the source is ptr-typed, the dest needs ARC tracking
                     // to prevent leaks when ptr-typed locals are reassigned in loops.
@@ -2991,6 +3025,8 @@ public final class LLVMCodeGen {
     private func emitNativeCollectionCreate(dest: String?, nativeFn: String, kind: HeapKind) -> [String] {
         guard let dest = dest else { return [] }
         var lines: [String] = []
+        // Release old value if dest was previously assigned (loop safety)
+        lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: kind))
         let tmp = nextSSA()
         lines.append("\(tmp) = call ptr @\(nativeFn)()")
         lines.append(storeToTemp(dest, value: tmp, type: "ptr"))

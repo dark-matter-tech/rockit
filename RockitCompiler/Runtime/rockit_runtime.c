@@ -230,8 +230,7 @@ void rockit_retain_value(int64_t val) {
 }
 
 void rockit_release_value(int64_t val) {
-
-    if (!is_likely_heap_ptr(val)) return;
+    if (!is_likely_heap_ptr(val)) { return; }
     void* ptr = (void*)(intptr_t)val;
     int64_t first_field = *(int64_t*)ptr;
     if (first_field == ROCKIT_IMMORTAL_REFCOUNT) return;  // immortal string literal

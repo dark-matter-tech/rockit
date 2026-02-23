@@ -1311,6 +1311,10 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val tval = llvmNextSSA(state)
             llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr @", globalName))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr %t", toString(dest)))))
+            // Retain on load: creates an owning reference so the value
+            // survives if the global is overwritten later.
+            llvmLine(buf, stringConcat("  call void @rockit_retain_value(i64 ", stringConcat(tval, ")")))
+            mapPut(usedExterns, "rockit_retain_value", true)
             ip = ip + 5
         } else if (op == 84) {
             // OP_STORE_GLOBAL: nameIdx(u16) + src(u16)
@@ -1860,6 +1864,10 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             val tval = llvmNextSSA(rState)
             llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr @", globalName))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr %t", toString(dest)))))
+            // Retain on load: creates an owning reference so the value
+            // survives if the global is overwritten later.
+            llvmLine(buf, stringConcat("  call void @rockit_retain_value(i64 ", stringConcat(tval, ")")))
+            mapPut(rExterns, "rockit_retain_value", true)
             ip = ip + 5
         } else if (op == 84) {
             // OP_STORE_GLOBAL: nameIdx(u16) + src(u16)
