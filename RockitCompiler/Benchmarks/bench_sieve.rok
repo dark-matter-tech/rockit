@@ -2,6 +2,9 @@
 // Measures: list indexing, modulo, conditionals, nested loops
 // Practical: prime number computation to 1,000,000
 
+import rockit.core.collections
+import rockit.core.math
+
 fun main(): Unit {
     val n: Int = 1000000
     val sieve = listCreateFilled(n + 1, 1)

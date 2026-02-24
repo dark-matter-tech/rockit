@@ -1,6 +1,8 @@
 // bench_fib.rok — Fibonacci benchmark (recursive)
 // Measures: function call overhead, recursion, integer arithmetic
 
+import rockit.core.math
+
 fun fib(n: Int): Int {
     if (n <= 1) { return n }
     return fib(n - 1) + fib(n - 2)

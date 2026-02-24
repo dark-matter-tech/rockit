@@ -2,6 +2,9 @@
 // Measures: nested loops, list indexing, arithmetic
 // Practical: 200x200 matrix multiply (scientific computing)
 
+import rockit.core.collections
+import rockit.core.math
+
 fun main(): Unit {
     val n: Int = 200
 

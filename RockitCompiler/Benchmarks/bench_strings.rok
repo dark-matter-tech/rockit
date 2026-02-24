@@ -1,6 +1,8 @@
 // bench_strings.rok — String operations benchmark
 // Measures: string concatenation, string interpolation, memory handling
 
+import rockit.core.strings
+
 fun main(): Unit {
     var s: String = ""
     var i: Int = 0

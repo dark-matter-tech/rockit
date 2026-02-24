@@ -2,6 +2,8 @@
 // Measures: recursion, list operations, partitioning
 // Practical: sort 500,000 integers
 
+import rockit.core.collections
+
 fun swap(arr: List, i: Int, j: Int): Unit {
     val tmp = listGet(arr, i)
     listSet(arr, i, listGet(arr, j))

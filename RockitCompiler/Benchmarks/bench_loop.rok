@@ -1,6 +1,8 @@
 // bench_loop.rok — Loop + arithmetic benchmark
 // Measures: loop overhead, integer arithmetic, variable mutation
 
+import rockit.core.math
+
 fun main(): Unit {
     var sum: Int = 0
     var i: Int = 0
