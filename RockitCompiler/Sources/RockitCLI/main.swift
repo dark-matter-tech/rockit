@@ -159,7 +159,7 @@ func checkCommand(file: String, dumpTypes: Bool) {
     let parsedAST = parser.parse()
 
     let sourceDir = (file as NSString).deletingLastPathComponent
-    let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
+    let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: findStdlibDir().map { [$0] } ?? [], diagnostics: diagnostics)
     let ast = importResolver.resolve(parsedAST)
 
     let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
@@ -260,7 +260,7 @@ func buildCommand(file: String, dumpBytecode: Bool) {
     let parsedAST = parser.parse()
 
     let sourceDir = (file as NSString).deletingLastPathComponent
-    let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
+    let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: findStdlibDir().map { [$0] } ?? [], diagnostics: diagnostics)
     let ast = importResolver.resolve(parsedAST)
 
     let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
@@ -340,7 +340,7 @@ func runCommand(file: String, trace: Bool, gcStats: Bool) {
         let parsedAST = parser.parse()
 
         let sourceDir = (file as NSString).deletingLastPathComponent
-        let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
+        let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: findStdlibDir().map { [$0] } ?? [], diagnostics: diagnostics)
         let ast = importResolver.resolve(parsedAST)
 
         let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
@@ -1722,6 +1722,7 @@ func buildNativeCommand(file: String, dumpLLVM: Bool) {
 
     // Find Runtime/ directory relative to the executable or working directory
     let runtimeDir = findRuntimeDir()
+    let stdlibPaths: [String] = findStdlibDir().map { [$0] } ?? []
 
     do {
         let result = try LLVMCodeGen.compileToNative(
@@ -1729,6 +1730,7 @@ func buildNativeCommand(file: String, dumpLLVM: Bool) {
             fileName: file,
             outputPath: outputPath,
             runtimeDir: runtimeDir,
+            libPaths: stdlibPaths,
             emitLLVM: false
         )
         print("\(file) \u{2192} \(result)")
@@ -1764,7 +1766,7 @@ func emitLLVMCommand(file: String) {
     let parsedAST = parser.parse()
 
     let sourceDir = (file as NSString).deletingLastPathComponent
-    let importResolver = ImportResolver(sourceDir: sourceDir, diagnostics: diagnostics)
+    let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: findStdlibDir().map { [$0] } ?? [], diagnostics: diagnostics)
     let ast = importResolver.resolve(parsedAST)
 
     let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
@@ -1799,6 +1801,7 @@ func runNativeCommand(file: String) {
 
     let outputPath = Platform.tempFilePath("rockit_native_\(ProcessInfo.processInfo.processIdentifier)")
     let runtimeDir = findRuntimeDir()
+    let runNativeStdlibPaths: [String] = findStdlibDir().map { [$0] } ?? []
 
     do {
         let binary = try LLVMCodeGen.compileToNative(
@@ -1806,6 +1809,7 @@ func runNativeCommand(file: String) {
             fileName: file,
             outputPath: outputPath,
             runtimeDir: runtimeDir,
+            libPaths: runNativeStdlibPaths,
             emitLLVM: false
         )
 
