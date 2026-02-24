@@ -758,7 +758,6 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             if (op == 36) { llvmOp = "srem" }
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = ", stringConcat(llvmOp, stringConcat(" i64 ", stringConcat(tl, stringConcat(", ", tr))))))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
-            mapPut(intRegs, toString(dest), true)
             ip = ip + 7
         } else if (op == 37) {
             // OP_NEG: dest(u16) + src(u16)
@@ -769,7 +768,6 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = sub i64 0, ", ts))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
-            mapPut(intRegs, toString(dest), true)
             ip = ip + 5
         } else if (op >= 38 && op <= 41) {
             // Float arithmetic: FADD(38) FSUB(39) FMUL(40) FDIV(41)

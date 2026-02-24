@@ -9,6 +9,7 @@
 #include <math.h>
 #ifdef __APPLE__
 #include <malloc/malloc.h>
+#include <mach/mach.h>
 #elif defined(_WIN32)
 #include <windows.h>
 #include <malloc.h>
@@ -632,9 +633,13 @@ static int is_likely_string_ptr(int64_t value) {
     if (value == 0) return 0;
     uint64_t uval = (uint64_t)value;
     if (uval > 0x100000000ULL && uval < 0x800000000000ULL) {
-        // Verify pointer is a valid heap allocation before reading
+        // Safely check if memory is readable before dereferencing
 #ifdef __APPLE__
-        if (malloc_size((void*)(intptr_t)value) == 0) return 0;
+        char _probe[32];
+        vm_size_t _probe_sz;
+        if (vm_read_overwrite(mach_task_self(), (vm_address_t)(intptr_t)value,
+                32, (vm_address_t)_probe, &_probe_sz) != KERN_SUCCESS)
+            return 0;
 #endif
         RockitString* s = (RockitString*)(intptr_t)value;
         if (((s->refCount > 0 && s->refCount < 100000) || s->refCount == ROCKIT_IMMORTAL_REFCOUNT) &&
