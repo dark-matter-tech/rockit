@@ -1577,13 +1577,13 @@ public final class LLVMCodeGen {
             if case .string = type {
                 return emitStringConcat(dest: dest, parts: [lhs, rhs])
             }
-            return emitBinaryArith("add", "fadd", dest: dest, lhs: lhs, rhs: rhs, type: type, intFlags: "nsw")
+            return emitBinaryArith("add", "fadd", dest: dest, lhs: lhs, rhs: rhs, type: type)
 
         case .sub(let dest, let lhs, let rhs, let type):
-            return emitBinaryArith("sub", "fsub", dest: dest, lhs: lhs, rhs: rhs, type: type, intFlags: "nsw")
+            return emitBinaryArith("sub", "fsub", dest: dest, lhs: lhs, rhs: rhs, type: type)
 
         case .mul(let dest, let lhs, let rhs, let type):
-            return emitBinaryArith("mul", "fmul", dest: dest, lhs: lhs, rhs: rhs, type: type, intFlags: "nsw")
+            return emitBinaryArith("mul", "fmul", dest: dest, lhs: lhs, rhs: rhs, type: type)
 
         case .div(let dest, let lhs, let rhs, let type):
             return emitBinaryArith("sdiv", "fdiv", dest: dest, lhs: lhs, rhs: rhs, type: type)
@@ -3107,7 +3107,7 @@ public final class LLVMCodeGen {
         lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(size)")
         lines.append("store i64 \(val), ptr \(elemAddr), !tbaa !4")
         let newSize = nextSSA()
-        lines.append("\(newSize) = add nsw i64 \(size), 1")
+        lines.append("\(newSize) = add i64 \(size), 1")
         lines.append("store i64 \(newSize), ptr \(sizeAddr), !tbaa !3")
         lines.append("br label %\(doneLabel)")
 
