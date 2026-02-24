@@ -632,6 +632,10 @@ static int is_likely_string_ptr(int64_t value) {
     if (value == 0) return 0;
     uint64_t uval = (uint64_t)value;
     if (uval > 0x100000000ULL && uval < 0x800000000000ULL) {
+        // Verify pointer is a valid heap allocation before reading
+#ifdef __APPLE__
+        if (malloc_size((void*)(intptr_t)value) == 0) return 0;
+#endif
         RockitString* s = (RockitString*)(intptr_t)value;
         if (((s->refCount > 0 && s->refCount < 100000) || s->refCount == ROCKIT_IMMORTAL_REFCOUNT) &&
             s->length >= 0 && s->length < 10000000) {

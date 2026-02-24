@@ -4894,6 +4894,11 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "rockit_print_double", "void|double")
     mapPut(t, "rockit_double_to_string", "ptr|double")
 
+    // Int print/toString
+    mapPut(t, "rockit_println_int", "void|i64")
+    mapPut(t, "rockit_print_int", "void|i64")
+    mapPut(t, "rockit_int_to_string", "ptr|i64")
+
     // Math builtins (double → double)
     mapPut(t, "rockit_math_sqrt", "double|double")
     mapPut(t, "rockit_math_sin", "double|double")
@@ -5302,6 +5307,8 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
     mapPut(state, "usedExterns", usedExterns)
     val doubleRegs = mapCreate()
     mapPut(state, "doubleRegs", doubleRegs)
+    val intRegs = mapCreate()
+    mapPut(state, "intRegs", intRegs)
     val creprRegs = mapCreate()
     mapPut(state, "creprRegs", creprRegs)
 
@@ -5375,6 +5382,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val dest = llvmReadU16(bc, ip + 1)
             val value = llvmReadI64(bc, ip + 3)
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(llvmFormatI64(value), stringConcat(", ptr %t", toString(dest)))))
+            mapPut(intRegs, toString(dest), true)
             ip = ip + 11
         } else if (op == 2) {
             // OP_CONST_FLOAT: dest(u16) + poolIdx(u16)
@@ -5443,6 +5451,10 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             if (creprTag17 != null) {
                 mapPut(creprRegs17, toString(dest), creprTag17)
             }
+            // Propagate int flag
+            if (mapGet(intRegs, toString(src)) != null) {
+                mapPut(intRegs, toString(dest), true)
+            }
             ip = ip + 5
         } else if (op == 18) {
             // OP_LOAD: dest(u16) + src(u16)
@@ -5461,6 +5473,10 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val creprTag18 = mapGet(creprRegs18, toString(src))
             if (creprTag18 != null) {
                 mapPut(creprRegs18, toString(dest), creprTag18)
+            }
+            // Propagate int flag
+            if (mapGet(intRegs, toString(src)) != null) {
+                mapPut(intRegs, toString(dest), true)
             }
             ip = ip + 5
         } else if (op == 19) {
@@ -5488,6 +5504,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             if (op == 36) { llvmOp = "srem" }
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = ", stringConcat(llvmOp, stringConcat(" i64 ", stringConcat(tl, stringConcat(", ", tr))))))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(intRegs, toString(dest), true)
             ip = ip + 7
         } else if (op == 37) {
             // OP_NEG: dest(u16) + src(u16)
@@ -5498,6 +5515,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = sub i64 0, ", ts))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(intRegs, toString(dest), true)
             ip = ip + 5
         } else if (op >= 38 && op <= 41) {
             // Float arithmetic: FADD(38) FSUB(39) FMUL(40) FDIV(41)
@@ -5574,6 +5592,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
                 llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i8 ", stringConcat(tcmp, " to i64")))))
             }
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(intRegs, toString(dest), true)
             ip = ip + 7
         } else if (op >= 50 && op <= 53) {
             // OP_LT(50) LTE(51) GT(52) GTE(53)
@@ -5593,6 +5612,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp ", stringConcat(cmpOp, stringConcat(" i64 ", stringConcat(tl, stringConcat(", ", tr))))))))
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(intRegs, toString(dest), true)
             ip = ip + 7
         } else if (op >= 54 && op <= 58) {
             // Float comparisons: FEQ(54) FLT(55) FLTE(56) FGT(57) FGTE(58)
@@ -5617,6 +5637,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = fcmp ", stringConcat(fcmpOp, stringConcat(" double ", stringConcat(tlf, stringConcat(", ", trf))))))))
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(intRegs, toString(dest), true)
             ip = ip + 7
         } else if (op == 64 || op == 65) {
             // OP_AND(64) / OP_OR(65)
@@ -5634,6 +5655,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
                 llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = or i64 ", stringConcat(tl, stringConcat(", ", tr))))))
             }
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(intRegs, toString(dest), true)
             ip = ip + 7
         } else if (op == 66) {
             // OP_NOT
@@ -5646,6 +5668,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(ts, ", 0")))))
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(intRegs, toString(dest), true)
             ip = ip + 5
         } else if (op == 80) {
             // OP_CALL: dest(u16) + funcIdx(u16) + argc(u16) + args(u16*N)
@@ -5675,6 +5698,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(ts, ", 3405691582")))))
             llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = zext i1 ", stringConcat(tcmp, " to i64")))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(intRegs, toString(dest), true)
             ip = ip + 5
         } else if (op == 96) {
             // OP_GET_FIELD: dest(u16) + obj(u16) + fieldIdx(u16)
@@ -7295,6 +7319,34 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         }
     }
 
+    // Check if println/print/toString arg is an integer register
+    if ((callName == "println" || callName == "print" || callName == "toString") && argc == 1) {
+        val argReg2 = llvmReadU16(bc, argStart)
+        val iRegs = mapGet(state, "intRegs")
+        if (iRegs != null && mapGet(iRegs, toString(argReg2)) != null) {
+            if (callName == "toString") {
+                cName = "rockit_int_to_string"
+                mapPut(usedExterns, cName, true)
+                val tia = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tia, stringConcat(" = load i64, ptr %t", toString(argReg2)))))
+                val tires = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tires, stringConcat(" = call ptr @rockit_int_to_string(i64 ", stringConcat(tia, ")")))))
+                val ticonv = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(ticonv, stringConcat(" = ptrtoint ptr ", stringConcat(tires, " to i64")))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(ticonv, stringConcat(", ptr %t", toString(dest)))))
+                return
+            }
+            if (callName == "println") { cName = "rockit_println_int" }
+            if (callName == "print") { cName = "rockit_print_int" }
+            mapPut(usedExterns, cName, true)
+            val tia = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tia, stringConcat(" = load i64, ptr %t", toString(argReg2)))))
+            llvmLine(buf, stringConcat("  call void @", stringConcat(cName, stringConcat("(i64 ", stringConcat(tia, ")")))))
+            llvmLine(buf, stringConcat("  store i64 3405691582, ptr %t", toString(dest)))
+            return
+        }
+    }
+
     if (callName == "println") { cName = "rockit_println_any" }
     if (callName == "print") { cName = "rockit_print_any" }
 
@@ -7387,6 +7439,13 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         val tres = llvmNextSSA(state)
         llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @", stringConcat(cName, stringConcat("(", stringConcat(argStr, ")")))))))
         llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+        // Track known integer-returning builtins
+        if (callName == "listSize" || callName == "toInt" || callName == "charCodeAt" || callName == "stringLength" || callName == "stringIndexOf" || callName == "currentTimeMillis" || callName == "randomInt") {
+            val iRegs2 = mapGet(state, "intRegs")
+            if (iRegs2 != null) {
+                mapPut(iRegs2, toString(dest), true)
+            }
+        }
     }
 }
 
