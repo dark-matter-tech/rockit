@@ -145,6 +145,7 @@ fun registerBuiltins(tc: Map): Unit {
 
     // List operations
     registerFn(fns, "listCreate", 0, "List")
+    registerFn(fns, "listCreateFilled", 2, "List")
     registerFn(fns, "listAppend", 2, "Unit")
     registerFn(fns, "listGet", 2, "Any")
     registerFn(fns, "listSet", 3, "Unit")

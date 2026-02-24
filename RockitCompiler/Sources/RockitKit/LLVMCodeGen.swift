@@ -3097,8 +3097,9 @@ public final class LLVMCodeGen {
         labelCounter += 1
         lines.append("br i1 \(ok), label %\(fastLabel), label %\(slowLabel), !prof !5")
 
-        // Fast path: store element and increment size
+        // Fast path: retain value, store element and increment size
         lines.append("\(fastLabel):")
+        lines.append("call void @rockit_retain_value(i64 \(val))")
         let dataAddr = nextSSA()
         lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
         let dataPtr = nextSSA()

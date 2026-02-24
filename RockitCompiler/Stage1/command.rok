@@ -2958,6 +2958,7 @@ fun registerBuiltins(tc: Map): Unit {
 
     // List operations
     registerFn(fns, "listCreate", 0, "List")
+    registerFn(fns, "listCreateFilled", 2, "List")
     registerFn(fns, "listAppend", 2, "Unit")
     registerFn(fns, "listGet", 2, "Any")
     registerFn(fns, "listSet", 3, "Unit")
@@ -4797,6 +4798,7 @@ fun llvmBuildSigTable(): Map {
     val t = mapCreate()
     // i64 → i64 wrappers (no casting needed)
     mapPut(t, "listCreate", "i64|")
+    mapPut(t, "listCreateFilled", "i64|i64,i64")
     mapPut(t, "listGet", "i64|i64,i64")
     mapPut(t, "listSize", "i64|i64")
     mapPut(t, "listAppend", "void|i64,i64")
