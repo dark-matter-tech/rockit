@@ -281,6 +281,9 @@ public final class LLVMCodeGen {
         lines.append("!2 = !{!\"list_element\", !0}")
         lines.append("!3 = !{!1, !1, i64 0}")
         lines.append("!4 = !{!2, !2, i64 0}")
+        lines.append("")
+        lines.append("; Branch weight metadata for bounds checks (hot path = in-bounds)")
+        lines.append("!5 = !{!\"branch_weights\", i32 2000000, i32 1}")
 
         return lines.joined(separator: "\n")
     }
@@ -408,7 +411,7 @@ public final class LLVMCodeGen {
         // Emit a constructor function that registers the hierarchy at program start
         lines.append("@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @rockit_init_type_hierarchy, ptr null }]")
         lines.append("")
-        lines.append("define internal void @rockit_init_type_hierarchy() {")
+        lines.append("define internal void @rockit_init_type_hierarchy() nounwind {")
         lines.append("  call void @rockit_set_type_hierarchy(ptr @rockit_type_hierarchy, i32 \(count))")
         lines.append("  ret void")
         lines.append("}")
@@ -440,7 +443,7 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare ptr @rockit_int_to_string(i64)")
         externalDecls.insert("declare ptr @rockit_float_to_string(double)")
         externalDecls.insert("declare ptr @rockit_bool_to_string(i1)")
-        externalDecls.insert("declare void @rockit_panic(ptr)")
+        externalDecls.insert("declare void @rockit_panic(ptr) noreturn")
         // Object runtime
         externalDecls.insert("declare ptr @rockit_object_alloc(ptr, i32)")
         externalDecls.insert("declare i64 @rockit_object_get_field(ptr, i32)")
@@ -749,7 +752,7 @@ public final class LLVMCodeGen {
         }
 
         let linkage = funcName == "main" ? "" : "internal "
-        lines.append("define \(linkage)\(retType) @\(funcName)(\(params)) {")
+        lines.append("define \(linkage)\(retType) @\(funcName)(\(params)) nounwind {")
 
         // Alloca prologue block: emit allocas for all temps
         let allTemps = collectTemps(function)
@@ -1574,13 +1577,13 @@ public final class LLVMCodeGen {
             if case .string = type {
                 return emitStringConcat(dest: dest, parts: [lhs, rhs])
             }
-            return emitBinaryArith("add", "fadd", dest: dest, lhs: lhs, rhs: rhs, type: type)
+            return emitBinaryArith("add", "fadd", dest: dest, lhs: lhs, rhs: rhs, type: type, intFlags: "nsw")
 
         case .sub(let dest, let lhs, let rhs, let type):
-            return emitBinaryArith("sub", "fsub", dest: dest, lhs: lhs, rhs: rhs, type: type)
+            return emitBinaryArith("sub", "fsub", dest: dest, lhs: lhs, rhs: rhs, type: type, intFlags: "nsw")
 
         case .mul(let dest, let lhs, let rhs, let type):
-            return emitBinaryArith("mul", "fmul", dest: dest, lhs: lhs, rhs: rhs, type: type)
+            return emitBinaryArith("mul", "fmul", dest: dest, lhs: lhs, rhs: rhs, type: type, intFlags: "nsw")
 
         case .div(let dest, let lhs, let rhs, let type):
             return emitBinaryArith("sdiv", "fdiv", dest: dest, lhs: lhs, rhs: rhs, type: type)
@@ -2466,17 +2469,20 @@ public final class LLVMCodeGen {
 
     private func emitBinaryArith(
         _ intOp: String, _ floatOp: String,
-        dest: String, lhs: String, rhs: String, type: MIRType
+        dest: String, lhs: String, rhs: String, type: MIRType,
+        intFlags: String = ""
     ) -> [String] {
         let lt = llvmArithType(type)
         let tmp1 = nextSSA()
         let tmp2 = nextSSA()
         let tmp3 = nextSSA()
-        let op = isFloatType(type) ? floatOp : intOp
+        let isFloat = isFloatType(type)
+        let op = isFloat ? floatOp : intOp
+        let flags = (!isFloat && !intFlags.isEmpty) ? " \(intFlags)" : ""
         return [
             "\(tmp1) = load \(lt), ptr \(addrOf(lhs))",
             "\(tmp2) = load \(lt), ptr \(addrOf(rhs))",
-            "\(tmp3) = \(op) \(lt) \(tmp1), \(tmp2)",
+            "\(tmp3) = \(op)\(flags) \(lt) \(tmp1), \(tmp2)",
             storeToTemp(dest, value: tmp3, type: lt)
         ]
     }
@@ -3072,7 +3078,45 @@ public final class LLVMCodeGen {
         var lines: [String] = []
         let listPtr = loadArgAsPtr(args[0], lines: &lines)
         let val = loadArgAsI64(args[1], lines: &lines)
+
+        // Inline fast path: if size < capacity, store directly and increment size
+        // RockitList layout: refCount(0) size(8) capacity(16) data*(24)
+        let sizeAddr = nextSSA()
+        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+        let size = nextSSA()
+        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+        let capAddr = nextSSA()
+        lines.append("\(capAddr) = getelementptr i8, ptr \(listPtr), i64 16")
+        let cap = nextSSA()
+        lines.append("\(cap) = load i64, ptr \(capAddr), !tbaa !3")
+        let ok = nextSSA()
+        lines.append("\(ok) = icmp ult i64 \(size), \(cap)")
+        let fastLabel = "append.fast.\(labelCounter)"
+        let slowLabel = "append.slow.\(labelCounter)"
+        let doneLabel = "append.done.\(labelCounter)"
+        labelCounter += 1
+        lines.append("br i1 \(ok), label %\(fastLabel), label %\(slowLabel), !prof !5")
+
+        // Fast path: store element and increment size
+        lines.append("\(fastLabel):")
+        let dataAddr = nextSSA()
+        lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
+        let dataPtr = nextSSA()
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
+        let elemAddr = nextSSA()
+        lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(size)")
+        lines.append("store i64 \(val), ptr \(elemAddr), !tbaa !4")
+        let newSize = nextSSA()
+        lines.append("\(newSize) = add nsw i64 \(size), 1")
+        lines.append("store i64 \(newSize), ptr \(sizeAddr), !tbaa !3")
+        lines.append("br label %\(doneLabel)")
+
+        // Slow path: call runtime for reallocation
+        lines.append("\(slowLabel):")
         lines.append("call void @rockit_list_append(ptr \(listPtr), i64 \(val))")
+        lines.append("br label %\(doneLabel)")
+
+        lines.append("\(doneLabel):")
         return lines
     }
 
@@ -3107,7 +3151,7 @@ public final class LLVMCodeGen {
         let okLabel = "list.ok.\(labelCounter)"
         let oobLabel = "list.oob.\(labelCounter)"
         labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel)")
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
         lines.append("\(oobLabel):")
         let oobIdx = internString("list index out of bounds")
         lines.append("call void @rockit_panic(ptr \(oobIdx))")
@@ -3165,7 +3209,7 @@ public final class LLVMCodeGen {
         let okLabel = "list.ok.\(labelCounter)"
         let oobLabel = "list.oob.\(labelCounter)"
         labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel)")
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
         lines.append("\(oobLabel):")
         let oobIdx = internString("list index out of bounds")
         lines.append("call void @rockit_panic(ptr \(oobIdx))")
@@ -3217,7 +3261,7 @@ public final class LLVMCodeGen {
         let okLabel = "list.ok.\(labelCounter)"
         let oobLabel = "list.oob.\(labelCounter)"
         labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel)")
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
         lines.append("\(oobLabel):")
         let oobIdx = internString("list index out of bounds")
         lines.append("call void @rockit_panic(ptr \(oobIdx))")
@@ -3265,7 +3309,7 @@ public final class LLVMCodeGen {
         let okLabel = "list.ok.\(labelCounter)"
         let oobLabel = "list.oob.\(labelCounter)"
         labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel)")
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
         lines.append("\(oobLabel):")
         let oobIdx = internString("list index out of bounds")
         lines.append("call void @rockit_panic(ptr \(oobIdx))")
@@ -4022,17 +4066,11 @@ public final class LLVMCodeGen {
             if isStackPromoted, let stackAlloca = stackAllocaNames[dest] {
                 // Stack allocation: use pre-allocated prologue alloca
                 objTmp = stackAlloca
-                // Initialize header for layout compatibility
-                lines.append("store ptr \(typeNameGlobal), ptr \(objTmp)")
-                let rcGep = nextSSA()
-                lines.append("\(rcGep) = getelementptr i8, ptr \(objTmp), i64 8")
-                lines.append("store i64 -1, ptr \(rcGep)")  // sentinel: stack-allocated
-                let fcGep = nextSSA()
-                lines.append("\(fcGep) = getelementptr i8, ptr \(objTmp), i64 16")
-                lines.append("store i32 \(fieldCount), ptr \(fcGep)")
-                let bitsGep = nextSSA()
-                lines.append("\(bitsGep) = getelementptr i8, ptr \(objTmp), i64 20")
-                lines.append("store i32 0, ptr \(bitsGep)")
+                // Skip header initialization — value types use inline GEP at
+                // hardcoded offsets, ARC is skipped, and escape analysis
+                // guarantees no runtime function receives the object.
+                // Header fields (typeName, RC, fieldCount, ptrFieldBits)
+                // are never read for stack-promoted value types.
             } else {
                 objTmp = nextSSA()
                 lines.append("\(objTmp) = call ptr @rockit_object_alloc(ptr \(typeNameGlobal), i32 \(fieldCount))")

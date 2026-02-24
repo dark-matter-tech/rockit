@@ -69,7 +69,7 @@ final class LLVMCodeGenTests: XCTestCase {
         }
         fun main(): Unit { println(add(40, 2)) }
         """)
-        XCTAssertTrue(ir.contains("add i64"), "Should emit add i64 instruction")
+        XCTAssertTrue(ir.contains("add nsw i64"), "Should emit add nsw i64 instruction")
     }
 
     func testIntegerSub() {
@@ -79,7 +79,7 @@ final class LLVMCodeGenTests: XCTestCase {
         }
         fun main(): Unit { println(sub(50, 8)) }
         """)
-        XCTAssertTrue(ir.contains("sub i64"), "Should emit sub i64 instruction")
+        XCTAssertTrue(ir.contains("sub nsw i64"), "Should emit sub nsw i64 instruction")
     }
 
     func testIntegerMul() {
@@ -89,7 +89,7 @@ final class LLVMCodeGenTests: XCTestCase {
         }
         fun main(): Unit { println(mul(6, 7)) }
         """)
-        XCTAssertTrue(ir.contains("mul i64"), "Should emit mul i64 instruction")
+        XCTAssertTrue(ir.contains("mul nsw i64"), "Should emit mul nsw i64 instruction")
     }
 
     func testIntegerDiv() {
