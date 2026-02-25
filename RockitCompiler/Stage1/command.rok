@@ -5731,8 +5731,10 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             llvmLine(buf, stringConcat("  ", stringConcat(tl, stringConcat(" = load i64, ptr %t", toString(left)))))
             llvmLine(buf, stringConcat("  ", stringConcat(tr, stringConcat(" = load i64, ptr %t", toString(right)))))
             val eqNoRuntime = mapGet(compiler, "noRuntime") == true
-            if (eqNoRuntime) {
-                // Freestanding: integer comparison only (no runtime)
+            val eqLeftInt = mapGet(intRegs, toString(left)) != null
+            val eqRightInt = mapGet(intRegs, toString(right)) != null
+            if (eqNoRuntime || eqLeftInt || eqRightInt) {
+                // Integer comparison: direct icmp
                 if (op == 48) {
                     llvmLine(buf, stringConcat("  ", stringConcat(tcmp, stringConcat(" = icmp eq i64 ", stringConcat(tl, stringConcat(", ", tr))))))
                 } else {
@@ -5907,29 +5909,17 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             } else {
                 val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
                 // Check if object register is tracked as value type
-                val vtInfo96 = mapGet(mapGet(state, "vtRegs"), toString(objReg))
-                if (vtInfo96 != null) {
-                    // Inline GEP: offset 24 + fieldIdx * 8
-                    val vtOff96 = 24 + fieldIdx * 8
-                    val tobj = llvmNextSSA(state)
-                    val tobjPtr = llvmNextSSA(state)
-                    val tgep = llvmNextSSA(state)
-                    val tres = llvmNextSSA(state)
-                    llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr, stringConcat(", i64 ", toString(vtOff96)))))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = load i64, ptr ", tgep))))
-                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
-                } else {
-                    val tobj = llvmNextSSA(state)
-                    val tobjPtr = llvmNextSSA(state)
-                    val tres = llvmNextSSA(state)
-                    mapPut(usedExterns, "rockit_object_get_field", true)
-                    llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @rockit_object_get_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), ")")))))))
-                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
-                }
+                // Always use inline GEP: offset 24 + fieldIdx * 8
+                val vtOff96 = 24 + fieldIdx * 8
+                val tobj = llvmNextSSA(state)
+                val tobjPtr = llvmNextSSA(state)
+                val tgep = llvmNextSSA(state)
+                val tres = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr, stringConcat(", i64 ", toString(vtOff96)))))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = load i64, ptr ", tgep))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             }
             ip = ip + 7
         } else if (op == 97) {
@@ -5975,30 +5965,17 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
                 }
             } else {
                 val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
-                // Check if object register is tracked as value type
-                val vtInfo97 = mapGet(mapGet(state, "vtRegs"), toString(objReg))
-                if (vtInfo97 != null) {
-                    // Inline GEP: offset 24 + fieldIdx * 8
-                    val vtOff97 = 24 + fieldIdx * 8
-                    val tobj = llvmNextSSA(state)
-                    val tobjPtr = llvmNextSSA(state)
-                    val tgep = llvmNextSSA(state)
-                    val tval = llvmNextSSA(state)
-                    llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr, stringConcat(", i64 ", toString(vtOff97)))))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
-                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr ", tgep))))
-                } else {
-                    val tobj = llvmNextSSA(state)
-                    val tobjPtr = llvmNextSSA(state)
-                    val tval = llvmNextSSA(state)
-                    mapPut(usedExterns, "rockit_object_set_field", true)
-                    llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
-                    llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
-                    llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), stringConcat(", i64 ", stringConcat(tval, ")")))))))
-                }
+                // Always use inline GEP: offset 24 + fieldIdx * 8
+                val vtOff97 = 24 + fieldIdx * 8
+                val tobj = llvmNextSSA(state)
+                val tobjPtr = llvmNextSSA(state)
+                val tgep = llvmNextSSA(state)
+                val tval = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr, stringConcat(", i64 ", toString(vtOff97)))))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr ", tgep))))
             }
             ip = ip + 7
         } else if (op == 112) {
@@ -6860,34 +6837,38 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             mapPut(rExterns, "rockit_retain_value", true)
             ip = ip + 5
         } else if (op == 96) {
-            // OP_GET_FIELD
+            // OP_GET_FIELD — always inline GEP: offset 24 + fieldIdx * 8
             val dest = llvmReadU16(bc, ip + 1)
             val objReg = llvmReadU16(bc, ip + 3)
             val fieldPoolIdx = llvmReadU16(bc, ip + 5)
             val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
+            val vtOff = 24 + fieldIdx * 8
             val tobj = llvmNextSSA(rState)
             val tobjPtr = llvmNextSSA(rState)
+            val tgep = llvmNextSSA(rState)
             val tres = llvmNextSSA(rState)
-            mapPut(rExterns, "rockit_object_get_field", true)
             llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
             llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
-            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @rockit_object_get_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), ")")))))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr, stringConcat(", i64 ", toString(vtOff)))))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = load i64, ptr ", tgep))))
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7
         } else if (op == 97) {
-            // OP_SET_FIELD
+            // OP_SET_FIELD — always inline GEP: offset 24 + fieldIdx * 8
             val objReg = llvmReadU16(bc, ip + 1)
             val fieldPoolIdx = llvmReadU16(bc, ip + 3)
             val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
             val valReg = llvmReadU16(bc, ip + 5)
+            val vtOff = 24 + fieldIdx * 8
             val tobj = llvmNextSSA(rState)
             val tobjPtr = llvmNextSSA(rState)
+            val tgep = llvmNextSSA(rState)
             val tval = llvmNextSSA(rState)
-            mapPut(rExterns, "rockit_object_set_field", true)
             llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
             llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+            llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr, stringConcat(", i64 ", toString(vtOff)))))))
             llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
-            llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), stringConcat(", i64 ", stringConcat(tval, ")")))))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr ", tgep))))
             ip = ip + 7
         } else if (op == 112) {
             // OP_NEW_OBJECT: dest(u16) + typeIdx(u16) + argc(u16) + args
