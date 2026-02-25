@@ -4317,9 +4317,9 @@ fun main(): Unit {
         var clangCmd: String = ""
         if (noRuntime) {
             // Freestanding: compile LLVM IR without runtime
-            clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" -o ", outputFile)))
+            clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -o ", outputFile)))
             if (toString(platformOS()) == "linux") {
-                clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
+                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
             }
         } else {
             // Find runtime path
@@ -4335,15 +4335,15 @@ fun main(): Unit {
             if (endsWith(runtimePath, ".c")) {
                 // Backward compat: C runtime needs -I for the header directory
                 val runtimeDir = dirName(runtimePath)
-                clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
+                clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+                    clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
                 }
             } else {
                 // Pre-built .o runtime — link directly, no -I needed
-                clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
+                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
+                    clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
                 }
             }
         }

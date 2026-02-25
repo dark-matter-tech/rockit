@@ -7510,6 +7510,9 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         llvmLine(buf, stringConcat("  ", stringConcat(lgElemAddr, stringConcat(" = getelementptr i64, ptr ", stringConcat(lgDataPtr, stringConcat(", i64 ", lgIdx))))))
         llvmLine(buf, stringConcat("  ", stringConcat(lgResult, stringConcat(" = load i64, ptr ", stringConcat(lgElemAddr, ", !tbaa !5")))))
         llvmLine(buf, stringConcat("  store i64 ", stringConcat(lgResult, stringConcat(", ptr %t", toString(dest)))))
+        // Mark listGet result as integer for downstream icmp optimizations
+        val iRegs4 = mapGet(state, "intRegs")
+        if (iRegs4 != null) { mapPut(iRegs4, toString(dest), true) }
         return
     }
 
@@ -7542,20 +7545,14 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         llvmLine(buf, "  call void @rockit_panic(ptr @.oob_msg)")
         llvmLine(buf, "  unreachable")
         llvmLine(buf, stringConcat(lsOkLabel, ":"))
-        // Retain new value, release old value
+        // Direct store — skip ARC retain/release (matches Stage 0)
         val lsDataAddr = llvmNextSSA(state)
         val lsDataPtr = llvmNextSSA(state)
         val lsElemAddr = llvmNextSSA(state)
-        val lsOldVal = llvmNextSSA(state)
         llvmLine(buf, stringConcat("  ", stringConcat(lsDataAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(lsListPtr, ", i64 24")))))
         llvmLine(buf, stringConcat("  ", stringConcat(lsDataPtr, stringConcat(" = load ptr, ptr ", stringConcat(lsDataAddr, ", !tbaa !4")))))
         llvmLine(buf, stringConcat("  ", stringConcat(lsElemAddr, stringConcat(" = getelementptr i64, ptr ", stringConcat(lsDataPtr, stringConcat(", i64 ", lsIdx))))))
-        llvmLine(buf, stringConcat("  ", stringConcat(lsOldVal, stringConcat(" = load i64, ptr ", stringConcat(lsElemAddr, ", !tbaa !5")))))
-        mapPut(usedExterns, "rockit_retain_value", true)
-        mapPut(usedExterns, "rockit_release_value", true)
-        llvmLine(buf, stringConcat("  call void @rockit_retain_value(i64 ", stringConcat(lsVal, ")")))
         llvmLine(buf, stringConcat("  store i64 ", stringConcat(lsVal, stringConcat(", ptr ", stringConcat(lsElemAddr, ", !tbaa !5")))))
-        llvmLine(buf, stringConcat("  call void @rockit_release_value(i64 ", stringConcat(lsOldVal, ")")))
         llvmLine(buf, stringConcat("  store i64 3405691582, ptr %t", toString(dest)))
         return
     }
@@ -7628,6 +7625,62 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         return
     }
     // ── End inline list operations ─────────────────────────────────────
+
+    // Inline toInt() for known integer arguments — avoids runtime call
+    if (callName == "toInt" && argc == 1) {
+        val tiArgReg = llvmReadU16(bc, argStart)
+        val tiIRegs = mapGet(state, "intRegs")
+        if (tiIRegs != null && mapGet(tiIRegs, toString(tiArgReg)) != null) {
+            val tiTmp = llvmNextSSA(state)
+            llvmLine(buf, stringConcat("  ", stringConcat(tiTmp, stringConcat(" = load i64, ptr %t", toString(tiArgReg)))))
+            llvmLine(buf, stringConcat("  store i64 ", stringConcat(tiTmp, stringConcat(", ptr %t", toString(dest)))))
+            mapPut(tiIRegs, toString(dest), true)
+            return
+        }
+    }
+
+    // Inline stringLength(s) — load from offset 8 in RockitString struct
+    if (callName == "stringLength" && argc == 1) {
+        val slArgReg = llvmReadU16(bc, argStart)
+        val slPtr = llvmNextSSA(state)
+        val slLenAddr = llvmNextSSA(state)
+        val slLen = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(slPtr, stringConcat(" = load i64, ptr %t", toString(slArgReg)))))
+        val slPtrCast = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(slPtrCast, stringConcat(" = inttoptr i64 ", stringConcat(slPtr, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(slLenAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(slPtrCast, ", i64 8")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(slLen, stringConcat(" = load i64, ptr ", slLenAddr))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(slLen, stringConcat(", ptr %t", toString(dest)))))
+        val slIRegs = mapGet(state, "intRegs")
+        if (slIRegs != null) { mapPut(slIRegs, toString(dest), true) }
+        return
+    }
+
+    // Inline charCodeAt(s, index) — load byte from s->chars[index], zext to i64
+    if (callName == "charCodeAt" && argc == 2) {
+        val ccArgReg = llvmReadU16(bc, argStart)
+        val ccIdxReg = llvmReadU16(bc, argStart + 2)
+        val ccPtr = llvmNextSSA(state)
+        val ccPtrCast = llvmNextSSA(state)
+        val ccIdx = llvmNextSSA(state)
+        val ccCharsAddr = llvmNextSSA(state)
+        val ccCharsPtr = llvmNextSSA(state)
+        val ccByteAddr = llvmNextSSA(state)
+        val ccByte = llvmNextSSA(state)
+        val ccResult = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(ccPtr, stringConcat(" = load i64, ptr %t", toString(ccArgReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(ccPtrCast, stringConcat(" = inttoptr i64 ", stringConcat(ccPtr, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(ccIdx, stringConcat(" = load i64, ptr %t", toString(ccIdxReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(ccCharsAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(ccPtrCast, ", i64 16")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(ccCharsPtr, stringConcat(" = load ptr, ptr ", ccCharsAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(ccByteAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(ccCharsPtr, stringConcat(", i64 ", ccIdx))))))
+        llvmLine(buf, stringConcat("  ", stringConcat(ccByte, stringConcat(" = load i8, ptr ", ccByteAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(ccResult, stringConcat(" = zext i8 ", stringConcat(ccByte, " to i64")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(ccResult, stringConcat(", ptr %t", toString(dest)))))
+        val ccIRegs = mapGet(state, "intRegs")
+        if (ccIRegs != null) { mapPut(ccIRegs, toString(dest), true) }
+        return
+    }
 
     // Check if println/print/toString arg is a double register
     if ((callName == "println" || callName == "print" || callName == "toString") && argc == 1) {
@@ -12421,9 +12474,9 @@ fun main(): Unit {
         var clangCmd: String = ""
         if (noRuntime) {
             // Freestanding: compile LLVM IR without runtime
-            clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" -o ", outputFile)))
+            clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -o ", outputFile)))
             if (toString(platformOS()) == "linux") {
-                clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
+                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
             }
         } else {
             // Find runtime path
@@ -12439,15 +12492,15 @@ fun main(): Unit {
             if (endsWith(runtimePath, ".c")) {
                 // Backward compat: C runtime needs -I for the header directory
                 val runtimeDir = dirName(runtimePath)
-                clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
+                clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O1 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+                    clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
                 }
             } else {
                 // Pre-built .o runtime — link directly, no -I needed
-                clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
+                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O1 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
+                    clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
                 }
             }
         }
