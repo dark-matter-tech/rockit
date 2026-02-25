@@ -5311,11 +5311,13 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
     mapPut(state, "intRegs", intRegs)
     val creprRegs = mapCreate()
     mapPut(state, "creprRegs", creprRegs)
+    val vtRegs = mapCreate()
+    mapPut(state, "vtRegs", vtRegs)
 
     // Function signature
     val noRuntime = mapGet(compiler, "noRuntime") == true
     if (isMain) {
-        llvmLine(buf, "define i32 @main(i32 %argc, ptr %argv) {")
+        llvmLine(buf, "define i32 @main(i32 %argc, ptr %argv) nounwind {")
     } else {
         var linkage: String = ""
         if (noRuntime == false) { linkage = "internal " }
@@ -5326,7 +5328,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             sig = stringConcat(sig, stringConcat("i64 %p", toString(pi)))
             pi = pi + 1
         }
-        sig = stringConcat(sig, ") {")
+        sig = stringConcat(sig, ") nounwind {")
         llvmLine(buf, sig)
     }
 
@@ -5746,14 +5748,30 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
                 }
             } else {
                 val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
-                val tobj = llvmNextSSA(state)
-                val tobjPtr = llvmNextSSA(state)
-                val tres = llvmNextSSA(state)
-                mapPut(usedExterns, "rockit_object_get_field", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
-                llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
-                llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @rockit_object_get_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), ")")))))))
-                llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+                // Check if object register is tracked as value type
+                val vtInfo96 = mapGet(mapGet(state, "vtRegs"), toString(objReg))
+                if (vtInfo96 != null) {
+                    // Inline GEP: offset 24 + fieldIdx * 8
+                    val vtOff96 = 24 + fieldIdx * 8
+                    val tobj = llvmNextSSA(state)
+                    val tobjPtr = llvmNextSSA(state)
+                    val tgep = llvmNextSSA(state)
+                    val tres = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr, stringConcat(", i64 ", toString(vtOff96)))))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = load i64, ptr ", tgep))))
+                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+                } else {
+                    val tobj = llvmNextSSA(state)
+                    val tobjPtr = llvmNextSSA(state)
+                    val tres = llvmNextSSA(state)
+                    mapPut(usedExterns, "rockit_object_get_field", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tres, stringConcat(" = call i64 @rockit_object_get_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), ")")))))))
+                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tres, stringConcat(", ptr %t", toString(dest)))))
+                }
             }
             ip = ip + 7
         } else if (op == 97) {
@@ -5799,14 +5817,30 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
                 }
             } else {
                 val fieldIdx = llvmResolveFieldIndex(compiler, fieldPoolIdx)
-                val tobj = llvmNextSSA(state)
-                val tobjPtr = llvmNextSSA(state)
-                val tval = llvmNextSSA(state)
-                mapPut(usedExterns, "rockit_object_set_field", true)
-                llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
-                llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
-                llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
-                llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), stringConcat(", i64 ", stringConcat(tval, ")")))))))
+                // Check if object register is tracked as value type
+                val vtInfo97 = mapGet(mapGet(state, "vtRegs"), toString(objReg))
+                if (vtInfo97 != null) {
+                    // Inline GEP: offset 24 + fieldIdx * 8
+                    val vtOff97 = 24 + fieldIdx * 8
+                    val tobj = llvmNextSSA(state)
+                    val tobjPtr = llvmNextSSA(state)
+                    val tgep = llvmNextSSA(state)
+                    val tval = llvmNextSSA(state)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobjPtr, stringConcat(", i64 ", toString(vtOff97)))))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
+                    llvmLine(buf, stringConcat("  store i64 ", stringConcat(tval, stringConcat(", ptr ", tgep))))
+                } else {
+                    val tobj = llvmNextSSA(state)
+                    val tobjPtr = llvmNextSSA(state)
+                    val tval = llvmNextSSA(state)
+                    mapPut(usedExterns, "rockit_object_set_field", true)
+                    llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = load i64, ptr %t", toString(objReg)))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tobjPtr, stringConcat(" = inttoptr i64 ", stringConcat(tobj, " to ptr")))))
+                    llvmLine(buf, stringConcat("  ", stringConcat(tval, stringConcat(" = load i64, ptr %t", toString(valReg)))))
+                    llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobjPtr, stringConcat(", i32 ", stringConcat(toString(fieldIdx), stringConcat(", i64 ", stringConcat(tval, ")")))))))
+                }
             }
             ip = ip + 7
         } else if (op == 112) {
@@ -5837,17 +5871,21 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val tobjI64 = llvmNextSSA(state)
             mapPut(usedExterns, "rockit_object_alloc", true)
             llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = call ptr @rockit_object_alloc(ptr ", stringConcat(tyGlobal, stringConcat(", i32 ", stringConcat(toString(totalFields), ")")))))))
-            // Set fields
+            // Set fields via inline GEP (offset 24 + i*8)
             var ai: Int = 0
             while (ai < argc) {
                 val argReg = llvmReadU16(bc, ip + 7 + ai * 2)
                 val targ = llvmNextSSA(state)
-                mapPut(usedExterns, "rockit_object_set_field", true)
+                val tgep = llvmNextSSA(state)
+                val fieldOff = 24 + ai * 8
                 llvmLine(buf, stringConcat("  ", stringConcat(targ, stringConcat(" = load i64, ptr %t", toString(argReg)))))
-                llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobj, stringConcat(", i32 ", stringConcat(toString(ai), stringConcat(", i64 ", stringConcat(targ, ")")))))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobj, stringConcat(", i64 ", toString(fieldOff)))))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(targ, stringConcat(", ptr ", tgep))))
                 ai = ai + 1
             }
             llvmLine(buf, stringConcat("  ", stringConcat(tobjI64, stringConcat(" = ptrtoint ptr ", stringConcat(tobj, " to i64")))))
+            // Tag register as value type with field count for inline GEP
+            mapPut(mapGet(state, "vtRegs"), toString(dest), totalFields)
             llvmLine(buf, stringConcat("  store i64 ", stringConcat(tobjI64, stringConcat(", ptr %t", toString(dest)))))
             ip = ip + 7 + argc * 2
         } else if (op == 176) {
@@ -6172,7 +6210,7 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
     // === Wrapper function ===
     val noRuntime = mapGet(compiler, "noRuntime") == true
     if (isMain) {
-        llvmLine(buf, "define i32 @main(i32 %argc, ptr %argv) {")
+        llvmLine(buf, "define i32 @main(i32 %argc, ptr %argv) nounwind {")
     } else {
         var linkage: String = ""
         if (noRuntime == false) { linkage = "internal " }
@@ -6183,7 +6221,7 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             sig = stringConcat(sig, stringConcat("i64 %p", toString(pi)))
             pi = pi + 1
         }
-        sig = stringConcat(sig, ") {")
+        sig = stringConcat(sig, ") nounwind {")
         llvmLine(buf, sig)
     }
     llvmLine(buf, "entry:")
@@ -6709,13 +6747,16 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             val tobjI64 = llvmNextSSA(rState)
             mapPut(rExterns, "rockit_object_alloc", true)
             llvmLine(buf, stringConcat("  ", stringConcat(tobj, stringConcat(" = call ptr @rockit_object_alloc(ptr ", stringConcat(tyGlobal, stringConcat(", i32 ", stringConcat(toString(totalFields), ")")))))))
+            // Set fields via inline GEP (offset 24 + i*8)
             var oai: Int = 0
             while (oai < argc) {
                 val argReg = llvmReadU16(bc, ip + 7 + oai * 2)
                 val targ = llvmNextSSA(rState)
-                mapPut(rExterns, "rockit_object_set_field", true)
+                val tgep = llvmNextSSA(rState)
+                val fieldOff2 = 24 + oai * 8
                 llvmLine(buf, stringConcat("  ", stringConcat(targ, stringConcat(" = load i64, ptr %t", toString(argReg)))))
-                llvmLine(buf, stringConcat("  call void @rockit_object_set_field(ptr ", stringConcat(tobj, stringConcat(", i32 ", stringConcat(toString(oai), stringConcat(", i64 ", stringConcat(targ, ")")))))))
+                llvmLine(buf, stringConcat("  ", stringConcat(tgep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobj, stringConcat(", i64 ", toString(fieldOff2)))))))
+                llvmLine(buf, stringConcat("  store i64 ", stringConcat(targ, stringConcat(", ptr ", tgep))))
                 oai = oai + 1
             }
             llvmLine(buf, stringConcat("  ", stringConcat(tobjI64, stringConcat(" = ptrtoint ptr ", stringConcat(tobj, " to i64")))))
@@ -7284,6 +7325,162 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
     }
     // ── End function pointer intrinsics ────────────────────────────────
 
+    // ── Inline list operations ─────────────────────────────────────────
+    // listGet(list, index): inline bounds check + GEP into data array
+    // RockitList layout: refCount(0) size(8) capacity(16) data*(24)
+    if (callName == "listGet" && argc == 2) {
+        val lgListReg = llvmReadU16(bc, argStart)
+        val lgIdxReg = llvmReadU16(bc, argStart + 2)
+        val lgList = llvmNextSSA(state)
+        val lgListPtr = llvmNextSSA(state)
+        val lgIdx = llvmNextSSA(state)
+        val lgSizeAddr = llvmNextSSA(state)
+        val lgSize = llvmNextSSA(state)
+        val lgOk = llvmNextSSA(state)
+        val lgLbl = toInt(mapGet(state, "ssa"))
+        val lgOkLabel = stringConcat("list.ok.", toString(lgLbl))
+        val lgOobLabel = stringConcat("list.oob.", toString(lgLbl))
+        mapPut(state, "ssa", lgLbl + 1)
+        llvmLine(buf, stringConcat("  ", stringConcat(lgList, stringConcat(" = load i64, ptr %t", toString(lgListReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lgListPtr, stringConcat(" = inttoptr i64 ", stringConcat(lgList, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lgIdx, stringConcat(" = load i64, ptr %t", toString(lgIdxReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lgSizeAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(lgListPtr, ", i64 8")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lgSize, stringConcat(" = load i64, ptr ", lgSizeAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lgOk, stringConcat(" = icmp ult i64 ", stringConcat(lgIdx, stringConcat(", ", lgSize))))))
+        llvmLine(buf, stringConcat("  br i1 ", stringConcat(lgOk, stringConcat(", label %", stringConcat(lgOkLabel, stringConcat(", label %", stringConcat(lgOobLabel, ", !prof !0")))))))
+        llvmLine(buf, stringConcat(lgOobLabel, ":"))
+        mapPut(usedExterns, "rockit_panic", true)
+        llvmLine(buf, "  call void @rockit_panic(ptr @.oob_msg)")
+        llvmLine(buf, "  unreachable")
+        llvmLine(buf, stringConcat(lgOkLabel, ":"))
+        val lgDataAddr = llvmNextSSA(state)
+        val lgDataPtr = llvmNextSSA(state)
+        val lgElemAddr = llvmNextSSA(state)
+        val lgResult = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(lgDataAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(lgListPtr, ", i64 24")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lgDataPtr, stringConcat(" = load ptr, ptr ", lgDataAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lgElemAddr, stringConcat(" = getelementptr i64, ptr ", stringConcat(lgDataPtr, stringConcat(", i64 ", lgIdx))))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lgResult, stringConcat(" = load i64, ptr ", lgElemAddr))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(lgResult, stringConcat(", ptr %t", toString(dest)))))
+        return
+    }
+
+    // listSet(list, index, value): inline bounds check + GEP store
+    if (callName == "listSet" && argc == 3) {
+        val lsListReg = llvmReadU16(bc, argStart)
+        val lsIdxReg = llvmReadU16(bc, argStart + 2)
+        val lsValReg = llvmReadU16(bc, argStart + 4)
+        val lsList = llvmNextSSA(state)
+        val lsListPtr = llvmNextSSA(state)
+        val lsIdx = llvmNextSSA(state)
+        val lsVal = llvmNextSSA(state)
+        val lsSizeAddr = llvmNextSSA(state)
+        val lsSize = llvmNextSSA(state)
+        val lsOk = llvmNextSSA(state)
+        val lsLbl = toInt(mapGet(state, "ssa"))
+        val lsOkLabel = stringConcat("list.set.ok.", toString(lsLbl))
+        val lsOobLabel = stringConcat("list.set.oob.", toString(lsLbl))
+        mapPut(state, "ssa", lsLbl + 1)
+        llvmLine(buf, stringConcat("  ", stringConcat(lsList, stringConcat(" = load i64, ptr %t", toString(lsListReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lsListPtr, stringConcat(" = inttoptr i64 ", stringConcat(lsList, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lsIdx, stringConcat(" = load i64, ptr %t", toString(lsIdxReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lsVal, stringConcat(" = load i64, ptr %t", toString(lsValReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lsSizeAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(lsListPtr, ", i64 8")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lsSize, stringConcat(" = load i64, ptr ", lsSizeAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lsOk, stringConcat(" = icmp ult i64 ", stringConcat(lsIdx, stringConcat(", ", lsSize))))))
+        llvmLine(buf, stringConcat("  br i1 ", stringConcat(lsOk, stringConcat(", label %", stringConcat(lsOkLabel, stringConcat(", label %", stringConcat(lsOobLabel, ", !prof !0")))))))
+        llvmLine(buf, stringConcat(lsOobLabel, ":"))
+        mapPut(usedExterns, "rockit_panic", true)
+        llvmLine(buf, "  call void @rockit_panic(ptr @.oob_msg)")
+        llvmLine(buf, "  unreachable")
+        llvmLine(buf, stringConcat(lsOkLabel, ":"))
+        // Retain new value, release old value
+        val lsDataAddr = llvmNextSSA(state)
+        val lsDataPtr = llvmNextSSA(state)
+        val lsElemAddr = llvmNextSSA(state)
+        val lsOldVal = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(lsDataAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(lsListPtr, ", i64 24")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lsDataPtr, stringConcat(" = load ptr, ptr ", lsDataAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lsElemAddr, stringConcat(" = getelementptr i64, ptr ", stringConcat(lsDataPtr, stringConcat(", i64 ", lsIdx))))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lsOldVal, stringConcat(" = load i64, ptr ", lsElemAddr))))
+        mapPut(usedExterns, "rockit_retain_value", true)
+        mapPut(usedExterns, "rockit_release_value", true)
+        llvmLine(buf, stringConcat("  call void @rockit_retain_value(i64 ", stringConcat(lsVal, ")")))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(lsVal, stringConcat(", ptr ", lsElemAddr))))
+        llvmLine(buf, stringConcat("  call void @rockit_release_value(i64 ", stringConcat(lsOldVal, ")")))
+        llvmLine(buf, stringConcat("  store i64 3405691582, ptr %t", toString(dest)))
+        return
+    }
+
+    // listAppend(list, value): inline fast path (size < capacity) + slow path
+    if (callName == "listAppend" && argc == 2) {
+        val laListReg = llvmReadU16(bc, argStart)
+        val laValReg = llvmReadU16(bc, argStart + 2)
+        val laList = llvmNextSSA(state)
+        val laListPtr = llvmNextSSA(state)
+        val laVal = llvmNextSSA(state)
+        val laSizeAddr = llvmNextSSA(state)
+        val laSize = llvmNextSSA(state)
+        val laCapAddr = llvmNextSSA(state)
+        val laCap = llvmNextSSA(state)
+        val laOk = llvmNextSSA(state)
+        val laLbl = toInt(mapGet(state, "ssa"))
+        val laFastLabel = stringConcat("append.fast.", toString(laLbl))
+        val laSlowLabel = stringConcat("append.slow.", toString(laLbl))
+        val laDoneLabel = stringConcat("append.done.", toString(laLbl))
+        mapPut(state, "ssa", laLbl + 1)
+        llvmLine(buf, stringConcat("  ", stringConcat(laList, stringConcat(" = load i64, ptr %t", toString(laListReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laListPtr, stringConcat(" = inttoptr i64 ", stringConcat(laList, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laVal, stringConcat(" = load i64, ptr %t", toString(laValReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laSizeAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(laListPtr, ", i64 8")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laSize, stringConcat(" = load i64, ptr ", laSizeAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laCapAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(laListPtr, ", i64 16")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laCap, stringConcat(" = load i64, ptr ", laCapAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laOk, stringConcat(" = icmp ult i64 ", stringConcat(laSize, stringConcat(", ", laCap))))))
+        llvmLine(buf, stringConcat("  br i1 ", stringConcat(laOk, stringConcat(", label %", stringConcat(laFastLabel, stringConcat(", label %", stringConcat(laSlowLabel, ", !prof !0")))))))
+        // Fast path: retain, store, increment size
+        llvmLine(buf, stringConcat(laFastLabel, ":"))
+        mapPut(usedExterns, "rockit_retain_value", true)
+        llvmLine(buf, stringConcat("  call void @rockit_retain_value(i64 ", stringConcat(laVal, ")")))
+        val laDataAddr = llvmNextSSA(state)
+        val laDataPtr = llvmNextSSA(state)
+        val laElemAddr = llvmNextSSA(state)
+        val laNewSize = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(laDataAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(laListPtr, ", i64 24")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laDataPtr, stringConcat(" = load ptr, ptr ", laDataAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laElemAddr, stringConcat(" = getelementptr i64, ptr ", stringConcat(laDataPtr, stringConcat(", i64 ", laSize))))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(laVal, stringConcat(", ptr ", laElemAddr))))
+        llvmLine(buf, stringConcat("  ", stringConcat(laNewSize, stringConcat(" = add i64 ", stringConcat(laSize, ", 1")))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(laNewSize, stringConcat(", ptr ", laSizeAddr))))
+        llvmLine(buf, stringConcat("  br label %", laDoneLabel))
+        // Slow path: call runtime for reallocation
+        llvmLine(buf, stringConcat(laSlowLabel, ":"))
+        mapPut(usedExterns, "rockit_list_append", true)
+        llvmLine(buf, stringConcat("  call void @rockit_list_append(ptr ", stringConcat(laListPtr, stringConcat(", i64 ", stringConcat(laVal, ")")))))
+        llvmLine(buf, stringConcat("  br label %", laDoneLabel))
+        llvmLine(buf, stringConcat(laDoneLabel, ":"))
+        llvmLine(buf, stringConcat("  store i64 3405691582, ptr %t", toString(dest)))
+        return
+    }
+
+    // listSize(list): inline load from offset 8
+    if (callName == "listSize" && argc == 1) {
+        val lszListReg = llvmReadU16(bc, argStart)
+        val lszList = llvmNextSSA(state)
+        val lszListPtr = llvmNextSSA(state)
+        val lszSizeAddr = llvmNextSSA(state)
+        val lszSize = llvmNextSSA(state)
+        llvmLine(buf, stringConcat("  ", stringConcat(lszList, stringConcat(" = load i64, ptr %t", toString(lszListReg)))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lszListPtr, stringConcat(" = inttoptr i64 ", stringConcat(lszList, " to ptr")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lszSizeAddr, stringConcat(" = getelementptr i8, ptr ", stringConcat(lszListPtr, ", i64 8")))))
+        llvmLine(buf, stringConcat("  ", stringConcat(lszSize, stringConcat(" = load i64, ptr ", lszSizeAddr))))
+        llvmLine(buf, stringConcat("  store i64 ", stringConcat(lszSize, stringConcat(", ptr %t", toString(dest)))))
+        val iRegs3 = mapGet(state, "intRegs")
+        if (iRegs3 != null) { mapPut(iRegs3, toString(dest), true) }
+        return
+    }
+    // ── End inline list operations ─────────────────────────────────────
+
     // Check if println/print/toString arg is a double register
     if ((callName == "println" || callName == "print" || callName == "toString") && argc == 1) {
         val argReg = llvmReadU16(bc, argStart)
@@ -7487,7 +7684,9 @@ fun llvmEmitExterns(usedExterns: Map, sigTable: Map, definedFuncs: Map): String 
                     paramStr = stringConcat(paramStr, toString(listGet(sig, pi)))
                     pi = pi + 1
                 }
-                llvmLine(buf, stringConcat("declare ", stringConcat(retType, stringConcat(" @", stringConcat(name, stringConcat("(", stringConcat(paramStr, ")")))))))
+                var declSuffix: String = ""
+                if (name == "rockit_panic") { declSuffix = " noreturn" }
+                llvmLine(buf, stringConcat("declare ", stringConcat(retType, stringConcat(" @", stringConcat(name, stringConcat("(", stringConcat(paramStr, stringConcat(")", declSuffix))))))))
             } else {
                 // Unknown extern — assume all i64
                 // Try to build a generic declaration
@@ -7636,6 +7835,10 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
         llvmLine(mainBuf, "")
     }
 
+    // Emit OOB panic message constant for inline bounds checks
+    llvmLine(mainBuf, "@.oob_msg = private unnamed_addr constant [25 x i8] c\"list index out of bounds\\00\"")
+    llvmLine(mainBuf, "")
+
     // Emit mutable global variable declarations
     val globals = mapGet(compiler, "globals")
     if (globals != null) {
@@ -7717,7 +7920,9 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
                     paramStr = stringConcat(paramStr, toString(listGet(sig, pi)))
                     pi = pi + 1
                 }
-                llvmLine(mainBuf, stringConcat("declare ", stringConcat(retType, stringConcat(" @", stringConcat(name, stringConcat("(", stringConcat(paramStr, ")")))))))
+                var declSuffix2: String = ""
+                if (name == "rockit_panic") { declSuffix2 = " noreturn" }
+                llvmLine(mainBuf, stringConcat("declare ", stringConcat(retType, stringConcat(" @", stringConcat(name, stringConcat("(", stringConcat(paramStr, stringConcat(")", declSuffix2))))))))
             }
         }
         di = di + 1
@@ -7732,6 +7937,9 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
     llvmLine(mainBuf, "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)")
     llvmLine(mainBuf, "")
     llvmLine(mainBuf, "attributes #0 = { returns_twice }")
+    llvmLine(mainBuf, "")
+    llvmLine(mainBuf, "; Branch weight metadata for bounds checks (hot path = in-bounds)")
+    llvmLine(mainBuf, "!0 = !{!\"branch_weights\", i32 2000000, i32 1}")
 
     // Join and write
     val irText = llvmJoin(mainBuf)
