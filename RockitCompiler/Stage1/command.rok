@@ -4881,6 +4881,7 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "rockit_object_get_type_name", "ptr|ptr")
     mapPut(t, "rockit_retain_value", "void|i64")
     mapPut(t, "rockit_release_value", "void|i64")
+    mapPut(t, "rockit_list_append", "void|ptr,i64")
 
     // Async runtime
     mapPut(t, "rockit_task_schedule", "void|ptr,ptr,i64")
@@ -7510,9 +7511,9 @@ fun llvmEmitCall(buf: List, state: Map, sigTable: Map, compiler: Map, usedExtern
         llvmLine(buf, stringConcat("  ", stringConcat(lgElemAddr, stringConcat(" = getelementptr i64, ptr ", stringConcat(lgDataPtr, stringConcat(", i64 ", lgIdx))))))
         llvmLine(buf, stringConcat("  ", stringConcat(lgResult, stringConcat(" = load i64, ptr ", stringConcat(lgElemAddr, ", !tbaa !5")))))
         llvmLine(buf, stringConcat("  store i64 ", stringConcat(lgResult, stringConcat(", ptr %t", toString(dest)))))
-        // Mark listGet result as integer for downstream icmp optimizations
-        val iRegs4 = mapGet(state, "intRegs")
-        if (iRegs4 != null) { mapPut(iRegs4, toString(dest), true) }
+        // Do NOT mark listGet result in intRegs — lists can contain strings/objects,
+        // not just integers. Marking as int causes toString/println to misidentify
+        // string pointers as integers, breaking the bootstrap.
         return
     }
 
