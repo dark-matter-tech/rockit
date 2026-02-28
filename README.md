@@ -284,26 +284,26 @@ All benchmarks run on Apple M1, best of 3 runs.
 
 #### Core Benchmarks
 
-| Benchmark | Rockit | Go | Node.js |
-|-----------|--------|-----|---------|
-| **Fibonacci** (fib 40, recursive) | **0.31s** | 0.34s | 1.03s |
-| **Object alloc** (1M data class) | **0.002s** | 0.003s | 0.07s |
-| **Prime sieve** (primes to 1M) | **0.004s** | 0.004s | 0.07s |
-| **Matrix multiply** (200x200) | **0.006s** | 0.011s | 0.08s |
-| **Quicksort** (500K integers) | **0.031s** | 0.034s | 0.18s |
-| **String concat** (500K iterations) | **0.17s** | 0.35s | **0.06s** |
-| **Monkey interpreter** (lex+parse+eval) | 0.25s | **0.19s** | – |
+| Benchmark | Rockit | Go | Node.js | Rockit Mem | Go Mem | Node Mem |
+|-----------|--------|-----|---------|------------|--------|----------|
+| **Fibonacci** (fib 40, recursive) | **0.31s** | 0.34s | 1.03s | **1.3 MB** | 4.0 MB | 47.5 MB |
+| **Object alloc** (1M data class) | **0.002s** | 0.003s | 0.07s | **1.3 MB** | 3.9 MB | 50.6 MB |
+| **Prime sieve** (primes to 1M) | **0.004s** | 0.004s | 0.07s | 8.9 MB | **4.9 MB** | 49.1 MB |
+| **Matrix multiply** (200x200) | **0.006s** | 0.011s | 0.08s | **2.2 MB** | 4.9 MB | 49.1 MB |
+| **Quicksort** (500K integers) | **0.031s** | 0.034s | 0.18s | **5.1 MB** | 8.3 MB | 71.3 MB |
+| **String concat** (500K iterations) | **0.17s** | 0.35s | **0.06s** | **2.4 MB** | 15.3 MB | 51.7 MB |
+| **Monkey interpreter** (lex+parse+eval) | 0.25s | **0.19s** | – | 321 MB | **10.6 MB** | – |
 
 #### CLBG Benchmarks
 
-| Benchmark | Rockit | Go |
-|-----------|--------|-----|
-| **Binary trees** (depth 21) | **5.41s** | 10.52s |
-| **Fannkuch** (n=12) | 25.03s | **24.79s** |
-| **N-body** (50M steps) | 2.63s | **2.42s** |
-| **Spectral norm** (n=5500) | 1.15s | **1.14s** |
+| Benchmark | Rockit | Go | Rockit Mem | Go Mem |
+|-----------|--------|-----|------------|--------|
+| **Binary trees** (depth 21) | **5.41s** | 10.52s | 261 MB | **204 MB** |
+| **Fannkuch** (n=12) | 25.03s | **24.79s** | **1.3 MB** | 4.1 MB |
+| **N-body** (50M steps) | 2.63s | **2.42s** | **1.3 MB** | 4.1 MB |
+| **Spectral norm** (n=5500) | 1.15s | **1.14s** | **2.3 MB** | 4.9 MB |
 
-Rockit beats Go on 7 of 11 benchmarks. Rockit outperforms Node.js 3-15x across all measured benchmarks.
+Rockit beats Go on 7 of 11 benchmarks. Rockit outperforms Node.js 3-15x across all measured benchmarks. Rockit uses 3-40x less memory than Node.js and 2-6x less than Go on most benchmarks thanks to ARC (no GC runtime overhead).
 
 Run the full suite: `bash RockitCompiler/Benchmarks/run_benchmarks.sh`
 
