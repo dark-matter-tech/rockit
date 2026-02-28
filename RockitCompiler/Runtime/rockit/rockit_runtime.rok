@@ -117,17 +117,18 @@ fun is_likely_string_ptr(value: Int): Int {
 //   offset 8:  length   (i64)
 //   offset 16: chars    (ptr) — points to character data
 //   offset 24: base     (ptr) — non-null for slices (retained reference to owner)
-//   offset 32+: data[]  — inline character data (owned strings only)
+//   offset 32: capacity (i64) — allocated data capacity in bytes (owned strings only)
+//   offset 40+: data[]  — inline character data (owned strings only)
 //
-// Header size: 32 bytes (4 x i64)
+// Header size: 40 bytes (5 x i64)
 
-val STR_HEADER: Int = 32
+val STR_HEADER: Int = 40
 
 // ── String pool ──────────────────────────────────────────────────────────
 // Free list for small owned strings to avoid malloc/free overhead.
 
 val POOL_MAX_LEN: Int = 48
-val POOL_BLOCK_SIZE: Int = 81  // STR_HEADER(32) + POOL_MAX_LEN(48) + 1
+val POOL_BLOCK_SIZE: Int = 89  // STR_HEADER(40) + POOL_MAX_LEN(48) + 1
 
 var string_pool_free: Int = 0
 var slice_pool_free: Int = 0
@@ -194,6 +195,11 @@ fun rockit_string_new(utf8: Int): Int {
         p.offset(0).store(1)           // refCount = 1
         p.offset(1).store(len)         // length
         p.offset(3).store(0)           // base = NULL
+        if (len <= POOL_MAX_LEN) {
+            p.offset(4).store(POOL_MAX_LEN)  // capacity = pool block size
+        } else {
+            p.offset(4).store(len)           // capacity = exact allocation
+        }
         val dataPtr = s + STR_HEADER
         memcpy(dataPtr, src, len + 1)  // copy including null terminator
         p.offset(2).store(dataPtr)     // chars → data region
@@ -204,6 +210,59 @@ fun rockit_string_new(utf8: Int): Int {
 fun rockit_string_concat(a: Int, b: Int): Int {
     // stringConcat wrapper — called as rockit_string_concat
     return stringConcat(a, b)
+}
+
+// ── Consume-concat: takes ownership of LHS for in-place append ──────────
+// Used by codegen for `s = s + expr` patterns. The caller does NOT retain
+// the LHS — this function either mutates it in-place (if unique & has capacity)
+// or allocates a new string and releases the old one.
+
+fun rockit_string_concat_consume(a: Int, b: Int): Int {
+    unsafe {
+        val pa = bitcast<Ptr<Int>>(a)
+        val rc = pa.offset(0).load()
+        val base = pa.offset(3).load()
+        val lenA = pa.offset(1).load()
+        val pb = bitcast<Ptr<Int>>(b)
+        val lenB = pb.offset(1).load()
+        val newLen = lenA + lenB
+
+        // Fast path: unique owner, not a slice, not immortal
+        if (rc == 1) {
+            if (base == 0) {
+                if (rc != ROCKIT_IMMORTAL) {
+                    val cap = pa.offset(4).load()
+                    if (newLen <= cap) {
+                        // Append in-place — no allocation
+                        val charsA = pa.offset(2).load()
+                        val charsB = pb.offset(2).load()
+                        memcpy(charsA + lenA, charsB, lenB)
+                        storeByte(charsA, newLen, 0)
+                        pa.offset(1).store(newLen)
+                        return a
+                    }
+                    // Grow: realloc with 2x capacity
+                    var newCap: Int = cap * 2
+                    if (newCap < newLen) { newCap = newLen }
+                    val newBlock = realloc(a, STR_HEADER + newCap + 1)
+                    val np = bitcast<Ptr<Int>>(newBlock)
+                    val newDataPtr = newBlock + STR_HEADER
+                    val charsB2 = pb.offset(2).load()
+                    memcpy(newDataPtr + lenA, charsB2, lenB)
+                    storeByte(newDataPtr, newLen, 0)
+                    np.offset(1).store(newLen)
+                    np.offset(2).store(newDataPtr)
+                    np.offset(4).store(newCap)
+                    return newBlock
+                }
+            }
+        }
+
+        // Slow path: not unique or slice — allocate new, release old
+        val result = stringConcat(a, b)
+        rockit_string_release(a)
+        return result
+    }
 }
 
 fun stringConcat(a: Int, b: Int): Int {
@@ -218,6 +277,11 @@ fun stringConcat(a: Int, b: Int): Int {
         p.offset(0).store(1)            // refCount = 1
         p.offset(1).store(newLen)       // length
         p.offset(3).store(0)            // base = NULL
+        if (newLen <= POOL_MAX_LEN) {
+            p.offset(4).store(POOL_MAX_LEN)
+        } else {
+            p.offset(4).store(newLen)
+        }
         val dataPtr = s + STR_HEADER
         val charsA = pa.offset(2).load()
         val charsB = pb.offset(2).load()
@@ -389,6 +453,11 @@ fun rockit_string_concat_n(n: Int, parts: Int): Int {
         rp.offset(0).store(1)
         rp.offset(1).store(totalLen)
         rp.offset(3).store(0)
+        if (totalLen <= POOL_MAX_LEN) {
+            rp.offset(4).store(POOL_MAX_LEN)
+        } else {
+            rp.offset(4).store(totalLen)
+        }
         val dataPtr = result + STR_HEADER
         var pos: Int = 0
         i = 0
@@ -428,6 +497,7 @@ fun charAt(s: Int, index: Int): Int {
         rp.offset(0).store(1)          // refCount
         rp.offset(1).store(1)          // length
         rp.offset(3).store(0)          // base = NULL
+        rp.offset(4).store(POOL_MAX_LEN) // capacity
         val dataPtr = result + STR_HEADER
         storeByte(dataPtr, 0, ch)
         storeByte(dataPtr, 1, 0)       // null terminator
@@ -457,6 +527,7 @@ fun intToChar(code: Int): Int {
         rp.offset(0).store(1)          // refCount
         rp.offset(1).store(1)          // length
         rp.offset(3).store(0)          // base = NULL
+        rp.offset(4).store(POOL_MAX_LEN) // capacity
         val dataPtr = result + STR_HEADER
         storeByte(dataPtr, 0, code)
         storeByte(dataPtr, 1, 0)       // null terminator
@@ -568,6 +639,11 @@ fun stringTrim(s: Int): Int {
         rp.offset(0).store(1)
         rp.offset(1).store(trimLen)
         rp.offset(3).store(0)
+        if (trimLen <= POOL_MAX_LEN) {
+            rp.offset(4).store(POOL_MAX_LEN)
+        } else {
+            rp.offset(4).store(trimLen)
+        }
         val dataPtr = result + STR_HEADER
         memcpy(dataPtr, chars + start, trimLen)
         storeByte(dataPtr, trimLen, 0)
@@ -611,16 +687,15 @@ fun substring(s: Int, start: Int, end: Int): Int {
 // ── Conversion ───────────────────────────────────────────────────────────
 
 fun toString(value: Int): Int {
-    if (value == ROCKIT_NULL) {
-        unsafe { return rockit_string_new(cstr("null")) }
-    }
-    if (value == 0) {
-        return rockit_int_to_string(value)
-    }
-    if (is_likely_string_ptr(value) == 1) {
-        return value
-    }
+    if (value == ROCKIT_NULL) { return toString_null() }
+    if (value == 0) { return rockit_int_to_string(value) }
+    if (is_likely_string_ptr(value) == 1) { return value }
     return rockit_int_to_string(value)
+}
+
+fun toString_null(): Int {
+    unsafe { return rockit_string_new(cstr("null")) }
+    return 0
 }
 
 fun rockit_int_to_string(value: Int): Int {
@@ -661,21 +736,19 @@ fun rockit_int_to_string(value: Int): Int {
 fun toInt(value: Int): Int {
     if (value == ROCKIT_NULL) { return 0 }
     if (value == 0) { return 0 }
-    if (is_likely_string_ptr(value) == 1) {
-        unsafe {
-            val p = bitcast<Ptr<Int>>(value)
-            val len = p.offset(1).load()
-            val chars = p.offset(2).load()
-            // Copy to null-terminated buffer for strtoll
-            var bufLen: Int = len
-            if (bufLen > 31) { bufLen = 31 }
-            val buf = malloc(32)
-            memcpy(buf, chars, bufLen)
-            storeByte(buf, bufLen, 0)
-            val result = strtoll(buf, 0, 10)
-            free(buf)
-            return result
-        }
+    if (is_likely_string_ptr(value) != 1) { return value }
+    unsafe {
+        val p = bitcast<Ptr<Int>>(value)
+        val len = p.offset(1).load()
+        val chars = p.offset(2).load()
+        var bufLen: Int = len
+        if (bufLen > 31) { bufLen = 31 }
+        val buf = malloc(32)
+        memcpy(buf, chars, bufLen)
+        storeByte(buf, bufLen, 0)
+        val result = strtoll(buf, 0, 10)
+        free(buf)
+        return result
     }
     return value
 }
@@ -1219,6 +1292,58 @@ fun listGetFloat(list: Int, index: Int): Float {
         if (index >= size) { return bitcast<Float>(0) }
         val arr = p.offset(LIST_DATA).load()
         return bitcast<Float>(bitcast<Ptr<Int>>(arr).offset(index).load())
+    }
+}
+
+// ── ByteArray ────────────────────────────────────────────────────────────
+// Compact byte buffer: 1 byte per element (vs 8 for List).
+// Layout: refCount(i64) | size(i64) | data[](i8 inline)
+// Header = 16 bytes (2 x i64), data starts at offset 16.
+
+val BYTE_ARRAY_HEADER: Int = 16
+
+fun byteArrayCreate(size: Int): Int {
+    unsafe {
+        val arr = calloc(1, BYTE_ARRAY_HEADER + size)
+        val p = bitcast<Ptr<Int>>(arr)
+        p.offset(0).store(1)      // refCount = 1
+        p.offset(1).store(size)   // size
+        return arr
+    }
+}
+
+fun byteArrayCreateFilled(size: Int, value: Int): Int {
+    unsafe {
+        val arr = malloc(BYTE_ARRAY_HEADER + size)
+        val p = bitcast<Ptr<Int>>(arr)
+        p.offset(0).store(1)      // refCount = 1
+        p.offset(1).store(size)   // size
+        memset(arr + BYTE_ARRAY_HEADER, value, size)
+        return arr
+    }
+}
+
+fun byteArrayGet(arr: Int, index: Int): Int {
+    unsafe {
+        val size = bitcast<Ptr<Int>>(arr).offset(1).load()
+        if (index < 0) { rockit_panic(cstr("byteArray index out of bounds")) }
+        if (index >= size) { rockit_panic(cstr("byteArray index out of bounds")) }
+        return loadByte(arr + BYTE_ARRAY_HEADER, index)
+    }
+}
+
+fun byteArraySet(arr: Int, index: Int, value: Int): Unit {
+    unsafe {
+        val size = bitcast<Ptr<Int>>(arr).offset(1).load()
+        if (index < 0) { rockit_panic(cstr("byteArray index out of bounds")) }
+        if (index >= size) { rockit_panic(cstr("byteArray index out of bounds")) }
+        storeByte(arr + BYTE_ARRAY_HEADER, index, value)
+    }
+}
+
+fun byteArraySize(arr: Int): Int {
+    unsafe {
+        return bitcast<Ptr<Int>>(arr).offset(1).load()
     }
 }
 // map.rok — String-keyed and integer-keyed hash maps
