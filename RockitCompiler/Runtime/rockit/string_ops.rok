@@ -20,6 +20,7 @@ fun charAt(s: Int, index: Int): Int {
         rp.offset(0).store(1)          // refCount
         rp.offset(1).store(1)          // length
         rp.offset(3).store(0)          // base = NULL
+        rp.offset(4).store(POOL_MAX_LEN) // capacity
         val dataPtr = result + STR_HEADER
         storeByte(dataPtr, 0, ch)
         storeByte(dataPtr, 1, 0)       // null terminator
@@ -49,6 +50,7 @@ fun intToChar(code: Int): Int {
         rp.offset(0).store(1)          // refCount
         rp.offset(1).store(1)          // length
         rp.offset(3).store(0)          // base = NULL
+        rp.offset(4).store(POOL_MAX_LEN) // capacity
         val dataPtr = result + STR_HEADER
         storeByte(dataPtr, 0, code)
         storeByte(dataPtr, 1, 0)       // null terminator
@@ -160,6 +162,11 @@ fun stringTrim(s: Int): Int {
         rp.offset(0).store(1)
         rp.offset(1).store(trimLen)
         rp.offset(3).store(0)
+        if (trimLen <= POOL_MAX_LEN) {
+            rp.offset(4).store(POOL_MAX_LEN)
+        } else {
+            rp.offset(4).store(trimLen)
+        }
         val dataPtr = result + STR_HEADER
         memcpy(dataPtr, chars + start, trimLen)
         storeByte(dataPtr, trimLen, 0)

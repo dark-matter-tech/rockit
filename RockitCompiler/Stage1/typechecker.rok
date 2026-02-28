@@ -156,6 +156,13 @@ fun registerBuiltins(tc: Map): Unit {
     registerFn(fns, "listIsEmpty", 1, "Bool")
     registerFn(fns, "listClear", 1, "Unit")
 
+    // ByteArray operations
+    registerFn(fns, "byteArrayCreate", 1, "Int")
+    registerFn(fns, "byteArrayCreateFilled", 2, "Int")
+    registerFn(fns, "byteArrayGet", 2, "Int")
+    registerFn(fns, "byteArraySet", 3, "Unit")
+    registerFn(fns, "byteArraySize", 1, "Int")
+
     // Map operations
     registerFn(fns, "mapCreate", 0, "Map")
     registerFn(fns, "mapPut", 3, "Unit")

@@ -331,6 +331,13 @@ public final class SymbolTable {
                                          returnType: .bool)),
             ("mapClear",       .function(parameterTypes: [.classType(name: "Map", typeArguments: [])],
                                          returnType: .unit)),
+
+            // ByteArray operations
+            ("byteArrayCreate",      .function(parameterTypes: [.int], returnType: .int)),
+            ("byteArrayCreateFilled", .function(parameterTypes: [.int, .int], returnType: .int)),
+            ("byteArrayGet",         .function(parameterTypes: [.int, .int], returnType: .int)),
+            ("byteArraySet",         .function(parameterTypes: [.int, .int, .int], returnType: .unit)),
+            ("byteArraySize",        .function(parameterTypes: [.int], returnType: .int)),
         ]
 
         for (name, type) in collectionBuiltins {

@@ -218,3 +218,55 @@ fun listGetFloat(list: Int, index: Int): Float {
         return bitcast<Float>(bitcast<Ptr<Int>>(arr).offset(index).load())
     }
 }
+
+// ── ByteArray ────────────────────────────────────────────────────────────
+// Compact byte buffer: 1 byte per element (vs 8 for List).
+// Layout: refCount(i64) | size(i64) | data[](i8 inline)
+// Header = 16 bytes (2 x i64), data starts at offset 16.
+
+val BYTE_ARRAY_HEADER: Int = 16
+
+fun byteArrayCreate(size: Int): Int {
+    unsafe {
+        val arr = calloc(1, BYTE_ARRAY_HEADER + size)
+        val p = bitcast<Ptr<Int>>(arr)
+        p.offset(0).store(1)      // refCount = 1
+        p.offset(1).store(size)   // size
+        return arr
+    }
+}
+
+fun byteArrayCreateFilled(size: Int, value: Int): Int {
+    unsafe {
+        val arr = malloc(BYTE_ARRAY_HEADER + size)
+        val p = bitcast<Ptr<Int>>(arr)
+        p.offset(0).store(1)      // refCount = 1
+        p.offset(1).store(size)   // size
+        memset(arr + BYTE_ARRAY_HEADER, value, size)
+        return arr
+    }
+}
+
+fun byteArrayGet(arr: Int, index: Int): Int {
+    unsafe {
+        val size = bitcast<Ptr<Int>>(arr).offset(1).load()
+        if (index < 0) { rockit_panic(cstr("byteArray index out of bounds")) }
+        if (index >= size) { rockit_panic(cstr("byteArray index out of bounds")) }
+        return loadByte(arr + BYTE_ARRAY_HEADER, index)
+    }
+}
+
+fun byteArraySet(arr: Int, index: Int, value: Int): Unit {
+    unsafe {
+        val size = bitcast<Ptr<Int>>(arr).offset(1).load()
+        if (index < 0) { rockit_panic(cstr("byteArray index out of bounds")) }
+        if (index >= size) { rockit_panic(cstr("byteArray index out of bounds")) }
+        storeByte(arr + BYTE_ARRAY_HEADER, index, value)
+    }
+}
+
+fun byteArraySize(arr: Int): Int {
+    unsafe {
+        return bitcast<Ptr<Int>>(arr).offset(1).load()
+    }
+}

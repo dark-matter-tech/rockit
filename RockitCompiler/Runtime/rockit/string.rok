@@ -6,17 +6,18 @@
 //   offset 8:  length   (i64)
 //   offset 16: chars    (ptr) — points to character data
 //   offset 24: base     (ptr) — non-null for slices (retained reference to owner)
-//   offset 32+: data[]  — inline character data (owned strings only)
+//   offset 32: capacity (i64) — allocated data capacity in bytes (owned strings only)
+//   offset 40+: data[]  — inline character data (owned strings only)
 //
-// Header size: 32 bytes (4 x i64)
+// Header size: 40 bytes (5 x i64)
 
-val STR_HEADER: Int = 32
+val STR_HEADER: Int = 40
 
 // ── String pool ──────────────────────────────────────────────────────────
 // Free list for small owned strings to avoid malloc/free overhead.
 
 val POOL_MAX_LEN: Int = 48
-val POOL_BLOCK_SIZE: Int = 81  // STR_HEADER(32) + POOL_MAX_LEN(48) + 1
+val POOL_BLOCK_SIZE: Int = 89  // STR_HEADER(40) + POOL_MAX_LEN(48) + 1
 
 var string_pool_free: Int = 0
 var slice_pool_free: Int = 0
@@ -83,6 +84,11 @@ fun rockit_string_new(utf8: Int): Int {
         p.offset(0).store(1)           // refCount = 1
         p.offset(1).store(len)         // length
         p.offset(3).store(0)           // base = NULL
+        if (len <= POOL_MAX_LEN) {
+            p.offset(4).store(POOL_MAX_LEN)  // capacity = pool block size
+        } else {
+            p.offset(4).store(len)           // capacity = exact allocation
+        }
         val dataPtr = s + STR_HEADER
         memcpy(dataPtr, src, len + 1)  // copy including null terminator
         p.offset(2).store(dataPtr)     // chars → data region
@@ -93,6 +99,59 @@ fun rockit_string_new(utf8: Int): Int {
 fun rockit_string_concat(a: Int, b: Int): Int {
     // stringConcat wrapper — called as rockit_string_concat
     return stringConcat(a, b)
+}
+
+// ── Consume-concat: takes ownership of LHS for in-place append ──────────
+// Used by codegen for `s = s + expr` patterns. The caller does NOT retain
+// the LHS — this function either mutates it in-place (if unique & has capacity)
+// or allocates a new string and releases the old one.
+
+fun rockit_string_concat_consume(a: Int, b: Int): Int {
+    unsafe {
+        val pa = bitcast<Ptr<Int>>(a)
+        val rc = pa.offset(0).load()
+        val base = pa.offset(3).load()
+        val lenA = pa.offset(1).load()
+        val pb = bitcast<Ptr<Int>>(b)
+        val lenB = pb.offset(1).load()
+        val newLen = lenA + lenB
+
+        // Fast path: unique owner, not a slice, not immortal
+        if (rc == 1) {
+            if (base == 0) {
+                if (rc != ROCKIT_IMMORTAL) {
+                    val cap = pa.offset(4).load()
+                    if (newLen <= cap) {
+                        // Append in-place — no allocation
+                        val charsA = pa.offset(2).load()
+                        val charsB = pb.offset(2).load()
+                        memcpy(charsA + lenA, charsB, lenB)
+                        storeByte(charsA, newLen, 0)
+                        pa.offset(1).store(newLen)
+                        return a
+                    }
+                    // Grow: realloc with 2x capacity
+                    var newCap: Int = cap * 2
+                    if (newCap < newLen) { newCap = newLen }
+                    val newBlock = realloc(a, STR_HEADER + newCap + 1)
+                    val np = bitcast<Ptr<Int>>(newBlock)
+                    val newDataPtr = newBlock + STR_HEADER
+                    val charsB2 = pb.offset(2).load()
+                    memcpy(newDataPtr + lenA, charsB2, lenB)
+                    storeByte(newDataPtr, newLen, 0)
+                    np.offset(1).store(newLen)
+                    np.offset(2).store(newDataPtr)
+                    np.offset(4).store(newCap)
+                    return newBlock
+                }
+            }
+        }
+
+        // Slow path: not unique or slice — allocate new, release old
+        val result = stringConcat(a, b)
+        rockit_string_release(a)
+        return result
+    }
 }
 
 fun stringConcat(a: Int, b: Int): Int {
@@ -107,6 +166,11 @@ fun stringConcat(a: Int, b: Int): Int {
         p.offset(0).store(1)            // refCount = 1
         p.offset(1).store(newLen)       // length
         p.offset(3).store(0)            // base = NULL
+        if (newLen <= POOL_MAX_LEN) {
+            p.offset(4).store(POOL_MAX_LEN)
+        } else {
+            p.offset(4).store(newLen)
+        }
         val dataPtr = s + STR_HEADER
         val charsA = pa.offset(2).load()
         val charsB = pb.offset(2).load()
@@ -278,6 +342,11 @@ fun rockit_string_concat_n(n: Int, parts: Int): Int {
         rp.offset(0).store(1)
         rp.offset(1).store(totalLen)
         rp.offset(3).store(0)
+        if (totalLen <= POOL_MAX_LEN) {
+            rp.offset(4).store(POOL_MAX_LEN)
+        } else {
+            rp.offset(4).store(totalLen)
+        }
         val dataPtr = result + STR_HEADER
         var pos: Int = 0
         i = 0

@@ -69,6 +69,7 @@ RockitString* rockit_string_new(const char* utf8) {
     s->refCount = 1;
     s->length = len;
     s->base = NULL;
+    s->capacity = (len <= POOL_MAX_LEN) ? POOL_MAX_LEN : len;
     memcpy(s->data, utf8, len + 1);
     s->chars = s->data;
     return s;
@@ -82,11 +83,44 @@ RockitString* rockit_string_concat(RockitString* a, RockitString* b) {
     s->refCount = 1;
     s->length = newLen;
     s->base = NULL;
+    s->capacity = (newLen <= POOL_MAX_LEN) ? POOL_MAX_LEN : newLen;
     memcpy(s->data, a->chars, a->length);
     memcpy(s->data + a->length, b->chars, b->length);
     s->data[newLen] = '\0';
     s->chars = s->data;
     return s;
+}
+
+// Consume-concat: takes ownership of LHS for in-place append.
+// Used by codegen for `s = s + expr` self-append patterns.
+RockitString* rockit_string_concat_consume(RockitString* a, RockitString* b) {
+    int64_t newLen = a->length + b->length;
+
+    // Fast path: unique owner, not a slice, not immortal
+    if (a->refCount == 1 && a->base == NULL && a->refCount != ROCKIT_IMMORTAL_REFCOUNT) {
+        if (newLen <= a->capacity) {
+            // Append in-place — no allocation
+            memcpy((char*)a->chars + a->length, b->chars, b->length);
+            ((char*)a->chars)[newLen] = '\0';
+            a->length = newLen;
+            return a;
+        }
+        // Grow: realloc with 2x capacity
+        int64_t newCap = a->capacity * 2;
+        if (newCap < newLen) newCap = newLen;
+        RockitString* a2 = (RockitString*)realloc(a, sizeof(RockitString) + newCap + 1);
+        a2->chars = a2->data;
+        memcpy(a2->data + a2->length, b->chars, b->length);
+        a2->length = newLen;
+        a2->data[newLen] = '\0';
+        a2->capacity = newCap;
+        return a2;
+    }
+
+    // Slow path: not unique or slice — allocate new, release old
+    RockitString* result = rockit_string_concat(a, b);
+    rockit_string_release(a);
+    return result;
 }
 
 // Single-allocation multi-string concatenation.
@@ -101,6 +135,7 @@ RockitString* rockit_string_concat_n(int64_t n, RockitString** parts) {
     s->refCount = 1;
     s->length = totalLen;
     s->base = NULL;
+    s->capacity = (totalLen <= POOL_MAX_LEN) ? POOL_MAX_LEN : totalLen;
     char* dst = s->data;
     for (int64_t i = 0; i < n; i++) {
         memcpy(dst, parts[i]->chars, parts[i]->length);
@@ -874,6 +909,7 @@ RockitString* stringTrim(RockitString* s) {
     result->refCount = 1;
     result->length = len;
     result->base = NULL;
+    result->capacity = (len <= POOL_MAX_LEN) ? POOL_MAX_LEN : len;
     memcpy(result->data, s->chars + start, len);
     result->data[len] = '\0';
     result->chars = result->data;

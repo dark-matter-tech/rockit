@@ -191,15 +191,15 @@ public final class LLVMCodeGen {
             lines.append("\(name) = private unnamed_addr constant [\(len) x i8] c\"\(escaped)\\00\"")
         }
         // Emit immortal RockitString globals (pre-built structs, no malloc needed)
-        // Layout matches C struct: { i64 refCount, i64 length, ptr chars, ptr base, [N x i8] data }
-        // chars points to the data[] portion (offset 32 bytes from struct start).
+        // Layout matches C struct: { i64 refCount, i64 length, ptr chars, ptr base, i64 capacity, [N x i8] data }
+        // chars points to the data[] portion (offset 40 bytes from struct start).
         // base is null (owned string, not a slice).
         for (value, name) in rockitStringGlobals.sorted(by: { $0.value < $1.value }) {
             let escaped = llvmEscapeString(value)
             let dataLen = value.utf8.count + 1  // +1 for null terminator
             let strLen = value.utf8.count
-            // chars = GEP into the data[] portion of the same global (offset 32 = 4 * i64)
-            lines.append("\(name) = private global <{ i64, i64, ptr, ptr, [\(dataLen) x i8] }> <{ i64 9223372036854775807, i64 \(strLen), ptr getelementptr (i8, ptr \(name), i64 32), ptr null, [\(dataLen) x i8] c\"\(escaped)\\00\" }>")
+            // chars = GEP into the data[] portion of the same global (offset 40 = 5 * i64)
+            lines.append("\(name) = private global <{ i64, i64, ptr, ptr, i64, [\(dataLen) x i8] }> <{ i64 9223372036854775807, i64 \(strLen), ptr getelementptr (i8, ptr \(name), i64 40), ptr null, i64 \(strLen), [\(dataLen) x i8] c\"\(escaped)\\00\" }>")
         }
         if !stringPool.isEmpty || !typeNamePool.isEmpty || !rockitStringGlobals.isEmpty {
             lines.append("")
@@ -466,6 +466,12 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i64 @rockit_list_size(ptr)")
         externalDecls.insert("declare i1 @rockit_list_is_empty(ptr)")
         externalDecls.insert("declare void @rockit_list_release(ptr)")
+        // ByteArray runtime
+        externalDecls.insert("declare i64 @byteArrayCreate(i64)")
+        externalDecls.insert("declare i64 @byteArrayCreateFilled(i64, i64)")
+        externalDecls.insert("declare i64 @byteArrayGet(i64, i64)")
+        externalDecls.insert("declare void @byteArraySet(i64, i64, i64)")
+        externalDecls.insert("declare i64 @byteArraySize(i64)")
         // Map runtime (string-keyed)
         externalDecls.insert("declare i64 @mapCreate()")
         externalDecls.insert("declare i64 @mapPut(i64, ptr, i64)")
@@ -910,7 +916,56 @@ public final class LLVMCodeGen {
                 return [temp]
             }
 
+            // --- Detect self-append: s = s + expr → use concat_consume ---
+            // Pattern: load(lhsTemp, var), add(dest, lhsTemp, rhs, .string), store(var, dest)
+            // Conditions: lhsTemp used only once (in the add), dest used only once (in the store)
+            var loadSources: [String: String] = [:]  // temp → source variable
+            var storeTargets: [String: String] = [:]  // src temp → dest variable
             for inst in block.instructions {
+                if case .load(let dest, let src) = inst {
+                    loadSources[dest] = src
+                }
+                if case .store(let dest, let src) = inst {
+                    storeTargets[src] = dest
+                }
+            }
+            var selfAppendVar: [String: String] = [:]  // add dest → variable name
+            var selfAppendSkipLoad = Set<String>()  // load dests to skip
+            var selfAppendSkipStore = Set<String>()  // store srcs to skip
+            for inst in block.instructions {
+                if case .add(let dest, let lhs, _, let type) = inst, case .string = type {
+                    if let lhsSource = loadSources[lhs],
+                       let storeDest = storeTargets[dest],
+                       lhsSource == storeDest,
+                       useCount[lhs, default: 0] == 1,
+                       useCount[dest, default: 0] == 1,
+                       !chainIntermediate.contains(dest) {
+                        selfAppendVar[dest] = lhsSource
+                        selfAppendSkipLoad.insert(lhs)
+                        selfAppendSkipStore.insert(dest)
+                    }
+                }
+            }
+
+            for inst in block.instructions {
+                // Skip loads that are part of self-append optimization
+                if case .load(let dest, _) = inst, selfAppendSkipLoad.contains(dest) {
+                    continue
+                }
+                // Skip stores that are part of self-append optimization
+                if case .store(_, let src) = inst, selfAppendSkipStore.contains(src) {
+                    continue
+                }
+                // Self-append: emit consume variant
+                if case .add(let dest, _, let rhs, let type) = inst,
+                   case .string = type,
+                   let targetVar = selfAppendVar[dest] {
+                    let emitted = emitStringConcatConsume(dest: dest, rhs: rhs, targetVar: targetVar)
+                    for line in emitted {
+                        lines.append("  \(line)")
+                    }
+                    continue
+                }
                 // Skip emitting chain intermediate string adds — they'll be
                 // folded into the root chain's concat_n call
                 if case .add(let dest, _, _, let type) = inst,
@@ -2886,7 +2941,7 @@ public final class LLVMCodeGen {
     /// Returns the HeapKind for functions that return newly-allocated heap objects, or nil.
     private func heapKindForFunction(_ name: String) -> HeapKind? {
         switch name {
-        case "rockit_string_new", "rockit_string_concat", "stringConcat",
+        case "rockit_string_new", "rockit_string_concat", "rockit_string_concat_consume", "stringConcat",
              "readLine", "substring", "charAt", "stringTrim", "fileRead",
              "rockit_int_to_string", "rockit_float_to_string", "rockit_bool_to_string",
              "intToChar":
@@ -3941,39 +3996,39 @@ public final class LLVMCodeGen {
 
     // MARK: - String Concat
 
+    /// Load a concat part and convert to ptr (string) if needed.
+    /// Returns (value, isOwned) — isOwned is true when a new string was allocated
+    /// (toString conversion), false when the value is a borrowed reference from an alloca.
+    private func loadAsString(_ part: String, into lines: inout [String]) -> (String, Bool) {
+        let partType = typeOf(part)
+        let raw = nextSSA()
+        lines.append("\(raw) = load \(partType), ptr \(addrOf(part))")
+        switch partType {
+        case "ptr":
+            return (raw, false)  // borrowed reference — do NOT release
+        case "i64":
+            let conv = nextSSA()
+            lines.append("\(conv) = call ptr @rockit_int_to_string(i64 \(raw))")
+            return (conv, true)
+        case "double":
+            let conv = nextSSA()
+            lines.append("\(conv) = call ptr @rockit_float_to_string(double \(raw))")
+            return (conv, true)
+        case "i1":
+            let conv = nextSSA()
+            lines.append("\(conv) = call ptr @rockit_bool_to_string(i1 \(raw))")
+            return (conv, true)
+        default:
+            // Treat unknown types as i64 → int_to_string
+            let conv = nextSSA()
+            lines.append("\(conv) = call ptr @rockit_int_to_string(i64 \(raw))")
+            return (conv, true)
+        }
+    }
+
     private func emitStringConcat(dest: String, parts: [String]) -> [String] {
         guard !parts.isEmpty else {
             return [storeToTemp(dest, value: "null", type: "ptr")]
-        }
-
-        /// Load a concat part and convert to ptr (string) if needed.
-        /// Returns (value, isOwned) — isOwned is true when a new string was allocated
-        /// (toString conversion), false when the value is a borrowed reference from an alloca.
-        func loadAsString(_ part: String, into lines: inout [String]) -> (String, Bool) {
-            let partType = typeOf(part)
-            let raw = nextSSA()
-            lines.append("\(raw) = load \(partType), ptr \(addrOf(part))")
-            switch partType {
-            case "ptr":
-                return (raw, false)  // borrowed reference — do NOT release
-            case "i64":
-                let conv = nextSSA()
-                lines.append("\(conv) = call ptr @rockit_int_to_string(i64 \(raw))")
-                return (conv, true)
-            case "double":
-                let conv = nextSSA()
-                lines.append("\(conv) = call ptr @rockit_float_to_string(double \(raw))")
-                return (conv, true)
-            case "i1":
-                let conv = nextSSA()
-                lines.append("\(conv) = call ptr @rockit_bool_to_string(i1 \(raw))")
-                return (conv, true)
-            default:
-                // Treat unknown types as i64 → int_to_string
-                let conv = nextSSA()
-                lines.append("\(conv) = call ptr @rockit_int_to_string(i64 \(raw))")
-                return (conv, true)
-            }
         }
 
         var lines: [String] = []
@@ -4023,6 +4078,35 @@ public final class LLVMCodeGen {
         lines.append(storeToTemp(dest, value: result, type: "ptr"))
         trackHeapTemp(dest, kind: .string)
         if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
+        return lines
+    }
+
+    /// Emit string concat_consume for self-append pattern (s = s + expr).
+    /// Takes ownership of LHS — no extra retain, function handles release if needed.
+    private func emitStringConcatConsume(dest: String, rhs: String, targetVar: String) -> [String] {
+        var lines: [String] = []
+        externalDecls.insert("declare ptr @rockit_string_concat_consume(ptr, ptr)")
+
+        // Load LHS directly from variable (no retain — concat_consume takes ownership)
+        let lhsPtr = nextSSA()
+        lines.append("\(lhsPtr) = load ptr, ptr \(addrOf(targetVar))")
+
+        // Load RHS
+        let (rhsStr, rhsOwned) = loadAsString(rhs, into: &lines)
+
+        // Call consume variant
+        let result = nextSSA()
+        lines.append("\(result) = call ptr @rockit_string_concat_consume(ptr \(lhsPtr), ptr \(rhsStr))")
+
+        // Release RHS if it was an owned intermediate (toString conversion)
+        if rhsOwned { lines.append(contentsOf: emitInlineStringRelease(rhsStr)) }
+
+        // Store result directly to variable (ownership transferred from function)
+        lines.append("store ptr \(result), ptr \(addrOf(targetVar))")
+
+        // Also store to dest temp so any subsequent reads see the right value
+        lines.append(storeToTemp(dest, value: result, type: "ptr"))
+
         return lines
     }
 
@@ -4375,7 +4459,8 @@ public final class LLVMCodeGen {
              "fileRead", "getEnv", "intToChar":
             return "ptr"
         case "stringLength", "charCodeAt", "stringIndexOf", "toInt",
-             "charToInt", "abs", "min", "max", "listSize", "mapSize":
+             "charToInt", "abs", "min", "max", "listSize", "mapSize",
+             "byteArrayCreate", "byteArrayCreateFilled", "byteArrayGet", "byteArraySize":
             return "i64"
         case "listOf", "mutableListOf", "mapOf", "mutableMapOf",
              "listCreate", "listCreateFilled", "mapCreate":

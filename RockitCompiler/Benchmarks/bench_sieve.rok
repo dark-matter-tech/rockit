@@ -1,25 +1,23 @@
 // bench_sieve.rok — Sieve of Eratosthenes
-// Measures: list indexing, modulo, conditionals, nested loops
+// Measures: array indexing, modulo, conditionals, nested loops
 // Practical: prime number computation to 1,000,000
-
-import rockit.core.collections
-import rockit.core.math
+// Uses ByteArray (1 byte/element) instead of List (8 bytes/element)
 
 fun main(): Unit {
     val n: Int = 1000000
-    val sieve = listCreateFilled(n + 1, 1)
+    val sieve = byteArrayCreateFilled(n + 1, 1)
 
     // 0 and 1 are not prime
-    listSet(sieve, 0, 0)
-    listSet(sieve, 1, 0)
+    byteArraySet(sieve, 0, 0)
+    byteArraySet(sieve, 1, 0)
 
     // Sieve
     var i: Int = 2
     while (i * i <= n) {
-        if (listGet(sieve, i) == 1) {
+        if (byteArrayGet(sieve, i) == 1) {
             var j: Int = i * i
             while (j <= n) {
-                listSet(sieve, j, 0)
+                byteArraySet(sieve, j, 0)
                 j = j + i
             }
         }
@@ -30,7 +28,7 @@ fun main(): Unit {
     var count: Int = 0
     i = 2
     while (i <= n) {
-        if (listGet(sieve, i) == 1) {
+        if (byteArrayGet(sieve, i) == 1) {
             count = count + 1
         }
         i = i + 1
