@@ -43,10 +43,10 @@ jobs:
           chmod 600 ~/.netrc
           if [ -n "${GITHUB_REF_NAME}" ] && echo "${GITHUB_REF_NAME}" | grep -q "^v"; then
             # Tag push — check out the tag
-            git clone --depth 1 --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+            git clone --depth 1 --recurse-submodules --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
           else
             # Branch push (master merge) — check out master
-            git clone --depth 1 --branch master "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+            git clone --depth 1 --recurse-submodules --branch master "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
           fi
         env:
           GITHUB_TOKEN: ${{ github.token }}

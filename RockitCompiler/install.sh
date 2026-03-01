@@ -100,7 +100,7 @@ install_source() {
 
     # Clone compiler
     info "Downloading Rockit compiler..."
-    git clone --depth 1 --branch develop "${GITEA}/${REPO_COMPILER}.git" "${tmp}/moon" 2>&1 | tail -1
+    git clone --depth 1 --recurse-submodules --branch develop "${GITEA}/${REPO_COMPILER}.git" "${tmp}/moon" 2>&1 | tail -1
 
     # Build Stage 1 compiler
     info "Building compiler (this takes a minute)..."

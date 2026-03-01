@@ -177,21 +177,23 @@ RockitCompiler/
 │   ├── codegen.rok                  # Stage 1 bytecode codegen + main()
 │   ├── command.rok                  # Concatenated compiler (auto-gen via build.sh)
 │   ├── command                      # Stage 1 native binary
-│   └── stdlib/rockit/               # Standard library (14 modules)
-│       ├── core/collections.rok     # List map/filter/fold/sort/zip/flatten
-│       ├── core/math.rok            # Integer & float math, trig, constants
-│       ├── core/strings.rok         # pad, repeat, join, split, replace
-│       ├── core/result.rok          # Result type (Success/Failure)
-│       ├── core/uuid.rok            # UUID v4 generation
-│       ├── io/file.rok              # File I/O wrappers
-│       ├── io/path.rok              # Path join/dir/base/ext/normalize
-│       ├── net/http.rok             # HTTP/1.1 client (TCP + curl HTTPS)
-│       ├── net/ws.rok               # WebSocket client (RFC 6455)
-│       ├── net/url.rok              # URL parser and encoder
-│       ├── encoding/base64.rok      # Base64 encode/decode
-│       ├── time/datetime.rok        # Date/time utilities
-│       ├── test/probe.rok           # Probe test framework (assertions)
-│       └── json.rok                 # JSON encoder/decoder (parse, stringify, pretty-print)
+│   └── stdlib/                      # Standard library submodule (rockit-engine/launchpad, 15 modules)
+│       └── rockit/                  # 15 stdlib modules (from launchpad submodule)
+│           ├── core/collections.rok # List map/filter/fold/sort/zip/flatten
+│           ├── core/math.rok        # Integer & float math, trig, constants
+│           ├── core/strings.rok     # pad, repeat, join, split, replace
+│           ├── core/result.rok      # Result type (Success/Failure)
+│           ├── core/uuid.rok        # UUID v4 generation
+│           ├── io/file.rok          # File I/O wrappers
+│           ├── io/path.rok          # Path join/dir/base/ext/normalize
+│           ├── net/http.rok         # HTTP/1.1 client (TCP + curl HTTPS)
+│           ├── net/ws.rok           # WebSocket client (RFC 6455)
+│           ├── net/url.rok          # URL parser and encoder
+│           ├── encoding/base64.rok  # Base64 encode/decode
+│           ├── encoding/xml.rok     # XML parsing and generation
+│           ├── time/datetime.rok    # Date/time utilities
+│           ├── test/probe.rok       # Probe test framework (assertions)
+│           └── json.rok             # JSON encoder/decoder (parse, stringify, pretty-print)
 ├── Runtime/
 │   ├── rockit_runtime.c             # C runtime (ARC, task scheduler, event loop, actor wrappers)
 │   └── rockit/                      # Modular Rockit runtime (freestanding)
@@ -216,7 +218,7 @@ RockitKit is a standalone library so it can be imported by other tools (editor p
 
 ## Standard Library
 
-14 modules in `Stage1/stdlib/rockit/`. Import via dot-separated paths: `import rockit.json`, `import rockit.core.collections`.
+15 modules in `Stage1/stdlib/rockit/` (submodule from [rockit-engine/launchpad](https://github.com/rockit-engine/launchpad)). Import via dot-separated paths: `import rockit.json`, `import rockit.core.collections`.
 
 | Module | Import | Key Functions |
 |--------|--------|--------------|
@@ -231,6 +233,7 @@ RockitKit is a standalone library so it can be imported by other tools (editor p
 | WebSocket | `rockit.net.ws` | wsConnect, wsSend, wsRecv, wsClose |
 | URL | `rockit.net.url` | urlParse, urlEncode, urlDecode, urlQueryParams |
 | Base64 | `rockit.encoding.base64` | base64Encode, base64Decode |
+| XML | `rockit.encoding.xml` | xmlParse, xmlStringify, xmlElement, xmlAttribute |
 | DateTime | `rockit.time.datetime` | now, dateFromEpoch, formatDate, dayOfWeek |
 | JSON | `rockit.json` | jsonParse, jsonStringify, jsonObject, jsonArray |
 | Probe | `rockit.test.probe` | 20 assertions: assertEquals, assertEqualsStr, assertEqualsBool, assertNotEquals, assertNotEqualsStr, assertTrue, assertFalse, assertGreaterThan, assertLessThan, assertGreaterThanOrEqual, assertLessThanOrEqual, assertBetween, assertStringContains, assertStartsWith, assertEndsWith, assertStringEmpty, assertStringNotEmpty, assertStringLength, assert, fail |

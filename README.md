@@ -46,7 +46,7 @@ The installer downloads a prebuilt binary if available, or builds from source as
 
 **Or build manually:**
 ```bash
-git clone https://rustygits.com/Dark-Matter/moon.git
+git clone --recurse-submodules https://rustygits.com/Dark-Matter/moon.git
 cd moon/RockitCompiler
 make release && sudo make install
 ```
@@ -141,7 +141,7 @@ navigation AppRouter {
 | Language | **Rockit** | Shipped |
 | Compiler | **Command** | Shipped |
 | Package Manager | **Fuel** | Shipped |
-| Standard Library | **stdlib** | Shipped (14 modules) |
+| Standard Library | **stdlib** ([launchpad](https://github.com/rockit-engine/launchpad)) | Shipped (15 modules) |
 | Test Framework | **Probe** | Shipped |
 | REPL | **Launch** | Shipped |
 | Registry | **Silo** | Planned |
@@ -151,7 +151,7 @@ navigation AppRouter {
 
 ## Standard Library
 
-14 modules ship with Rockit. Import with `import rockit.<module>`.
+15 modules ship with Rockit in the [launchpad](https://github.com/rockit-engine/launchpad) repo. Import with `import rockit.<module>`.
 
 | Module | Import | Description |
 |--------|--------|-------------|
@@ -166,6 +166,7 @@ navigation AppRouter {
 | WebSocket | `import rockit.net.ws` | WebSocket client (RFC 6455) |
 | URL | `import rockit.net.url` | URL parsing, encoding, query parameters |
 | Base64 | `import rockit.encoding.base64` | Base64 encode/decode |
+| XML | `import rockit.encoding.xml` | XML parsing and generation |
 | DateTime | `import rockit.time.datetime` | Date/time, formatting, epoch conversion |
 | JSON | `import rockit.json` | JSON parse, stringify, pretty-print |
 | Probe | `import rockit.test.probe` | Test assertions for `@Test` annotated functions |
@@ -320,6 +321,7 @@ moon/
 │   │   ├── rockit_runtime.c     # C runtime (ARC, actors, coroutines)
 │   │   └── rockit/              # Modular Rockit runtime (12 freestanding .rok files)
 │   ├── Stage1/                  # Self-hosting compiler in Rockit (~12K lines)
+│   │   └── stdlib/              # Standard library submodule (rockit-engine/launchpad)
 │   └── Examples/                # 48 example/test .rok files
 ├── ide/
 │   ├── shared/                  # Canonical syntax definition + generator

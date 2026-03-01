@@ -385,7 +385,7 @@ if ($downloaded) {
 
     # Clone compiler
     Write-Info "Downloading Rockit compiler..."
-    git clone --depth 1 --branch develop "$GITEA/$REPO.git" "$tmp\moon" 2>&1 | Out-Null
+    git clone --depth 1 --recurse-submodules --branch develop "$GITEA/$REPO.git" "$tmp\moon" 2>&1 | Out-Null
     if (-not (Test-Path "$tmp\moon\RockitCompiler\Package.swift")) {
         Pop-Location
         $ErrorActionPreference = $savedEAP
