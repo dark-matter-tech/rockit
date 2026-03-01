@@ -422,13 +422,37 @@ do_install_jetbrains() {
     local plugins_dir="${ide_dir}/plugins"
     local plugin_zip=""
     local dist_dir="$IDE_DIR/intellij-rockit/build/distributions"
+
+    # Try 1: Pre-built zip in local build directory
     if [ -d "$dist_dir" ]; then
         plugin_zip=$(find "$dist_dir" -name '*.zip' -print -quit 2>/dev/null || true)
     fi
+
+    # Try 2: Build with Gradle if wrapper is available
     if [ -z "$plugin_zip" ] && [ -f "$IDE_DIR/intellij-rockit/gradlew" ]; then
         (cd "$IDE_DIR/intellij-rockit" && ./gradlew buildPlugin -q 2>/dev/null) || true
         plugin_zip=$(find "$dist_dir" -name '*.zip' -print -quit 2>/dev/null || true)
     fi
+
+    # Try 3: Download pre-built plugin from Gitea release
+    if [ -z "$plugin_zip" ] && command -v curl >/dev/null 2>&1; then
+        local repo_base="${REPO_URL%.git}"
+        local api_base="${repo_base%/*/*}/api/v1/repos/${repo_base#*://*/}"
+        local tmp_zip="${TMPDIR:-/tmp}/intellij-rockit-$$.zip"
+
+        # Query recent releases for a plugin zip asset
+        local asset_url=""
+        asset_url=$(curl -fsSL "${api_base}/releases?limit=5" 2>/dev/null | \
+            tr ',' '\n' | grep 'browser_download_url.*intellij-rockit.*\.zip' | \
+            head -1 | sed 's/.*"browser_download_url":"//;s/".*//') || true
+
+        if [ -n "$asset_url" ]; then
+            if curl -fsSL -o "$tmp_zip" "$asset_url" 2>/dev/null; then
+                plugin_zip="$tmp_zip"
+            fi
+        fi
+    fi
+
     if [ -n "$plugin_zip" ]; then
         unzip -o -q "$plugin_zip" -d "$plugins_dir" 2>/dev/null && INSTALLED+=("$friendly")
     fi

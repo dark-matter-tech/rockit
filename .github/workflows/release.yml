@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          apt-get update && apt-get install -y git clang-15 curl jq
+          apt-get update && apt-get install -y git clang-15 curl jq openjdk-17-jdk
           ln -sf /usr/bin/clang-15 /usr/bin/clang
 
       - name: Set version
@@ -105,6 +105,16 @@ jobs:
           RockitCompiler/Stage1/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path RockitCompiler/Runtime/rockit_runtime.o
         env:
           FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+      - name: Build IntelliJ plugin
+        if: env.SKIP_RELEASE != 'true'
+        working-directory: ide/intellij-rockit
+        run: |
+          chmod +x gradlew
+          ./gradlew buildPlugin
+          PLUGIN_ZIP=$(find build/distributions -name '*.zip' -print -quit)
+          echo "PLUGIN_ZIP=${PLUGIN_ZIP}" >> "$GITHUB_ENV"
+          echo "Built plugin: ${PLUGIN_ZIP}"
 
       - name: Package Linux x86_64
         if: env.SKIP_RELEASE != 'true'
@@ -192,5 +202,22 @@ jobs:
           fi
 
           echo "Successfully uploaded: ${ARCHIVE}"
+
+          # Upload IntelliJ plugin zip if it was built
+          if [ -n "${PLUGIN_ZIP:-}" ] && [ -f "ide/intellij-rockit/${PLUGIN_ZIP}" ]; then
+            PLUGIN_NAME=$(basename "${PLUGIN_ZIP}")
+            PLUGIN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+              -H "Authorization: token ${FUEL_TOKEN}" \
+              -H "Content-Type: application/zip" \
+              --data-binary "@ide/intellij-rockit/${PLUGIN_ZIP}" \
+              "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${PLUGIN_NAME}")
+            PLUGIN_HTTP=$(echo "$PLUGIN_RESPONSE" | tail -1)
+
+            if [ "$PLUGIN_HTTP" -ge 400 ]; then
+              echo "WARNING: Plugin upload failed (HTTP $PLUGIN_HTTP) — continuing"
+            else
+              echo "Successfully uploaded: ${PLUGIN_NAME}"
+            fi
+          fi
         env:
           FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
