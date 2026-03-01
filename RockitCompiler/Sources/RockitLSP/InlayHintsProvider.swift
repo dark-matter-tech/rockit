@@ -175,6 +175,7 @@ public final class InlayHintsProvider {
         case .string: return "String"
         case .unit: return "Unit"
         case .nothing: return "Nothing"
+        case .any: return "Any"
         case .byteArray: return "ByteArray"
         case .nullType: return "Null"
         case .nullable(let inner): return "\(typeToString(inner))?"

@@ -890,3 +890,113 @@ fun jsonStringifyPretty(v: Map, indent: Int): String {
 
     return "null"
 }
+
+// ── Auto-Wrapping ────────────────────────────────────────────────────────
+
+// Automatically wrap any Rockit value into a tagged JSON map.
+// Uses typeOf to detect runtime type and dispatch to the correct constructor.
+fun jsonFrom(value: Any): Map {
+    val t = typeOf(value)
+    if (t == "null") { return jsonNull() }
+    if (t == "Bool") {
+        if (toString(value) == "true") { return jsonBool(true) }
+        return jsonBool(false)
+    }
+    if (t == "Int") { return jsonNumber(toInt(toString(value))) }
+    if (t == "Float") { return jsonNumberFromString(toString(value)) }
+    if (t == "String") { return jsonString(toString(value)) }
+    if (t == "List") { return jsonFromList(value) }
+    if (t == "Map") { return jsonFromMap(value) }
+    // Fallback: convert unknown types to their string representation
+    return jsonString(toString(value))
+}
+
+// Convert a raw List to a JSON array, recursively wrapping each element.
+fun jsonFromList(list: Any): Map {
+    val arr = jsonArray()
+    val size = listSize(list)
+    var i: Int = 0
+    while (i < size) {
+        jsonArrayAppend(arr, jsonFrom(listGet(list, i)))
+        i = i + 1
+    }
+    return arr
+}
+
+// Convert a raw Map to a JSON object, recursively wrapping each value.
+// Keys are converted to strings.
+fun jsonFromMap(map: Any): Map {
+    // Check if this is already a tagged JSON map (has "type" key)
+    val typeVal = mapGet(map, "type")
+    if (typeVal != null) {
+        val t = toInt(typeVal)
+        if (t >= -1 && t <= 5) {
+            // Already a tagged JSON map, return as-is
+            return map
+        }
+    }
+    // Raw map — wrap each key/value
+    val obj = jsonObject()
+    val keys = mapKeys(map)
+    val size = listSize(keys)
+    var i: Int = 0
+    while (i < size) {
+        val key = toString(listGet(keys, i))
+        jsonObjectPut(obj, key, jsonFrom(mapGet(map, key)))
+        i = i + 1
+    }
+    return obj
+}
+
+// ── Unwrapping ───────────────────────────────────────────────────────────
+
+// Unwrap a tagged JSON value back to a native Rockit value.
+// JSON null → null, bool → Bool, number → Int or String, string → String,
+// array → List, object → Map.
+fun jsonToValue(v: Map): Any {
+    val t = jsonType(v)
+    if (t == JSON_NULL()) { return null }
+    if (t == JSON_BOOL()) { return jsonGetBool(v) }
+    if (t == JSON_NUMBER()) {
+        // Try to return as Int if it looks like a whole number
+        val numStr = jsonGetNumberString(v)
+        val hasDecimal = stringIndexOf(numStr, ".") >= 0
+        val hasExp = stringIndexOf(numStr, "e") >= 0
+        val hasExpUpper = stringIndexOf(numStr, "E") >= 0
+        if (!hasDecimal && !hasExp && !hasExpUpper) {
+            return toInt(numStr)
+        }
+        // Return the number string for floats (caller can toFloat if needed)
+        return numStr
+    }
+    if (t == JSON_STRING()) { return jsonGetString(v) }
+    if (t == JSON_ARRAY()) { return jsonToList(v) }
+    if (t == JSON_OBJECT()) { return jsonToMap(v) }
+    return null
+}
+
+// Unwrap a JSON array to a native List of unwrapped values.
+fun jsonToList(v: Map): List {
+    val result = listCreate()
+    val size = jsonArraySize(v)
+    var i: Int = 0
+    while (i < size) {
+        listAppend(result, jsonToValue(jsonArrayGet(v, i)))
+        i = i + 1
+    }
+    return result
+}
+
+// Unwrap a JSON object to a native Map of string keys to unwrapped values.
+fun jsonToMap(v: Map): Map {
+    val result = mapCreate()
+    val keys = jsonObjectKeys(v)
+    val size = listSize(keys)
+    var i: Int = 0
+    while (i < size) {
+        val key = toString(listGet(keys, i))
+        mapPut(result, key, jsonToValue(jsonObjectGet(v, key)))
+        i = i + 1
+    }
+    return result
+}

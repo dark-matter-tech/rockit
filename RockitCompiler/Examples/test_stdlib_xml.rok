@@ -1,0 +1,251 @@
+import rockit.encoding.xml
+import rockit.json
+
+var passed: Int = 0
+var failed: Int = 0
+
+fun assert(condition: Bool, name: String): Unit {
+    if (condition) {
+        passed = passed + 1
+    } else {
+        println(stringConcat("FAIL: ", name))
+        failed = failed + 1
+    }
+}
+
+fun main(): Unit {
+    println("=== XML Module Tests ===")
+
+    // ── Constructors & Type Checks ─────────────────────────────────────
+
+    val elem = xmlElement("div")
+    assert(xmlIsElement(elem), "xmlElement is element")
+    assert(xmlGetTag(elem) == "div", "xmlElement tag")
+
+    val txt = xmlText("hello")
+    assert(xmlIsText(txt), "xmlText is text")
+    assert(xmlGetText(txt) == "hello", "xmlText value")
+
+    val cdata = xmlCdata("raw <data>")
+    assert(xmlIsCdata(cdata), "xmlCdata is cdata")
+
+    val comment = xmlComment(" a comment ")
+    assert(xmlIsComment(comment), "xmlComment is comment")
+
+    val doc = xmlDocument()
+    assert(xmlIsDocument(doc), "xmlDocument is document")
+
+    val err = xmlError("test error")
+    assert(xmlIsError(err), "xmlError is error")
+
+    // ── Element Operations ──────────────────────────────────────────────
+
+    val div = xmlElement("div")
+    xmlSetAttr(div, "id", "main")
+    xmlSetAttr(div, "class", "container")
+    assert(xmlHasAttr(div, "id"), "hasAttr id")
+    assert(xmlGetAttr(div, "id") == "main", "getAttr id")
+    assert(xmlGetAttr(div, "class") == "container", "getAttr class")
+    assert(!xmlHasAttr(div, "style"), "!hasAttr style")
+    assert(xmlGetAttr(div, "style") == "", "getAttr missing returns empty")
+
+    val p = xmlElement("p")
+    xmlAppendChild(p, xmlText("Hello, "))
+    xmlAppendChild(p, xmlElement("b"))
+    assert(listSize(xmlGetChildren(p)) == 2, "p has 2 children")
+    assert(xmlGetText(p) == "Hello, ", "getText gets text content")
+
+    // ── Children By Tag ─────────────────────────────────────────────────
+
+    val ul = xmlElement("ul")
+    val li1 = xmlElement("li")
+    xmlAppendChild(li1, xmlText("one"))
+    val li2 = xmlElement("li")
+    xmlAppendChild(li2, xmlText("two"))
+    val span = xmlElement("span")
+    xmlAppendChild(ul, li1)
+    xmlAppendChild(ul, li2)
+    xmlAppendChild(ul, span)
+    val lis = xmlGetChildrenByTag(ul, "li")
+    assert(listSize(lis) == 2, "getChildrenByTag li count")
+
+    // ── Escaping ────────────────────────────────────────────────────────
+
+    assert(xmlEscapeText("a & b") == "a &amp; b", "escapeText &")
+    assert(xmlEscapeText("<tag>") == "&lt;tag&gt;", "escapeText < >")
+    assert(xmlEscapeAttr("a\"b") == "a&quot;b", "escapeAttr quote")
+    assert(xmlEscapeAttr("a'b") == "a&apos;b", "escapeAttr apos")
+
+    // ── Entity Decoding ─────────────────────────────────────────────────
+
+    assert(xmlDecodeEntities("a &amp; b") == "a & b", "decode &amp;")
+    assert(xmlDecodeEntities("&lt;tag&gt;") == "<tag>", "decode &lt; &gt;")
+    assert(xmlDecodeEntities("&quot;hi&quot;") == "\"hi\"", "decode &quot;")
+    assert(xmlDecodeEntities("it&apos;s") == "it's", "decode &apos;")
+    assert(xmlDecodeEntities("&#65;") == "A", "decode &#65; (decimal)")
+    assert(xmlDecodeEntities("&#x41;") == "A", "decode &#x41; (hex)")
+    assert(xmlDecodeEntities("no entities here") == "no entities here", "decode no entities")
+
+    // ── Parse Simple Element ────────────────────────────────────────────
+
+    val simple = xmlParse("<hello/>")
+    assert(xmlIsElement(simple), "parse simple self-closing")
+    assert(xmlGetTag(simple) == "hello", "parse simple tag")
+
+    val withText = xmlParse("<msg>Hi there</msg>")
+    assert(xmlIsElement(withText), "parse with text")
+    assert(xmlGetTag(withText) == "msg", "parse with text tag")
+    assert(xmlGetText(withText) == "Hi there", "parse with text content")
+
+    // ── Parse Attributes ────────────────────────────────────────────────
+
+    val withAttrs = xmlParse("<div id=\"main\" class=\"big\">content</div>")
+    assert(xmlIsElement(withAttrs), "parse with attrs")
+    assert(xmlGetAttr(withAttrs, "id") == "main", "parse attr id")
+    assert(xmlGetAttr(withAttrs, "class") == "big", "parse attr class")
+    assert(xmlGetText(withAttrs) == "content", "parse attr text")
+
+    // ── Parse Nested Elements ───────────────────────────────────────────
+
+    val nested = xmlParse("<root><a>1</a><b>2</b></root>")
+    assert(xmlIsElement(nested), "parse nested")
+    assert(xmlGetTag(nested) == "root", "parse nested root tag")
+    val nestedChildren = xmlGetChildren(nested)
+    assert(listSize(nestedChildren) == 2, "parse nested 2 children")
+    val childA = listGet(nestedChildren, 0)
+    assert(xmlGetTag(childA) == "a", "nested child a tag")
+    assert(xmlGetText(childA) == "1", "nested child a text")
+    val childB = listGet(nestedChildren, 1)
+    assert(xmlGetTag(childB) == "b", "nested child b tag")
+    assert(xmlGetText(childB) == "2", "nested child b text")
+
+    // ── Parse Entities in Content ───────────────────────────────────────
+
+    val withEntities = xmlParse("<msg>a &amp; b &lt; c</msg>")
+    assert(xmlGetText(withEntities) == "a & b < c", "parse entities in content")
+
+    // ── Parse Entities in Attributes ────────────────────────────────────
+
+    val attrEnt = xmlParse("<a title=\"a &amp; b\"/>")
+    assert(xmlGetAttr(attrEnt, "title") == "a & b", "parse entities in attr")
+
+    // ── Parse CDATA ─────────────────────────────────────────────────────
+
+    val withCdata = xmlParse("<data><![CDATA[raw <content> & stuff]]></data>")
+    assert(xmlIsElement(withCdata), "parse cdata element")
+    val cdataChildren = xmlGetChildren(withCdata)
+    assert(listSize(cdataChildren) == 1, "cdata 1 child")
+    val cdataChild = listGet(cdataChildren, 0)
+    assert(xmlIsCdata(cdataChild), "cdata child is cdata")
+    assert(xmlGetText(withCdata) == "raw <content> & stuff", "cdata text content")
+
+    // ── Parse Comment ───────────────────────────────────────────────────
+
+    val withComment = xmlParse("<root><!-- my comment --><item/></root>")
+    assert(xmlIsElement(withComment), "parse comment element")
+    val commentChildren = xmlGetChildren(withComment)
+    assert(listSize(commentChildren) == 2, "comment 2 children")
+    val commentChild = listGet(commentChildren, 0)
+    assert(xmlIsComment(commentChild), "comment child is comment")
+
+    // ── Parse Error ─────────────────────────────────────────────────────
+
+    val badXml = xmlParse("<open>no close")
+    assert(xmlIsError(badXml), "parse error on unclosed")
+
+    // ── Serialization ───────────────────────────────────────────────────
+
+    val sElem = xmlElement("br")
+    assert(xmlStringify(sElem) == "<br/>", "stringify self-closing")
+
+    val sDiv = xmlElement("div")
+    xmlSetAttr(sDiv, "id", "x")
+    xmlAppendChild(sDiv, xmlText("hi"))
+    assert(xmlStringify(sDiv) == "<div id=\"x\">hi</div>", "stringify with attr and text")
+
+    val sCdata = xmlCdata("raw stuff")
+    assert(xmlStringify(sCdata) == "<![CDATA[raw stuff]]>", "stringify cdata")
+
+    val sComment = xmlComment(" note ")
+    assert(xmlStringify(sComment) == "<!-- note -->", "stringify comment")
+
+    // ── Serialization Round-Trip ────────────────────────────────────────
+
+    val original = "<root><item id=\"1\">Hello</item><item id=\"2\">World</item></root>"
+    val parsed = xmlParse(original)
+    val serialized = xmlStringify(parsed)
+    val reparsed = xmlParse(serialized)
+    assert(!xmlIsError(reparsed), "round-trip reparse")
+    assert(xmlGetTag(reparsed) == "root", "round-trip root tag")
+    val rtChildren = xmlGetChildren(reparsed)
+    assert(listSize(rtChildren) == 2, "round-trip children count")
+    assert(xmlGetText(listGet(rtChildren, 0)) == "Hello", "round-trip child 0 text")
+    assert(xmlGetText(listGet(rtChildren, 1)) == "World", "round-trip child 1 text")
+
+    // ── Pretty Printing ─────────────────────────────────────────────────
+
+    val ppElem = xmlElement("root")
+    val ppChild = xmlElement("child")
+    xmlAppendChild(ppChild, xmlText("value"))
+    xmlAppendChild(ppElem, ppChild)
+    val pretty = xmlStringifyPretty(ppElem, 0)
+    // Should contain indentation
+    assert(stringIndexOf(pretty, "  <child>") >= 0, "pretty print has indent")
+    assert(stringIndexOf(pretty, "</root>") >= 0, "pretty print has closing tag")
+
+    // ── XML -> JSON Bridge ──────────────────────────────────────────────
+
+    val bridgeXml = xmlParse("<person><name>Alice</name><age>30</age></person>")
+    val bridgeJson = xmlToJson(bridgeXml)
+    assert(jsonIsObject(bridgeJson), "xmlToJson is object")
+    assert(jsonGetString(jsonObjectGet(bridgeJson, "tag")) == "person", "xmlToJson tag")
+    val bridgeKids = jsonObjectGet(bridgeJson, "children")
+    assert(jsonIsArray(bridgeKids), "xmlToJson has children array")
+    assert(jsonArraySize(bridgeKids) == 2, "xmlToJson 2 children")
+
+    // ── JSON -> XML Bridge ──────────────────────────────────────────────
+
+    val jsonObj = jsonObject()
+    jsonObjectPut(jsonObj, "name", jsonString("Bob"))
+    jsonObjectPut(jsonObj, "score", jsonNumber(100))
+    val xmlFromJson = jsonToXml(jsonObj, "player")
+    assert(xmlIsElement(xmlFromJson), "jsonToXml is element")
+    assert(xmlGetTag(xmlFromJson) == "player", "jsonToXml root tag")
+    val xmlKids = xmlGetChildren(xmlFromJson)
+    assert(listSize(xmlKids) == 2, "jsonToXml 2 children")
+
+    // ── xmlFrom Auto-Wrapping ───────────────────────────────────────────
+
+    val xInt = xmlFrom(42, "value")
+    assert(xmlIsElement(xInt), "xmlFrom int is element")
+    assert(xmlGetText(xInt) == "42", "xmlFrom int text")
+
+    val xStr = xmlFrom("hello", "greeting")
+    assert(xmlGetTag(xStr) == "greeting", "xmlFrom string tag")
+    assert(xmlGetText(xStr) == "hello", "xmlFrom string text")
+
+    val xNull = xmlFrom(null, "empty")
+    assert(xmlIsElement(xNull), "xmlFrom null is element")
+    assert(listSize(xmlGetChildren(xNull)) == 0, "xmlFrom null no children")
+
+    val xList = listCreate()
+    listAppend(xList, 1)
+    listAppend(xList, 2)
+    val xFromList = xmlFrom(xList, "numbers")
+    assert(xmlGetTag(xFromList) == "numbers", "xmlFrom list tag")
+    val xListKids = xmlGetChildren(xFromList)
+    assert(listSize(xListKids) == 2, "xmlFrom list 2 items")
+    assert(xmlGetText(listGet(xListKids, 0)) == "1", "xmlFrom list item 0")
+    assert(xmlGetText(listGet(xListKids, 1)) == "2", "xmlFrom list item 1")
+
+    // ── Summary ─────────────────────────────────────────────────────────
+
+    println("")
+    println(stringConcat("Passed: ", toString(passed)))
+    println(stringConcat("Failed: ", toString(failed)))
+    if (failed == 0) {
+        println("All XML tests passed!")
+    } else {
+        println("SOME TESTS FAILED")
+    }
+}

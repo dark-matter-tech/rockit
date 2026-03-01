@@ -1,0 +1,176 @@
+import rockit.json
+
+var passed: Int = 0
+var failed: Int = 0
+
+fun assert(condition: Bool, name: String): Unit {
+    if (condition) {
+        passed = passed + 1
+    } else {
+        println(stringConcat("FAIL: ", name))
+        failed = failed + 1
+    }
+}
+
+fun main(): Unit {
+    println("=== jsonFrom / jsonToValue Tests ===")
+
+    // ── Primitive Auto-Wrapping ─────────────────────────────────────────
+
+    // Int
+    val jInt = jsonFrom(42)
+    assert(jsonIsNumber(jInt), "jsonFrom(42) is number")
+    assert(jsonGetInt(jInt) == 42, "jsonFrom(42) value is 42")
+
+    // String
+    val jStr = jsonFrom("hello")
+    assert(jsonIsString(jStr), "jsonFrom(\"hello\") is string")
+    assert(jsonGetString(jStr) == "hello", "jsonFrom(\"hello\") value")
+
+    // Bool true
+    val jTrue = jsonFrom(true)
+    assert(jsonIsBool(jTrue), "jsonFrom(true) is bool")
+    assert(jsonGetBool(jTrue), "jsonFrom(true) value is true")
+
+    // Bool false
+    val jFalse = jsonFrom(false)
+    assert(jsonIsBool(jFalse), "jsonFrom(false) is bool")
+    assert(!jsonGetBool(jFalse), "jsonFrom(false) value is false")
+
+    // Null
+    val jNull = jsonFrom(null)
+    assert(jsonIsNull(jNull), "jsonFrom(null) is null")
+
+    // ── Stringify Round-Trip ────────────────────────────────────────────
+
+    assert(jsonStringify(jsonFrom(42)) == "42", "jsonStringify(jsonFrom(42))")
+    assert(jsonStringify(jsonFrom("hello")) == "\"hello\"", "jsonStringify(jsonFrom(\"hello\"))")
+    assert(jsonStringify(jsonFrom(true)) == "true", "jsonStringify(jsonFrom(true))")
+    assert(jsonStringify(jsonFrom(false)) == "false", "jsonStringify(jsonFrom(false))")
+    assert(jsonStringify(jsonFrom(null)) == "null", "jsonStringify(jsonFrom(null))")
+
+    // ── List Auto-Wrapping ──────────────────────────────────────────────
+
+    val list = listCreate()
+    listAppend(list, 1)
+    listAppend(list, 2)
+    listAppend(list, 3)
+    val jList = jsonFrom(list)
+    assert(jsonIsArray(jList), "jsonFrom(list) is array")
+    assert(jsonArraySize(jList) == 3, "jsonFrom(list) size is 3")
+    assert(jsonGetInt(jsonArrayGet(jList, 0)) == 1, "jsonFrom(list)[0] is 1")
+    assert(jsonGetInt(jsonArrayGet(jList, 1)) == 2, "jsonFrom(list)[1] is 2")
+    assert(jsonGetInt(jsonArrayGet(jList, 2)) == 3, "jsonFrom(list)[2] is 3")
+    assert(jsonStringify(jList) == "[1,2,3]", "jsonStringify list")
+
+    // ── Map Auto-Wrapping ───────────────────────────────────────────────
+
+    val map = mapCreate()
+    mapPut(map, "name", "Rockit")
+    mapPut(map, "version", 1)
+    val jMap = jsonFrom(map)
+    assert(jsonIsObject(jMap), "jsonFrom(map) is object")
+    assert(jsonGetString(jsonObjectGet(jMap, "name")) == "Rockit", "jsonFrom(map).name")
+    assert(jsonGetInt(jsonObjectGet(jMap, "version")) == 1, "jsonFrom(map).version")
+
+    // ── Mixed-Type List ─────────────────────────────────────────────────
+
+    val mixed = listCreate()
+    listAppend(mixed, 42)
+    listAppend(mixed, "hello")
+    listAppend(mixed, true)
+    listAppend(mixed, null)
+    val jMixed = jsonFrom(mixed)
+    assert(jsonArraySize(jMixed) == 4, "mixed list size")
+    assert(jsonIsNumber(jsonArrayGet(jMixed, 0)), "mixed[0] is number")
+    assert(jsonIsString(jsonArrayGet(jMixed, 1)), "mixed[1] is string")
+    assert(jsonIsBool(jsonArrayGet(jMixed, 2)), "mixed[2] is bool")
+    assert(jsonIsNull(jsonArrayGet(jMixed, 3)), "mixed[3] is null")
+
+    // ── Nested Structure ────────────────────────────────────────────────
+
+    val inner = mapCreate()
+    mapPut(inner, "x", 10)
+    mapPut(inner, "y", 20)
+    val outer = mapCreate()
+    mapPut(outer, "point", inner)
+    mapPut(outer, "label", "origin")
+    val jNested = jsonFrom(outer)
+    assert(jsonIsObject(jNested), "nested is object")
+    val jPoint = jsonObjectGet(jNested, "point")
+    assert(jsonIsObject(jPoint), "nested.point is object")
+    assert(jsonGetInt(jsonObjectGet(jPoint, "x")) == 10, "nested.point.x is 10")
+    assert(jsonGetInt(jsonObjectGet(jPoint, "y")) == 20, "nested.point.y is 20")
+
+    // ── Already-Tagged JSON Map Pass-Through ────────────────────────────
+
+    val tagged = jsonString("already tagged")
+    val jTagged = jsonFrom(tagged)
+    assert(jsonIsString(jTagged), "already-tagged passes through")
+    assert(jsonGetString(jTagged) == "already tagged", "already-tagged value preserved")
+
+    // ── jsonToValue Unwrapping ──────────────────────────────────────────
+
+    val uInt = jsonToValue(jsonNumber(99))
+    assert(toString(uInt) == "99", "jsonToValue(number) == 99")
+
+    val uStr = jsonToValue(jsonString("world"))
+    assert(toString(uStr) == "world", "jsonToValue(string) == world")
+
+    val uBool = jsonToValue(jsonBool(true))
+    assert(toString(uBool) == "true", "jsonToValue(bool true)")
+
+    val uNull = jsonToValue(jsonNull())
+    assert(uNull == null, "jsonToValue(null) is null")
+
+    // ── jsonToList Unwrapping ───────────────────────────────────────────
+
+    val arrJson = jsonArray()
+    jsonArrayAppend(arrJson, jsonNumber(10))
+    jsonArrayAppend(arrJson, jsonString("hi"))
+    jsonArrayAppend(arrJson, jsonBool(false))
+    val uList = jsonToList(arrJson)
+    assert(listSize(uList) == 3, "jsonToList size")
+    assert(toString(listGet(uList, 0)) == "10", "jsonToList[0]")
+    assert(toString(listGet(uList, 1)) == "hi", "jsonToList[1]")
+    assert(toString(listGet(uList, 2)) == "false", "jsonToList[2]")
+
+    // ── jsonToMap Unwrapping ────────────────────────────────────────────
+
+    val objJson = jsonObject()
+    jsonObjectPut(objJson, "a", jsonNumber(1))
+    jsonObjectPut(objJson, "b", jsonString("two"))
+    val uMap = jsonToMap(objJson)
+    assert(toString(mapGet(uMap, "a")) == "1", "jsonToMap.a")
+    assert(toString(mapGet(uMap, "b")) == "two", "jsonToMap.b")
+
+    // ── Full Round-Trip ─────────────────────────────────────────────────
+
+    val data = mapCreate()
+    mapPut(data, "name", "Rockit")
+    mapPut(data, "version", 1)
+    val items = listCreate()
+    listAppend(items, "alpha")
+    listAppend(items, "beta")
+    mapPut(data, "items", items)
+    val jsonStr = jsonStringify(jsonFrom(data))
+    val parsed = jsonParse(jsonStr)
+    assert(!jsonIsError(parsed), "round-trip parse succeeds")
+    assert(jsonGetString(jsonObjectGet(parsed, "name")) == "Rockit", "round-trip name")
+    assert(jsonGetInt(jsonObjectGet(parsed, "version")) == 1, "round-trip version")
+    val parsedItems = jsonObjectGet(parsed, "items")
+    assert(jsonArraySize(parsedItems) == 2, "round-trip items size")
+    assert(jsonGetString(jsonArrayGet(parsedItems, 0)) == "alpha", "round-trip items[0]")
+    assert(jsonGetString(jsonArrayGet(parsedItems, 1)) == "beta", "round-trip items[1]")
+
+    // ── Summary ─────────────────────────────────────────────────────────
+
+    println("")
+    println(stringConcat("Passed: ", toString(passed)))
+    println(stringConcat("Failed: ", toString(failed)))
+    if (failed == 0) {
+        println("All jsonFrom tests passed!")
+    } else {
+        println("SOME TESTS FAILED")
+    }
+}

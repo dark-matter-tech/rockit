@@ -1,0 +1,1094 @@
+// rockit.encoding.xml — XML encoder / decoder
+//
+// Usage:
+//   import rockit.encoding.xml
+//   val doc = xmlParse("<root><item id=\"1\">Hello</item></root>")
+//   println(xmlStringify(doc))
+//   println(xmlStringifyPretty(doc, 0))
+
+// ── Type Constants ──────────────────────────────────────────────────────
+
+fun XML_ELEMENT(): Int  { return 0 }
+fun XML_TEXT(): Int     { return 1 }
+fun XML_CDATA(): Int    { return 2 }
+fun XML_COMMENT(): Int  { return 3 }
+fun XML_PI(): Int       { return 4 }
+fun XML_DOCUMENT(): Int { return 5 }
+fun XML_ERROR(): Int    { return -1 }
+
+// ── Constructors ────────────────────────────────────────────────────────
+
+fun xmlElement(tag: String): Map {
+    val m = mapCreate()
+    mapPut(m, "type", XML_ELEMENT())
+    mapPut(m, "tag", tag)
+    mapPut(m, "attrs", mapCreate())
+    mapPut(m, "children", listCreate())
+    return m
+}
+
+fun xmlText(value: String): Map {
+    val m = mapCreate()
+    mapPut(m, "type", XML_TEXT())
+    mapPut(m, "value", value)
+    return m
+}
+
+fun xmlCdata(value: String): Map {
+    val m = mapCreate()
+    mapPut(m, "type", XML_CDATA())
+    mapPut(m, "value", value)
+    return m
+}
+
+fun xmlComment(value: String): Map {
+    val m = mapCreate()
+    mapPut(m, "type", XML_COMMENT())
+    mapPut(m, "value", value)
+    return m
+}
+
+fun xmlPI(target: String, data: String): Map {
+    val m = mapCreate()
+    mapPut(m, "type", XML_PI())
+    mapPut(m, "target", target)
+    mapPut(m, "data", data)
+    return m
+}
+
+fun xmlDocument(): Map {
+    val m = mapCreate()
+    mapPut(m, "type", XML_DOCUMENT())
+    mapPut(m, "children", listCreate())
+    return m
+}
+
+fun xmlError(msg: String): Map {
+    val m = mapCreate()
+    mapPut(m, "type", XML_ERROR())
+    mapPut(m, "value", msg)
+    return m
+}
+
+// ── Type Checking ───────────────────────────────────────────────────────
+
+fun xmlNodeType(node: Map): Int {
+    return toInt(mapGet(node, "type"))
+}
+
+fun xmlIsElement(node: Map): Bool {
+    return xmlNodeType(node) == XML_ELEMENT()
+}
+
+fun xmlIsText(node: Map): Bool {
+    return xmlNodeType(node) == XML_TEXT()
+}
+
+fun xmlIsCdata(node: Map): Bool {
+    return xmlNodeType(node) == XML_CDATA()
+}
+
+fun xmlIsComment(node: Map): Bool {
+    return xmlNodeType(node) == XML_COMMENT()
+}
+
+fun xmlIsPI(node: Map): Bool {
+    return xmlNodeType(node) == XML_PI()
+}
+
+fun xmlIsDocument(node: Map): Bool {
+    return xmlNodeType(node) == XML_DOCUMENT()
+}
+
+fun xmlIsError(node: Map): Bool {
+    return xmlNodeType(node) == XML_ERROR()
+}
+
+// ── Element Operations ──────────────────────────────────────────────────
+
+fun xmlSetAttr(elem: Map, name: String, value: String): Unit {
+    val attrs = mapGet(elem, "attrs")
+    mapPut(attrs, name, value)
+}
+
+fun xmlGetAttr(elem: Map, name: String): String {
+    val attrs = mapGet(elem, "attrs")
+    val v = mapGet(attrs, name)
+    if (v == null) { return "" }
+    return toString(v)
+}
+
+fun xmlHasAttr(elem: Map, name: String): Bool {
+    val attrs = mapGet(elem, "attrs")
+    return mapGet(attrs, name) != null
+}
+
+fun xmlAppendChild(parent: Map, child: Map): Unit {
+    val children = mapGet(parent, "children")
+    listAppend(children, child)
+}
+
+fun xmlGetChildren(node: Map): List {
+    val children = mapGet(node, "children")
+    if (children == null) { return listCreate() }
+    return children
+}
+
+fun xmlGetChildrenByTag(node: Map, tag: String): List {
+    val children = xmlGetChildren(node)
+    val result = listCreate()
+    val size = listSize(children)
+    var i: Int = 0
+    while (i < size) {
+        val child = listGet(children, i)
+        if (xmlIsElement(child)) {
+            if (xmlGetTag(child) == tag) {
+                listAppend(result, child)
+            }
+        }
+        i = i + 1
+    }
+    return result
+}
+
+fun xmlGetTag(elem: Map): String {
+    return toString(mapGet(elem, "tag"))
+}
+
+// Get concatenated text content of an element (direct text children only)
+fun xmlGetText(node: Map): String {
+    if (xmlIsText(node) || xmlIsCdata(node)) {
+        return toString(mapGet(node, "value"))
+    }
+    if (!xmlIsElement(node) && !xmlIsDocument(node)) { return "" }
+    val children = xmlGetChildren(node)
+    var result: String = ""
+    val size = listSize(children)
+    var i: Int = 0
+    while (i < size) {
+        val child = listGet(children, i)
+        val ct = xmlNodeType(child)
+        if (ct == XML_TEXT() || ct == XML_CDATA()) {
+            result = stringConcat(result, toString(mapGet(child, "value")))
+        } else if (ct == XML_ELEMENT()) {
+            result = stringConcat(result, xmlGetText(child))
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// ── Escaping ────────────────────────────────────────────────────────────
+
+fun xmlEscapeText(s: String): String {
+    var result: String = ""
+    val len = stringLength(s)
+    var i: Int = 0
+    while (i < len) {
+        val code = charCodeAt(s, i)
+        if (code == 38) {
+            // &
+            result = stringConcat(result, "&amp;")
+        } else if (code == 60) {
+            // <
+            result = stringConcat(result, "&lt;")
+        } else if (code == 62) {
+            // >
+            result = stringConcat(result, "&gt;")
+        } else {
+            result = stringConcat(result, charAt(s, i))
+        }
+        i = i + 1
+    }
+    return result
+}
+
+fun xmlEscapeAttr(s: String): String {
+    var result: String = ""
+    val len = stringLength(s)
+    var i: Int = 0
+    while (i < len) {
+        val code = charCodeAt(s, i)
+        if (code == 38) {
+            result = stringConcat(result, "&amp;")
+        } else if (code == 60) {
+            result = stringConcat(result, "&lt;")
+        } else if (code == 62) {
+            result = stringConcat(result, "&gt;")
+        } else if (code == 34) {
+            // "
+            result = stringConcat(result, "&quot;")
+        } else if (code == 39) {
+            // '
+            result = stringConcat(result, "&apos;")
+        } else {
+            result = stringConcat(result, charAt(s, i))
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// ── Entity Decoding ─────────────────────────────────────────────────────
+
+fun xmlDecodeEntities(s: String): String {
+    var result: String = ""
+    val len = stringLength(s)
+    var i: Int = 0
+    while (i < len) {
+        val ch = charAt(s, i)
+        if (ch == "&") {
+            // Find the semicolon
+            var j: Int = i + 1
+            var found: Bool = false
+            while (j < len && j < i + 10) {
+                if (charAt(s, j) == ";") {
+                    found = true
+                    j = j + 1
+                    // j now points past the ';', entity is s[i..j)
+                    // but we need s[i+1..j-1) for the name
+                    val entity = substring(s, i + 1, j - 1)
+                    if (entity == "amp") {
+                        result = stringConcat(result, "&")
+                    } else if (entity == "lt") {
+                        result = stringConcat(result, "<")
+                    } else if (entity == "gt") {
+                        result = stringConcat(result, ">")
+                    } else if (entity == "quot") {
+                        result = stringConcat(result, "\"")
+                    } else if (entity == "apos") {
+                        result = stringConcat(result, "'")
+                    } else if (startsWith(entity, "#x") || startsWith(entity, "#X")) {
+                        // Hex numeric entity: &#xHH;
+                        val hexStr = substring(entity, 2, stringLength(entity))
+                        val codePoint = xmlParseHex(hexStr)
+                        if (codePoint > 0) {
+                            result = stringConcat(result, intToChar(codePoint))
+                        } else {
+                            // Invalid hex, keep original
+                            result = stringConcat(result, substring(s, i, j))
+                        }
+                    } else if (startsWith(entity, "#")) {
+                        // Decimal numeric entity: &#123;
+                        val numStr = substring(entity, 1, stringLength(entity))
+                        val codePoint = toInt(numStr)
+                        if (codePoint > 0) {
+                            result = stringConcat(result, intToChar(codePoint))
+                        } else {
+                            result = stringConcat(result, substring(s, i, j))
+                        }
+                    } else {
+                        // Unknown entity, keep as-is
+                        result = stringConcat(result, substring(s, i, j))
+                    }
+                    i = j
+                    j = len // break inner loop
+                } else {
+                    j = j + 1
+                }
+            }
+            if (!found) {
+                result = stringConcat(result, "&")
+                i = i + 1
+            }
+        } else {
+            result = stringConcat(result, ch)
+            i = i + 1
+        }
+    }
+    return result
+}
+
+fun xmlParseHex(s: String): Int {
+    var result: Int = 0
+    val len = stringLength(s)
+    var i: Int = 0
+    while (i < len) {
+        val code = charCodeAt(s, i)
+        var digit: Int = -1
+        if (code >= 48 && code <= 57) {
+            digit = code - 48
+        } else if (code >= 97 && code <= 102) {
+            digit = code - 87
+        } else if (code >= 65 && code <= 70) {
+            digit = code - 55
+        }
+        if (digit < 0) { return -1 }
+        result = result * 16 + digit
+        i = i + 1
+    }
+    return result
+}
+
+// ── Parser ──────────────────────────────────────────────────────────────
+
+fun xmlParserCreate(input: String): Map {
+    val state = mapCreate()
+    mapPut(state, "input", input)
+    mapPut(state, "pos", 0)
+    mapPut(state, "len", stringLength(input))
+    return state
+}
+
+fun xmlParserPeek(state: Map): String {
+    val pos = toInt(mapGet(state, "pos"))
+    val len = toInt(mapGet(state, "len"))
+    if (pos >= len) { return "" }
+    val input = toString(mapGet(state, "input"))
+    return charAt(input, pos)
+}
+
+fun xmlParserPeekCode(state: Map): Int {
+    val pos = toInt(mapGet(state, "pos"))
+    val len = toInt(mapGet(state, "len"))
+    if (pos >= len) { return 0 }
+    val input = toString(mapGet(state, "input"))
+    return charCodeAt(input, pos)
+}
+
+fun xmlParserAdvance(state: Map): String {
+    val pos = toInt(mapGet(state, "pos"))
+    val len = toInt(mapGet(state, "len"))
+    if (pos >= len) { return "" }
+    val input = toString(mapGet(state, "input"))
+    val ch = charAt(input, pos)
+    mapPut(state, "pos", pos + 1)
+    return ch
+}
+
+fun xmlParserSkipWhitespace(state: Map): Unit {
+    val len = toInt(mapGet(state, "len"))
+    var pos = toInt(mapGet(state, "pos"))
+    val input = toString(mapGet(state, "input"))
+    var done: Bool = false
+    while (!done) {
+        if (pos >= len) {
+            done = true
+        } else {
+            val code = charCodeAt(input, pos)
+            if (code == 32 || code == 9 || code == 10 || code == 13) {
+                pos = pos + 1
+            } else {
+                done = true
+            }
+        }
+    }
+    mapPut(state, "pos", pos)
+}
+
+fun xmlParserMatch(state: Map, expected: String): Bool {
+    val pos = toInt(mapGet(state, "pos"))
+    val len = toInt(mapGet(state, "len"))
+    val input = toString(mapGet(state, "input"))
+    val elen = stringLength(expected)
+    if (pos + elen > len) { return false }
+    val sub = substring(input, pos, pos + elen)
+    if (sub == expected) {
+        mapPut(state, "pos", pos + elen)
+        return true
+    }
+    return false
+}
+
+fun xmlParserErrorAt(state: Map, msg: String): Map {
+    val pos = toInt(mapGet(state, "pos"))
+    return xmlError(stringConcat(msg, stringConcat(" at position ", toString(pos))))
+}
+
+// ── Parse Name ──────────────────────────────────────────────────────────
+
+fun xmlIsNameStartChar(code: Int): Bool {
+    // Letters, underscore, colon
+    if (code >= 65 && code <= 90) { return true }   // A-Z
+    if (code >= 97 && code <= 122) { return true }   // a-z
+    if (code == 95) { return true }                   // _
+    if (code == 58) { return true }                   // :
+    if (code > 127) { return true }                   // Unicode
+    return false
+}
+
+fun xmlIsNameChar(code: Int): Bool {
+    if (xmlIsNameStartChar(code)) { return true }
+    if (code >= 48 && code <= 57) { return true }    // 0-9
+    if (code == 45) { return true }                   // -
+    if (code == 46) { return true }                   // .
+    return false
+}
+
+fun xmlParseName(state: Map): String {
+    val input = toString(mapGet(state, "input"))
+    val len = toInt(mapGet(state, "len"))
+    val start = toInt(mapGet(state, "pos"))
+    var pos: Int = start
+
+    if (pos >= len) { return "" }
+    val firstCode = charCodeAt(input, pos)
+    if (!xmlIsNameStartChar(firstCode)) { return "" }
+    pos = pos + 1
+
+    var done: Bool = false
+    while (!done) {
+        if (pos >= len) {
+            done = true
+        } else {
+            val code = charCodeAt(input, pos)
+            if (xmlIsNameChar(code)) {
+                pos = pos + 1
+            } else {
+                done = true
+            }
+        }
+    }
+
+    mapPut(state, "pos", pos)
+    return substring(input, start, pos)
+}
+
+// ── Parse Attribute Value ───────────────────────────────────────────────
+
+fun xmlParseAttrValue(state: Map): String {
+    val quote = xmlParserAdvance(state) // consume " or '
+    val quoteCode = charCodeAt(quote, 0)
+    val input = toString(mapGet(state, "input"))
+    val len = toInt(mapGet(state, "len"))
+    val start = toInt(mapGet(state, "pos"))
+    var pos: Int = start
+
+    var done: Bool = false
+    while (!done) {
+        if (pos >= len) {
+            done = true
+        } else {
+            val code = charCodeAt(input, pos)
+            if (code == quoteCode) {
+                done = true
+            } else {
+                pos = pos + 1
+            }
+        }
+    }
+
+    val value = substring(input, start, pos)
+    mapPut(state, "pos", pos + 1) // skip closing quote
+    return xmlDecodeEntities(value)
+}
+
+// ── Parse Text Content ──────────────────────────────────────────────────
+
+fun xmlParseTextContent(state: Map): String {
+    val input = toString(mapGet(state, "input"))
+    val len = toInt(mapGet(state, "len"))
+    val start = toInt(mapGet(state, "pos"))
+    var pos: Int = start
+
+    var done: Bool = false
+    while (!done) {
+        if (pos >= len) {
+            done = true
+        } else {
+            val code = charCodeAt(input, pos)
+            if (code == 60) {
+                // <
+                done = true
+            } else {
+                pos = pos + 1
+            }
+        }
+    }
+
+    mapPut(state, "pos", pos)
+    val raw = substring(input, start, pos)
+    return xmlDecodeEntities(raw)
+}
+
+// ── Parse CDATA ─────────────────────────────────────────────────────────
+
+fun xmlParseCdata(state: Map): Map {
+    // Already consumed "<![CDATA["
+    val input = toString(mapGet(state, "input"))
+    val len = toInt(mapGet(state, "len"))
+    val start = toInt(mapGet(state, "pos"))
+    var pos: Int = start
+
+    var done: Bool = false
+    while (!done) {
+        if (pos + 2 >= len) {
+            done = true
+        } else {
+            if (charAt(input, pos) == "]" && charAt(input, pos + 1) == "]" && charAt(input, pos + 2) == ">") {
+                val value = substring(input, start, pos)
+                mapPut(state, "pos", pos + 3)
+                return xmlCdata(value)
+            }
+            pos = pos + 1
+        }
+    }
+
+    return xmlParserErrorAt(state, "Unterminated CDATA section")
+}
+
+// ── Parse Comment ───────────────────────────────────────────────────────
+
+fun xmlParseComment(state: Map): Map {
+    // Already consumed "<!--"
+    val input = toString(mapGet(state, "input"))
+    val len = toInt(mapGet(state, "len"))
+    val start = toInt(mapGet(state, "pos"))
+    var pos: Int = start
+
+    var done: Bool = false
+    while (!done) {
+        if (pos + 2 >= len) {
+            done = true
+        } else {
+            if (charAt(input, pos) == "-" && charAt(input, pos + 1) == "-" && charAt(input, pos + 2) == ">") {
+                val value = substring(input, start, pos)
+                mapPut(state, "pos", pos + 3)
+                return xmlComment(value)
+            }
+            pos = pos + 1
+        }
+    }
+
+    return xmlParserErrorAt(state, "Unterminated comment")
+}
+
+// ── Parse Processing Instruction ────────────────────────────────────────
+
+fun xmlParsePI(state: Map): Map {
+    // Already consumed "<?"
+    val target = xmlParseName(state)
+    xmlParserSkipWhitespace(state)
+
+    val input = toString(mapGet(state, "input"))
+    val len = toInt(mapGet(state, "len"))
+    val start = toInt(mapGet(state, "pos"))
+    var pos: Int = start
+
+    var done: Bool = false
+    while (!done) {
+        if (pos + 1 >= len) {
+            done = true
+        } else {
+            if (charAt(input, pos) == "?" && charAt(input, pos + 1) == ">") {
+                val data = substring(input, start, pos)
+                mapPut(state, "pos", pos + 2)
+                return xmlPI(target, data)
+            }
+            pos = pos + 1
+        }
+    }
+
+    return xmlParserErrorAt(state, "Unterminated processing instruction")
+}
+
+// ── Parse Element ───────────────────────────────────────────────────────
+
+fun xmlParseElement(state: Map): Map {
+    // Consume '<'
+    xmlParserAdvance(state)
+
+    val tag = xmlParseName(state)
+    if (stringLength(tag) == 0) {
+        return xmlParserErrorAt(state, "Expected element name")
+    }
+
+    val elem = xmlElement(tag)
+
+    // Parse attributes
+    var attrsDone: Bool = false
+    while (!attrsDone) {
+        xmlParserSkipWhitespace(state)
+        val ch = xmlParserPeek(state)
+        if (ch == ">" || ch == "/" || ch == "") {
+            attrsDone = true
+        } else {
+            val attrName = xmlParseName(state)
+            if (stringLength(attrName) == 0) {
+                return xmlParserErrorAt(state, "Expected attribute name")
+            }
+            xmlParserSkipWhitespace(state)
+            // Expect '='
+            if (xmlParserPeek(state) != "=") {
+                return xmlParserErrorAt(state, "Expected '=' in attribute")
+            }
+            xmlParserAdvance(state)
+            xmlParserSkipWhitespace(state)
+            val qch = xmlParserPeek(state)
+            if (qch != "\"" && qch != "'") {
+                return xmlParserErrorAt(state, "Expected quote for attribute value")
+            }
+            val attrValue = xmlParseAttrValue(state)
+            xmlSetAttr(elem, attrName, attrValue)
+        }
+    }
+
+    // Self-closing tag?
+    if (xmlParserPeek(state) == "/") {
+        xmlParserAdvance(state) // consume '/'
+        if (xmlParserPeek(state) != ">") {
+            return xmlParserErrorAt(state, "Expected '>' after '/'")
+        }
+        xmlParserAdvance(state) // consume '>'
+        return elem
+    }
+
+    // Consume '>'
+    if (xmlParserPeek(state) != ">") {
+        return xmlParserErrorAt(state, "Expected '>'")
+    }
+    xmlParserAdvance(state)
+
+    // Parse children until closing tag
+    var childrenDone: Bool = false
+    while (!childrenDone) {
+        val ch = xmlParserPeek(state)
+        if (ch == "") {
+            return xmlParserErrorAt(state, stringConcat("Unterminated element: ", tag))
+        }
+        if (ch == "<") {
+            // Check what follows '<'
+            val input = toString(mapGet(state, "input"))
+            val pos = toInt(mapGet(state, "pos"))
+            val len = toInt(mapGet(state, "len"))
+
+            if (pos + 1 < len && charAt(input, pos + 1) == "/") {
+                // Closing tag
+                mapPut(state, "pos", pos + 2)
+                val closeTag = xmlParseName(state)
+                xmlParserSkipWhitespace(state)
+                if (xmlParserPeek(state) != ">") {
+                    return xmlParserErrorAt(state, "Expected '>' in closing tag")
+                }
+                xmlParserAdvance(state)
+                if (closeTag != tag) {
+                    return xmlError(stringConcat("Mismatched tags: expected </", stringConcat(tag, stringConcat(">, got </", stringConcat(closeTag, ">")))))
+                }
+                childrenDone = true
+            } else if (pos + 3 < len && substring(input, pos + 1, pos + 4) == "!--") {
+                // Comment
+                mapPut(state, "pos", pos + 4)
+                val comment = xmlParseComment(state)
+                if (xmlIsError(comment)) { return comment }
+                xmlAppendChild(elem, comment)
+            } else if (pos + 8 < len && substring(input, pos + 1, pos + 9) == "![CDATA[") {
+                // CDATA
+                mapPut(state, "pos", pos + 9)
+                val cdata = xmlParseCdata(state)
+                if (xmlIsError(cdata)) { return cdata }
+                xmlAppendChild(elem, cdata)
+            } else if (pos + 1 < len && charAt(input, pos + 1) == "?") {
+                // Processing instruction
+                mapPut(state, "pos", pos + 2)
+                val pi = xmlParsePI(state)
+                if (xmlIsError(pi)) { return pi }
+                xmlAppendChild(elem, pi)
+            } else {
+                // Child element
+                val child = xmlParseElement(state)
+                if (xmlIsError(child)) { return child }
+                xmlAppendChild(elem, child)
+            }
+        } else {
+            // Text content
+            val text = xmlParseTextContent(state)
+            if (stringLength(text) > 0) {
+                xmlAppendChild(elem, xmlText(text))
+            }
+        }
+    }
+
+    return elem
+}
+
+// ── Public Parse Entry Point ────────────────────────────────────────────
+
+fun xmlParse(input: String): Map {
+    val state = xmlParserCreate(input)
+    xmlParserSkipWhitespace(state)
+
+    val ch = xmlParserPeek(state)
+    if (ch == "") {
+        return xmlError("Empty input")
+    }
+
+    // Check for XML declaration <?xml ... ?>
+    val inputStr = toString(mapGet(state, "input"))
+    val pos = toInt(mapGet(state, "pos"))
+    val len = toInt(mapGet(state, "len"))
+
+    if (pos + 4 < len && substring(inputStr, pos, pos + 5) == "<?xml") {
+        // Skip XML declaration
+        mapPut(state, "pos", pos + 2)
+        val pi = xmlParsePI(state)
+        if (xmlIsError(pi)) { return pi }
+        xmlParserSkipWhitespace(state)
+    }
+
+    // Check if we have multiple root nodes (wrap in document)
+    val result = xmlParseElement(state)
+    if (xmlIsError(result)) { return result }
+
+    xmlParserSkipWhitespace(state)
+    val endPos = toInt(mapGet(state, "pos"))
+    val endLen = toInt(mapGet(state, "len"))
+    if (endPos < endLen) {
+        // More content — wrap in a document node
+        val doc = xmlDocument()
+        xmlAppendChild(doc, result)
+        var moreDone: Bool = false
+        while (!moreDone) {
+            xmlParserSkipWhitespace(state)
+            if (toInt(mapGet(state, "pos")) >= toInt(mapGet(state, "len"))) {
+                moreDone = true
+            } else {
+                val next = xmlParseElement(state)
+                if (xmlIsError(next)) { return next }
+                xmlAppendChild(doc, next)
+            }
+        }
+        return doc
+    }
+
+    return result
+}
+
+// ── Serialization ───────────────────────────────────────────────────────
+
+fun xmlStringifyAttrs(elem: Map): String {
+    val attrs = mapGet(elem, "attrs")
+    val keys = mapKeys(attrs)
+    val size = listSize(keys)
+    if (size == 0) { return "" }
+
+    var result: String = ""
+    var i: Int = 0
+    while (i < size) {
+        val key = toString(listGet(keys, i))
+        val value = toString(mapGet(attrs, key))
+        result = stringConcat(result, stringConcat(" ", stringConcat(key, stringConcat("=\"", stringConcat(xmlEscapeAttr(value), "\"")))))
+        i = i + 1
+    }
+    return result
+}
+
+fun xmlStringify(node: Map): String {
+    val t = xmlNodeType(node)
+
+    if (t == XML_TEXT()) {
+        return xmlEscapeText(toString(mapGet(node, "value")))
+    }
+
+    if (t == XML_CDATA()) {
+        return stringConcat("<![CDATA[", stringConcat(toString(mapGet(node, "value")), "]]>"))
+    }
+
+    if (t == XML_COMMENT()) {
+        return stringConcat("<!--", stringConcat(toString(mapGet(node, "value")), "-->"))
+    }
+
+    if (t == XML_PI()) {
+        val target = toString(mapGet(node, "target"))
+        val data = toString(mapGet(node, "data"))
+        if (stringLength(data) == 0) {
+            return stringConcat("<?", stringConcat(target, "?>"))
+        }
+        return stringConcat("<?", stringConcat(target, stringConcat(" ", stringConcat(data, "?>"))))
+    }
+
+    if (t == XML_DOCUMENT()) {
+        val children = xmlGetChildren(node)
+        var result: String = ""
+        val size = listSize(children)
+        var i: Int = 0
+        while (i < size) {
+            result = stringConcat(result, xmlStringify(listGet(children, i)))
+            i = i + 1
+        }
+        return result
+    }
+
+    if (t == XML_ELEMENT()) {
+        val tag = xmlGetTag(node)
+        val attrs = xmlStringifyAttrs(node)
+        val children = xmlGetChildren(node)
+        val size = listSize(children)
+
+        if (size == 0) {
+            return stringConcat("<", stringConcat(tag, stringConcat(attrs, "/>")))
+        }
+
+        var result: String = stringConcat("<", stringConcat(tag, stringConcat(attrs, ">")))
+        var i: Int = 0
+        while (i < size) {
+            result = stringConcat(result, xmlStringify(listGet(children, i)))
+            i = i + 1
+        }
+        result = stringConcat(result, stringConcat("</", stringConcat(tag, ">")))
+        return result
+    }
+
+    if (t == XML_ERROR()) {
+        return stringConcat("<!-- ERROR: ", stringConcat(toString(mapGet(node, "value")), " -->"))
+    }
+
+    return ""
+}
+
+// ── Pretty Printing ─────────────────────────────────────────────────────
+
+fun xmlIndentString(level: Int): String {
+    var result: String = ""
+    var i: Int = 0
+    while (i < level) {
+        result = stringConcat(result, "  ")
+        i = i + 1
+    }
+    return result
+}
+
+fun xmlStringifyPretty(node: Map, indent: Int): String {
+    val t = xmlNodeType(node)
+
+    if (t == XML_TEXT()) {
+        return xmlEscapeText(toString(mapGet(node, "value")))
+    }
+
+    if (t == XML_CDATA()) {
+        return stringConcat("<![CDATA[", stringConcat(toString(mapGet(node, "value")), "]]>"))
+    }
+
+    if (t == XML_COMMENT()) {
+        val pad = xmlIndentString(indent)
+        return stringConcat(pad, stringConcat("<!--", stringConcat(toString(mapGet(node, "value")), "-->")))
+    }
+
+    if (t == XML_PI()) {
+        val pad = xmlIndentString(indent)
+        val target = toString(mapGet(node, "target"))
+        val data = toString(mapGet(node, "data"))
+        if (stringLength(data) == 0) {
+            return stringConcat(pad, stringConcat("<?", stringConcat(target, "?>")))
+        }
+        return stringConcat(pad, stringConcat("<?", stringConcat(target, stringConcat(" ", stringConcat(data, "?>")))))
+    }
+
+    if (t == XML_DOCUMENT()) {
+        val children = xmlGetChildren(node)
+        var result: String = ""
+        val size = listSize(children)
+        var i: Int = 0
+        while (i < size) {
+            if (i > 0) {
+                result = stringConcat(result, "\n")
+            }
+            result = stringConcat(result, xmlStringifyPretty(listGet(children, i), indent))
+            i = i + 1
+        }
+        return result
+    }
+
+    if (t == XML_ELEMENT()) {
+        val tag = xmlGetTag(node)
+        val attrs = xmlStringifyAttrs(node)
+        val children = xmlGetChildren(node)
+        val size = listSize(children)
+        val pad = xmlIndentString(indent)
+
+        if (size == 0) {
+            return stringConcat(pad, stringConcat("<", stringConcat(tag, stringConcat(attrs, "/>"))))
+        }
+
+        // Check if only one text child — inline it
+        if (size == 1) {
+            val only = listGet(children, 0)
+            if (xmlIsText(only)) {
+                return stringConcat(pad, stringConcat("<", stringConcat(tag, stringConcat(attrs, stringConcat(">", stringConcat(xmlEscapeText(toString(mapGet(only, "value"))), stringConcat("</", stringConcat(tag, ">"))))))))
+            }
+        }
+
+        var result: String = stringConcat(pad, stringConcat("<", stringConcat(tag, stringConcat(attrs, ">\n"))))
+        var i: Int = 0
+        while (i < size) {
+            val child = listGet(children, i)
+            if (xmlIsText(child)) {
+                result = stringConcat(result, stringConcat(xmlIndentString(indent + 1), stringConcat(xmlEscapeText(toString(mapGet(child, "value"))), "\n")))
+            } else {
+                result = stringConcat(result, stringConcat(xmlStringifyPretty(child, indent + 1), "\n"))
+            }
+            i = i + 1
+        }
+        result = stringConcat(result, stringConcat(pad, stringConcat("</", stringConcat(tag, ">"))))
+        return result
+    }
+
+    return ""
+}
+
+// ── XML <-> JSON Bridge ─────────────────────────────────────────────────
+
+// Import JSON type constants (assumed to be available via rockit.json)
+// JSON_NULL=0, JSON_BOOL=1, JSON_NUMBER=2, JSON_STRING=3, JSON_ARRAY=4, JSON_OBJECT=5
+
+fun xmlToJson(node: Map): Map {
+    val t = xmlNodeType(node)
+
+    if (t == XML_TEXT() || t == XML_CDATA()) {
+        val obj = jsonObject()
+        jsonObjectPut(obj, "type", jsonString("text"))
+        jsonObjectPut(obj, "value", jsonString(toString(mapGet(node, "value"))))
+        return obj
+    }
+
+    if (t == XML_COMMENT()) {
+        val obj = jsonObject()
+        jsonObjectPut(obj, "type", jsonString("comment"))
+        jsonObjectPut(obj, "value", jsonString(toString(mapGet(node, "value"))))
+        return obj
+    }
+
+    if (t == XML_ELEMENT()) {
+        val obj = jsonObject()
+        jsonObjectPut(obj, "type", jsonString("element"))
+        jsonObjectPut(obj, "tag", jsonString(xmlGetTag(node)))
+
+        // Attributes
+        val attrs = mapGet(node, "attrs")
+        val attrKeys = mapKeys(attrs)
+        if (listSize(attrKeys) > 0) {
+            val attrObj = jsonObject()
+            var i: Int = 0
+            while (i < listSize(attrKeys)) {
+                val key = toString(listGet(attrKeys, i))
+                jsonObjectPut(attrObj, key, jsonString(toString(mapGet(attrs, key))))
+                i = i + 1
+            }
+            jsonObjectPut(obj, "attributes", attrObj)
+        }
+
+        // Children
+        val children = xmlGetChildren(node)
+        val size = listSize(children)
+        if (size > 0) {
+            val arr = jsonArray()
+            var i: Int = 0
+            while (i < size) {
+                jsonArrayAppend(arr, xmlToJson(listGet(children, i)))
+                i = i + 1
+            }
+            jsonObjectPut(obj, "children", arr)
+        }
+
+        return obj
+    }
+
+    if (t == XML_DOCUMENT()) {
+        val arr = jsonArray()
+        val children = xmlGetChildren(node)
+        val size = listSize(children)
+        var i: Int = 0
+        while (i < size) {
+            jsonArrayAppend(arr, xmlToJson(listGet(children, i)))
+            i = i + 1
+        }
+        return arr
+    }
+
+    return jsonNull()
+}
+
+fun jsonToXml(json: Map, rootTag: String): Map {
+    val t = jsonType(json)
+
+    if (t == JSON_NULL()) {
+        return xmlElement(rootTag)
+    }
+
+    if (t == JSON_BOOL() || t == JSON_NUMBER() || t == JSON_STRING()) {
+        val elem = xmlElement(rootTag)
+        val text = xmlText(jsonGetString(json))
+        if (t == JSON_BOOL()) {
+            if (jsonGetBool(json)) {
+                xmlAppendChild(elem, xmlText("true"))
+            } else {
+                xmlAppendChild(elem, xmlText("false"))
+            }
+            return elem
+        }
+        if (t == JSON_NUMBER()) {
+            xmlAppendChild(elem, xmlText(jsonGetNumberString(json)))
+            return elem
+        }
+        xmlAppendChild(elem, text)
+        return elem
+    }
+
+    if (t == JSON_ARRAY()) {
+        val elem = xmlElement(rootTag)
+        val size = jsonArraySize(json)
+        var i: Int = 0
+        while (i < size) {
+            xmlAppendChild(elem, jsonToXml(jsonArrayGet(json, i), "item"))
+            i = i + 1
+        }
+        return elem
+    }
+
+    if (t == JSON_OBJECT()) {
+        val elem = xmlElement(rootTag)
+        val keys = jsonObjectKeys(json)
+        val size = listSize(keys)
+        var i: Int = 0
+        while (i < size) {
+            val key = toString(listGet(keys, i))
+            xmlAppendChild(elem, jsonToXml(jsonObjectGet(json, key), key))
+            i = i + 1
+        }
+        return elem
+    }
+
+    return xmlElement(rootTag)
+}
+
+// ── Auto-Wrapping ───────────────────────────────────────────────────────
+
+// Convert any Rockit value to an XML element with the given tag.
+fun xmlFrom(value: Any, tag: String): Map {
+    val t = typeOf(value)
+    val elem = xmlElement(tag)
+
+    if (t == "null") {
+        return elem
+    }
+
+    if (t == "Bool" || t == "Int" || t == "Float" || t == "String") {
+        xmlAppendChild(elem, xmlText(toString(value)))
+        return elem
+    }
+
+    if (t == "List") {
+        val size = listSize(value)
+        var i: Int = 0
+        while (i < size) {
+            xmlAppendChild(elem, xmlFrom(listGet(value, i), "item"))
+            i = i + 1
+        }
+        return elem
+    }
+
+    if (t == "Map") {
+        val keys = mapKeys(value)
+        val size = listSize(keys)
+        var i: Int = 0
+        while (i < size) {
+            val key = toString(listGet(keys, i))
+            xmlAppendChild(elem, xmlFrom(mapGet(value, key), key))
+            i = i + 1
+        }
+        return elem
+    }
+
+    // Fallback
+    xmlAppendChild(elem, xmlText(toString(value)))
+    return elem
+}

@@ -1638,6 +1638,7 @@ public final class TypeChecker {
     private func typesCompatible(source: Type, target: Type) -> Bool {
         if source == target { return true }
         if source.isError || target.isError { return true } // Suppress cascading
+        if source == .any || target == .any { return true } // Any is compatible with everything
         if source == .nothing { return true } // Nothing is a subtype of everything
         if source == .nullType && target.isNullable { return true } // null → T?
 

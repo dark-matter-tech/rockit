@@ -40,6 +40,7 @@ public indirect enum Type: Equatable {
     case byteArray
     case unit
     case nothing
+    case any
 
     // MARK: Null
 
@@ -94,6 +95,12 @@ extension Type {
     public var asNullable: Type {
         if isNullable { return self }
         return .nullable(self)
+    }
+
+    /// Whether this is the top type (Any)
+    public var isAny: Bool {
+        if case .any = self { return true }
+        return false
     }
 
     /// Whether this is the poison/error type
@@ -169,6 +176,7 @@ extension Type: CustomStringConvertible {
         case .byteArray:    return "ByteArray"
         case .unit:         return "Unit"
         case .nothing:      return "Nothing"
+        case .any:          return "Any"
         case .nullType:     return "null"
         case .error:        return "<error>"
 

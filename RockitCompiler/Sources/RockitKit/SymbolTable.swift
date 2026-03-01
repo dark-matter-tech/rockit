@@ -186,6 +186,7 @@ public final class SymbolTable {
             ("ByteArray", .byteArray),
             ("Unit",      .unit),
             ("Nothing",   .nothing),
+            ("Any",       .any),
         ]
 
         for (name, type) in builtinTypes {

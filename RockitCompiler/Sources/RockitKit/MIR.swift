@@ -38,6 +38,7 @@ extension MIRType {
         case .byteArray:    return .reference("ByteArray")
         case .unit:         return .unit
         case .nothing:      return .nothing
+        case .any:          return .reference("Any")
         case .nullType:     return .nullable(.unit)
         case .error:        return .unit
 
