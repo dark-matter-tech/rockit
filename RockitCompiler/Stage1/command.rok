@@ -2969,6 +2969,13 @@ fun registerBuiltins(tc: Map): Unit {
     registerFn(fns, "listIsEmpty", 1, "Bool")
     registerFn(fns, "listClear", 1, "Unit")
 
+    // ByteArray operations
+    registerFn(fns, "byteArrayCreate", 1, "Int")
+    registerFn(fns, "byteArrayCreateFilled", 2, "Int")
+    registerFn(fns, "byteArrayGet", 2, "Int")
+    registerFn(fns, "byteArraySet", 3, "Unit")
+    registerFn(fns, "byteArraySize", 1, "Int")
+
     // Map operations
     registerFn(fns, "mapCreate", 0, "Map")
     registerFn(fns, "mapPut", 3, "Unit")
@@ -4804,6 +4811,14 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "listAppend", "void|i64,i64")
     mapPut(t, "listSet", "void|i64,i64,i64")
     mapPut(t, "listRemoveAt", "i64|i64,i64")
+    mapPut(t, "listClear", "void|i64")
+
+    // ByteArray
+    mapPut(t, "byteArrayCreate", "i64|i64")
+    mapPut(t, "byteArrayCreateFilled", "i64|i64,i64")
+    mapPut(t, "byteArrayGet", "i64|i64,i64")
+    mapPut(t, "byteArraySet", "void|i64,i64,i64")
+    mapPut(t, "byteArraySize", "i64|i64")
     mapPut(t, "mapCreate", "i64|")
     mapPut(t, "mapKeys", "i64|i64")
     mapPut(t, "toInt", "i64|i64")
@@ -4864,6 +4879,7 @@ fun llvmBuildSigTable(): Map {
 
     // Low-level runtime
     mapPut(t, "rockit_string_new", "ptr|ptr")
+    mapPut(t, "rockit_string_concat_consume", "ptr|ptr,ptr")
     mapPut(t, "rockit_println_any", "void|i64")
     mapPut(t, "rockit_print_any", "void|i64")
     mapPut(t, "rockit_set_args", "void|i32,ptr")
@@ -8010,13 +8026,13 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
         if (kind == 1 || kind == 4 || kind == 5) {
             // CK_STRING, CK_FUNC_NAME, CK_METHOD_NAME — all are string literals
             // Emit as immortal RockitString struct globals (matches LLVMCodeGen.swift)
-            // Layout: { i64 refCount, i64 length, ptr chars, ptr base, [N x i8] data }
+            // Layout: { i64 refCount, i64 length, ptr chars, ptr base, i64 capacity, [N x i8] data }
             val value = toString(mapGet(entry, "value"))
             val escaped = llvmEscapeString(value)
             val strLen = stringLength(value)
             val dataLen = strLen + 1  // +1 for null terminator
             val globalName = stringConcat("@.rstr.", toString(si))
-            llvmLine(mainBuf, stringConcat(globalName, stringConcat(" = private global <{ i64, i64, ptr, ptr, [", stringConcat(toString(dataLen), stringConcat(" x i8] }> <{ i64 9223372036854775807, i64 ", stringConcat(toString(strLen), stringConcat(", ptr getelementptr (i8, ptr ", stringConcat(globalName, stringConcat(", i64 32), ptr null, [", stringConcat(toString(dataLen), stringConcat(" x i8] c\"", stringConcat(escaped, "\\00\" }>"))))))))))))
+            llvmLine(mainBuf, stringConcat(globalName, stringConcat(" = private global <{ i64, i64, ptr, ptr, i64, [", stringConcat(toString(dataLen), stringConcat(" x i8] }> <{ i64 9223372036854775807, i64 ", stringConcat(toString(strLen), stringConcat(", ptr getelementptr (i8, ptr ", stringConcat(globalName, stringConcat(", i64 40), ptr null, i64 ", stringConcat(toString(strLen), stringConcat(", [", stringConcat(toString(dataLen), stringConcat(" x i8] c\"", stringConcat(escaped, "\\00\" }>")))))))))))))))
         }
         si = si + 1
     }
