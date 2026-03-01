@@ -8032,7 +8032,7 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
             val strLen = stringLength(value)
             val dataLen = strLen + 1  // +1 for null terminator
             val globalName = stringConcat("@.rstr.", toString(si))
-            llvmLine(mainBuf, stringConcat(globalName, stringConcat(" = private global <{ i64, i64, ptr, ptr, i64, [", stringConcat(toString(dataLen), stringConcat(" x i8] }> <{ i64 9223372036854775807, i64 ", stringConcat(toString(strLen), stringConcat(", ptr getelementptr (i8, ptr ", stringConcat(globalName, stringConcat(", i64 40), ptr null, i64 ", stringConcat(toString(strLen), stringConcat(", [", stringConcat(toString(dataLen), stringConcat(" x i8] c\"", stringConcat(escaped, "\\00\" }>")))))))))))))))
+            llvmLine(mainBuf, stringConcat(globalName, stringConcat(" = private global <{ i64, i64, ptr, ptr, i64, [", stringConcat(toString(dataLen), stringConcat(" x i8] }> <{ i64 9223372036854775807, i64 ", stringConcat(toString(strLen), stringConcat(", ptr getelementptr (i8, ptr ", stringConcat(globalName, stringConcat(", i64 40), ptr null, i64 ", stringConcat(toString(strLen), stringConcat(", [", stringConcat(toString(dataLen), stringConcat(" x i8] c\"", stringConcat(escaped, "\\00\" }>"))))))))))))))
         }
         si = si + 1
     }
