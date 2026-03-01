@@ -177,7 +177,7 @@ RockitCompiler/
 │   ├── codegen.rok                  # Stage 1 bytecode codegen + main()
 │   ├── command.rok                  # Concatenated compiler (auto-gen via build.sh)
 │   ├── command                      # Stage 1 native binary
-│   └── stdlib/                      # Standard library submodule (rockit-engine/launchpad, 15 modules)
+│   └── stdlib/                      # Standard library submodule (dark-matter-tech/launchpad, 15 modules)
 │       └── rockit/                  # 15 stdlib modules (from launchpad submodule)
 │           ├── core/collections.rok # List map/filter/fold/sort/zip/flatten
 │           ├── core/math.rok        # Integer & float math, trig, constants
@@ -218,7 +218,7 @@ RockitKit is a standalone library so it can be imported by other tools (editor p
 
 ## Standard Library
 
-15 modules in `Stage1/stdlib/rockit/` (submodule from [rockit-engine/launchpad](https://github.com/rockit-engine/launchpad)). Import via dot-separated paths: `import rockit.json`, `import rockit.core.collections`.
+15 modules in `Stage1/stdlib/rockit/` (submodule from [dark-matter-tech/launchpad](https://github.com/dark-matter-tech/launchpad)). Import via dot-separated paths: `import rockit.json`, `import rockit.core.collections`.
 
 | Module | Import | Key Functions |
 |--------|--------|--------------|

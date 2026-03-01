@@ -141,7 +141,7 @@ navigation AppRouter {
 | Language | **Rockit** | Shipped |
 | Compiler | **Command** | Shipped |
 | Package Manager | **Fuel** | Shipped |
-| Standard Library | **stdlib** ([launchpad](https://github.com/rockit-engine/launchpad)) | Shipped (15 modules) |
+| Standard Library | **stdlib** ([launchpad](https://github.com/dark-matter-tech/launchpad)) | Shipped (15 modules) |
 | Test Framework | **Probe** | Shipped |
 | REPL | **Launch** | Shipped |
 | Registry | **Silo** | Planned |
@@ -151,7 +151,7 @@ navigation AppRouter {
 
 ## Standard Library
 
-15 modules ship with Rockit in the [launchpad](https://github.com/rockit-engine/launchpad) repo. Import with `import rockit.<module>`.
+15 modules ship with Rockit in the [launchpad](https://github.com/dark-matter-tech/launchpad) repo. Import with `import rockit.<module>`.
 
 | Module | Import | Description |
 |--------|--------|-------------|
@@ -321,7 +321,7 @@ moon/
 │   │   ├── rockit_runtime.c     # C runtime (ARC, actors, coroutines)
 │   │   └── rockit/              # Modular Rockit runtime (12 freestanding .rok files)
 │   ├── Stage1/                  # Self-hosting compiler in Rockit (~12K lines)
-│   │   └── stdlib/              # Standard library submodule (rockit-engine/launchpad)
+│   │   └── stdlib/              # Standard library submodule (dark-matter-tech/launchpad)
 │   └── Examples/                # 48 example/test .rok files
 ├── ide/
 │   ├── shared/                  # Canonical syntax definition + generator
