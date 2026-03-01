@@ -1,6 +1,6 @@
 # Rockit
 
-A statically-typed, compiled, memory-safe programming language designed to replace JavaScript, HTML, CSS, and the DOM as the foundational technology of the web platform.
+A statically-typed, compiled, memory-safe language designed for modularity. A lean core with platform modules for web, server, embedded, and beyond. Write once, target anything.
 
 Built by [Dark Matter Tech](https://rustygits.com/Dark-Matter).
 
