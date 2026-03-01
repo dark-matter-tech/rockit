@@ -3068,6 +3068,8 @@ public final class LLVMCodeGen {
             return emitNativeCollectionCallBool(dest: dest, nativeFn: "rockit_list_contains", args: args)
         case "listRemoveAt":
             return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_list_remove_at", args: args, retType: "i64")
+        case "listClear":
+            return emitNativeListClear(args: args)
         case "mapPut":
             return emitStringMapPut(args: args)
         case "mapGet":
@@ -3438,6 +3440,16 @@ public final class LLVMCodeGen {
         } else {
             lines.append("call \(retType) @\(nativeFn)(\(argList))")
         }
+        return lines
+    }
+
+    /// Emit a native listClear call (void, single ptr arg)
+    private func emitNativeListClear(args: [String]) -> [String] {
+        guard args.count >= 1 else { return [] }
+        var lines: [String] = []
+        let listPtr = loadArgAsPtr(args[0], lines: &lines)
+        externalDecls.insert("declare void @rockit_list_clear(ptr)")
+        lines.append("call void @rockit_list_clear(ptr \(listPtr))")
         return lines
     }
 

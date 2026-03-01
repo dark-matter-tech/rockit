@@ -197,6 +197,26 @@ fun rockit_list_release(list: Int): Unit {
     }
 }
 
+fun rockit_list_clear(list: Int): Unit {
+    if (list == 0) { return }
+    unsafe {
+        val p = bitcast<Ptr<Int>>(list)
+        val size = p.offset(LIST_SIZE).load()
+        val arr = p.offset(LIST_DATA).load()
+        val dp = bitcast<Ptr<Int>>(arr)
+        var i: Int = 0
+        while (i < size) {
+            rockit_release_value(dp.offset(i).load())
+            i = i + 1
+        }
+        p.offset(LIST_SIZE).store(0)
+    }
+}
+
+fun listClear(list: Int): Unit {
+    rockit_list_clear(list)
+}
+
 fun listSetFloat(list: Int, index: Int, value: Float): Unit {
     unsafe {
         val p = bitcast<Ptr<Int>>(list)

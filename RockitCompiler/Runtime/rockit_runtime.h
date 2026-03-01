@@ -110,6 +110,7 @@ void     rockit_list_set(RockitList* list, int64_t index, int64_t value);
 int64_t  rockit_list_size(RockitList* list);
 int8_t   rockit_list_is_empty(RockitList* list);
 void     rockit_list_release(RockitList* list);
+void     rockit_list_clear(RockitList* list);
 int8_t   rockit_list_contains(RockitList* list, int64_t value);
 int64_t  rockit_list_remove_at(RockitList* list, int64_t index);
 

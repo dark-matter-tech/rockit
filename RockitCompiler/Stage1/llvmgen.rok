@@ -58,6 +58,7 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "listAppend", "void|i64,i64")
     mapPut(t, "listSet", "void|i64,i64,i64")
     mapPut(t, "listRemoveAt", "i64|i64,i64")
+    mapPut(t, "listClear", "void|i64")
 
     // ByteArray
     mapPut(t, "byteArrayCreate", "i64|i64")

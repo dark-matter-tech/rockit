@@ -8,8 +8,8 @@ var poolLeft = listCreate()
 var poolRight = listCreate()
 
 fun resetPool(): Unit {
-    poolLeft = listCreate()
-    poolRight = listCreate()
+    listClear(poolLeft)
+    listClear(poolRight)
 }
 
 fun newNode(left: Int, right: Int): Int {
@@ -20,9 +20,7 @@ fun newNode(left: Int, right: Int): Int {
 }
 
 fun bottomUpTree(depth: Int): Int {
-    if (depth == 0) {
-        return newNode(-1, -1)
-    }
+    if (depth == 0) { return newNode(-1, -1) }
     val left: Int = bottomUpTree(depth - 1)
     val right: Int = bottomUpTree(depth - 1)
     return newNode(left, right)
@@ -30,9 +28,7 @@ fun bottomUpTree(depth: Int): Int {
 
 fun itemCheck(node: Int): Int {
     val left: Int = toInt(listGet(poolLeft, node))
-    if (left == -1) {
-        return 1
-    }
+    if (left == -1) { return 1 }
     val right: Int = toInt(listGet(poolRight, node))
     return 1 + itemCheck(left) + itemCheck(right)
 }
@@ -41,9 +37,7 @@ fun main(): Unit {
     val n: Int = 21
     val minDepth: Int = 4
     var maxDepth: Int = n
-    if (minDepth + 2 > n) {
-        maxDepth = minDepth + 2
-    }
+    if (minDepth + 2 > n) { maxDepth = minDepth + 2 }
     val stretchDepth: Int = maxDepth + 1
 
     // Stretch tree
@@ -55,12 +49,16 @@ fun main(): Unit {
     print("\t check: ")
     println(stretchCheck)
 
-    // Long-lived tree
-    resetPool()
+    // Long-lived tree — use separate pools
+    val longLeft = listCreate()
+    val longRight = listCreate()
+    poolLeft = longLeft
+    poolRight = longRight
     val longLivedTree: Int = bottomUpTree(maxDepth)
-    // Save the long-lived pool
-    val longLeft = poolLeft
-    val longRight = poolRight
+
+    // Switch to working pools for iterative trees
+    poolLeft = listCreate()
+    poolRight = listCreate()
 
     // Iterative trees
     var depth: Int = minDepth

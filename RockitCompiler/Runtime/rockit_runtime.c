@@ -433,6 +433,14 @@ void rockit_list_release(RockitList* list) {
     }
 }
 
+void rockit_list_clear(RockitList* list) {
+    if (!list) return;
+    for (int64_t i = 0; i < list->size; i++) {
+        rockit_release_value(list->data[i]);
+    }
+    list->size = 0;
+}
+
 int8_t rockit_list_contains(RockitList* list, int64_t value) {
     if (!list) return 0;
     for (int64_t i = 0; i < list->size; i++) {
