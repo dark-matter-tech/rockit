@@ -300,6 +300,7 @@ public final class LLVMCodeGen {
         // Pre-intern runtime panic messages
         internString("NullPointerException")
         internString("list index out of bounds")
+        internString("byteArray index out of bounds")
 
         for function in module.functions {
             for block in function.blocks {
@@ -3070,6 +3071,10 @@ public final class LLVMCodeGen {
             return emitNativeCollectionCall(dest: dest, nativeFn: "rockit_list_remove_at", args: args, retType: "i64")
         case "listClear":
             return emitNativeListClear(args: args)
+        case "byteArrayGet":
+            return emitInlineByteArrayGet(dest: dest, args: args)
+        case "byteArraySet":
+            return emitInlineByteArraySet(args: args)
         case "mapPut":
             return emitStringMapPut(args: args)
         case "mapGet":
@@ -3382,6 +3387,84 @@ public final class LLVMCodeGen {
         let elemAddr = nextSSA()
         lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
         lines.append("store i64 \(val), ptr \(elemAddr), !tbaa !4")
+
+        return lines
+    }
+
+    /// Inline byteArrayGet: load byte at arr+16+index, zero-extend to i64
+    /// ByteArray layout: [refCount:i64, size:i64, data:byte...]
+    private func emitInlineByteArrayGet(dest: String?, args: [String]) -> [String] {
+        guard let dest = dest, args.count >= 2 else { return [] }
+        var lines: [String] = []
+        let arrPtr = loadArgAsPtr(args[0], lines: &lines)
+        let idx = loadArgAsI64(args[1], lines: &lines)
+
+        // Bounds check: idx < size (unsigned comparison catches negative indices too)
+        let sizeAddr = nextSSA()
+        lines.append("\(sizeAddr) = getelementptr i8, ptr \(arrPtr), i64 8")
+        let size = nextSSA()
+        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+        let ok = nextSSA()
+        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+        let okLabel = "ba.ok.\(labelCounter)"
+        let oobLabel = "ba.oob.\(labelCounter)"
+        labelCounter += 1
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
+        lines.append("\(oobLabel):")
+        let oobMsg = internString("byteArray index out of bounds")
+        lines.append("call void @rockit_panic(ptr \(oobMsg))")
+        lines.append("unreachable")
+        lines.append("\(okLabel):")
+
+        // Load byte at offset 16 + index
+        let dataBase = nextSSA()
+        lines.append("\(dataBase) = getelementptr i8, ptr \(arrPtr), i64 16")
+        let byteAddr = nextSSA()
+        lines.append("\(byteAddr) = getelementptr i8, ptr \(dataBase), i64 \(idx)")
+        let byteVal = nextSSA()
+        lines.append("\(byteVal) = load i8, ptr \(byteAddr), !tbaa !4")
+        let result = nextSSA()
+        lines.append("\(result) = zext i8 \(byteVal) to i64")
+
+        lines.append(storeToTemp(dest, value: result, type: "i64"))
+        registerTypes[dest] = "i64"
+        knownIntTemps.insert(dest)
+        return lines
+    }
+
+    /// Inline byteArraySet: truncate value to i8, store at arr+16+index
+    private func emitInlineByteArraySet(args: [String]) -> [String] {
+        guard args.count >= 3 else { return [] }
+        var lines: [String] = []
+        let arrPtr = loadArgAsPtr(args[0], lines: &lines)
+        let idx = loadArgAsI64(args[1], lines: &lines)
+        let val = loadArgAsI64(args[2], lines: &lines)
+
+        // Bounds check
+        let sizeAddr = nextSSA()
+        lines.append("\(sizeAddr) = getelementptr i8, ptr \(arrPtr), i64 8")
+        let size = nextSSA()
+        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+        let ok = nextSSA()
+        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+        let okLabel = "ba.ok.\(labelCounter)"
+        let oobLabel = "ba.oob.\(labelCounter)"
+        labelCounter += 1
+        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
+        lines.append("\(oobLabel):")
+        let oobMsg = internString("byteArray index out of bounds")
+        lines.append("call void @rockit_panic(ptr \(oobMsg))")
+        lines.append("unreachable")
+        lines.append("\(okLabel):")
+
+        // Truncate and store
+        let truncVal = nextSSA()
+        lines.append("\(truncVal) = trunc i64 \(val) to i8")
+        let dataBase = nextSSA()
+        lines.append("\(dataBase) = getelementptr i8, ptr \(arrPtr), i64 16")
+        let byteAddr = nextSSA()
+        lines.append("\(byteAddr) = getelementptr i8, ptr \(dataBase), i64 \(idx)")
+        lines.append("store i8 \(truncVal), ptr \(byteAddr), !tbaa !4")
 
         return lines
     }
