@@ -10,12 +10,12 @@ The Rockit language compiler. Self-hosting — Rockit compiles itself.
 
 **macOS / Linux (one-liner):**
 ```bash
-curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.ps1 | iex
 ```
 
 The installer downloads a prebuilt binary if available, or builds from source as a fallback. The release includes:
@@ -50,28 +50,28 @@ make release   # release
 
 ```bash
 # Run a .rok file (bytecode)
-rockit run Examples/hello.rok
+rockit run examples/hello.rok
 
 # Compile to native binary
-rockit build-native Examples/hello.rok
+rockit build-native examples/hello.rok
 
 # Compile to native and run
-rockit run-native Examples/hello.rok
+rockit run-native examples/hello.rok
 
 # Compile without the standard runtime (freestanding mode)
-rockit build-native Examples/test_freestanding.rok --no-runtime
+rockit build-native examples/test_freestanding.rok --no-runtime
 
 # Parse and dump AST
-rockit parse Examples/hello.rok --dump-ast
+rockit parse examples/hello.rok --dump-ast
 
 # Type-check
-rockit check Examples/hello.rok
+rockit check examples/hello.rok
 
 # Compile to bytecode
-rockit build Examples/hello.rok
+rockit build examples/hello.rok
 
 # Emit LLVM IR
-rockit emit-llvm Examples/hello.rok
+rockit emit-llvm examples/hello.rok
 
 # Start REPL
 rockit launch
@@ -94,9 +94,9 @@ rockit test --watch
 rockit test --scheme unit
 
 # Run benchmarks
-rockit bench                              # run all Benchmarks/*.rok
-rockit bench Benchmarks/bench_fib.rok     # run a single benchmark
-rockit bench Benchmarks/ --save           # save results to history
+rockit bench                              # run all benchmarks/*.rok
+rockit bench benchmarks/bench_fib.rok     # run a single benchmark
+rockit bench benchmarks/ --save           # save results to history
 
 # Update to latest version
 rockit update
@@ -223,7 +223,7 @@ fun main() {
 
 ## Standard Library
 
-The standard library ships under `Stage1/stdlib/rockit/` and is imported with `import rockit.<module>`. 14 modules covering core utilities, networking, encoding, time, I/O, JSON, and testing.
+The standard library ships under `self-hosted-rockit/stdlib/rockit/` and is imported with `import rockit.<module>`. 14 modules covering core utilities, networking, encoding, time, I/O, JSON, and testing.
 
 ### Modules
 
@@ -526,7 +526,7 @@ fun main(): Unit {
 }
 ```
 
-See `Examples/json_tool.rok` for a complete file-based JSON tool (pretty-print, compact, info modes).
+See `examples/json_tool.rok` for a complete file-based JSON tool (pretty-print, compact, info modes).
 
 ---
 
@@ -595,18 +595,18 @@ All benchmarks run on Apple M1, best of 3 runs.
 
 Rockit beats Go on 7 of 11 benchmarks. Rockit outperforms Node.js 3-15x across all measured benchmarks.
 
-Run the full suite: `bash Benchmarks/run_benchmarks.sh`
+Run the full suite: `bash benchmarks/run_benchmarks.sh`
 
 ### Built-in Benchmark Runner
 
 `rockit bench` provides built-in benchmarking with history tracking and regression detection.
 
-**Whole-file benchmarks** — any `.rok` file in `Benchmarks/` is treated as a benchmark:
+**Whole-file benchmarks** — any `.rok` file in `benchmarks/` is treated as a benchmark:
 
 ```bash
-rockit bench Benchmarks/bench_fib.rok         # single file
-rockit bench Benchmarks/                       # all benchmarks in directory
-rockit bench                                   # default: Benchmarks/ directory
+rockit bench benchmarks/bench_fib.rok         # single file
+rockit bench benchmarks/                       # all benchmarks in directory
+rockit bench                                   # default: benchmarks/ directory
 ```
 
 **`@Benchmark` annotated functions** — fine-grained benchmarks within a file:
@@ -649,69 +649,75 @@ Results are stored in `.rockit/bench_history.json` with commit hash and timestam
 
 ```
 RockitCompiler/
-├── Sources/
-│   ├── RockitKit/          # Core compiler library (importable)
-│   │   ├── Token.swift     # 130+ token types
-│   │   ├── Lexer.swift     # Single-pass UTF-8 scanner
-│   │   ├── Parser.swift    # Recursive descent parser
+├── Package.swift
+├── README.md
+├── bootstrap-swift/           # Stage 0 Swift compiler
+│   ├── RockitKit/             #   Core compiler library (37+ files)
+│   │   ├── Token.swift        #   130+ token types
+│   │   ├── Lexer.swift        #   Single-pass UTF-8 scanner
+│   │   ├── Parser.swift       #   Recursive descent parser
 │   │   ├── TypeChecker.swift
 │   │   ├── MIRLowering.swift
 │   │   ├── MIROptimizer.swift
-│   │   ├── CodeGen.swift   # MIR → bytecode
-│   │   ├── LLVMCodeGen.swift  # MIR → LLVM IR → native
-│   │   ├── VM.swift        # Bytecode interpreter
-│   │   ├── Scheduler.swift # Coroutine scheduler
-│   │   ├── Coroutine.swift # Coroutine state machine
-│   │   └── ...             # 37+ files total
-│   └── RockitCLI/          # CLI entry point
-├── Tests/                  # 542 tests
-├── Runtime/
-│   ├── rockit_runtime.c    # C runtime (ARC, actors, coroutines)
-│   └── rockit/             # Modular Rockit runtime (freestanding)
-│       ├── memory.rok      # malloc/free, ARC retain/release
-│       ├── string.rok      # String struct, new, eq, neq, concat, length
-│       ├── string_ops.rok  # charAt, indexOf, substring, split, trim
-│       ├── object.rok      # Object alloc, field access, type checking
-│       ├── list.rok        # List create/append/get/set/remove/size
-│       ├── map.rok         # Map create/put/get/keys/remove
-│       ├── io.rok          # println, print (int, float, string, any)
-│       ├── exception.rok   # setjmp/longjmp exception stack
-│       ├── file.rok        # fileRead, fileWrite, fileExists, fileDelete
-│       ├── process.rok     # processArgs, getEnv, platformOS, systemExec
-│       ├── math.rok        # sqrt, sin, cos, tan, floor, ceil, round, etc.
-│       ├── concurrency.rok # Task scheduler, frame alloc/free, event loop
-│       └── build.sh        # Concatenates and compiles all modules
-├── Stage1/                 # Self-hosting compiler in Rockit (~12K lines)
-│   ├── lexer.rok           # Stage 1 lexer
-│   ├── parser.rok          # Stage 1 parser
-│   ├── typechecker.rok     # Stage 1 type checker
-│   ├── optimizer.rok       # Stage 1 optimizer
-│   ├── codegen.rok         # Stage 1 bytecode codegen
-│   ├── llvmgen.rok         # Stage 1 LLVM native codegen
-│   ├── command.rok         # Concatenated compiler source
-│   ├── command             # Stage 1 native binary
-│   └── stdlib/rockit/      # Standard library (14 modules)
-│       ├── core/
-│       │   ├── collections.rok  # List map/filter/fold/sort/zip/flatten
-│       │   ├── math.rok         # Integer & float math, trig, constants
-│       │   ├── strings.rok      # pad, repeat, join, split, replace
-│       │   ├── result.rok       # Result type (Success/Failure)
-│       │   └── uuid.rok         # UUID v4 generation
-│       ├── io/
-│       │   ├── file.rok         # File I/O wrappers
-│       │   └── path.rok         # Path join/dir/base/ext/normalize
-│       ├── net/
-│       │   ├── http.rok         # HTTP/1.1 client (TCP + curl HTTPS)
-│       │   ├── ws.rok           # WebSocket client (RFC 6455)
-│       │   └── url.rok          # URL parser and encoder
-│       ├── encoding/
-│       │   └── base64.rok       # Base64 encode/decode
-│       ├── time/
-│       │   └── datetime.rok     # Date/time utilities
-│       ├── test/
-│       │   └── probe.rok        # Probe test framework (assertions)
-│       └── json.rok             # JSON parser and serializer
-└── Examples/               # 48+ example/test .rok files
+│   │   ├── CodeGen.swift      #   MIR → bytecode
+│   │   ├── LLVMCodeGen.swift  #   MIR → LLVM IR → native
+│   │   ├── VM.swift           #   Bytecode interpreter
+│   │   ├── Scheduler.swift    #   Coroutine scheduler
+│   │   ├── Coroutine.swift    #   Coroutine state machine
+│   │   └── ...
+│   ├── RockitCLI/             #   CLI entry point
+│   └── Tests/RockitKitTests/  #   542 Swift tests
+├── lsp/
+│   └── RockitLSP/             # Language server (12 files)
+├── self-hosted-rockit/        # Stage 1 Rockit compiler (~12K lines)
+│   ├── lexer.rok
+│   ├── parser.rok
+│   ├── typechecker.rok
+│   ├── optimizer.rok
+│   ├── codegen.rok
+│   ├── llvmgen.rok
+│   ├── command.rok            # Concatenated compiler source
+│   ├── command                # Stage 1 native binary
+│   └── stdlib/                # Standard library submodule (launchpad, 15 modules)
+│       └── rockit/
+│           ├── core/          # collections, math, strings, result, uuid
+│           ├── encoding/      # base64, json, xml
+│           ├── filesystem/    # file, path
+│           ├── networking/    # http, url, websocket
+│           ├── testing/       # probe
+│           └── time/          # datetime
+├── tests/                     # Rockit integration tests
+│   ├── advanced/
+│   ├── core/
+│   ├── collections/
+│   ├── concurrency/
+│   ├── functions/
+│   ├── patterns/
+│   ├── stdlib/
+│   ├── types/
+│   └── ui/
+├── examples/                  # 48+ example/test .rok files
+├── benchmarks/                # Benchmark suite
+├── runtime/
+│   ├── rockit_runtime.c       # C runtime (ARC, actors, coroutines)
+│   └── rockit/                # Modular Rockit runtime (freestanding)
+│       ├── memory.rok         # malloc/free, ARC retain/release
+│       ├── string.rok         # String struct, new, eq, neq, concat, length
+│       ├── string_ops.rok     # charAt, indexOf, substring, split, trim
+│       ├── object.rok         # Object alloc, field access, type checking
+│       ├── list.rok           # List create/append/get/set/remove/size
+│       ├── map.rok            # Map create/put/get/keys/remove
+│       ├── io.rok             # println, print (int, float, string, any)
+│       ├── exception.rok      # setjmp/longjmp exception stack
+│       ├── file.rok           # fileRead, fileWrite, fileExists, fileDelete
+│       ├── process.rok        # processArgs, getEnv, platformOS, systemExec
+│       ├── math.rok           # sqrt, sin, cos, tan, floor, ceil, round, etc.
+│       ├── concurrency.rok    # Task scheduler, frame alloc/free, event loop
+│       └── build.sh           # Concatenates and compiles all modules
+└── scripts/                   # Install and packaging scripts
+    ├── install.sh
+    ├── install.ps1
+    └── package.sh
 ```
 
 RockitKit is a standalone library so it can be imported by other tools (editor plugins, LSP server, Fuel) without the CLI.

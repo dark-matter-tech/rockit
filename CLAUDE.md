@@ -141,7 +141,7 @@ MIR → bytecode (Stage 0 CodeGen.swift) and direct AST → bytecode (Stage 1 co
 ARC with cycle detector, coroutine scheduler, actor message dispatch, platform capability bridge.
 
 ### Phase 8: Freestanding Mode (`--no-runtime`) ✅
-Compiles Rockit programs without the standard runtime. Enables low-level systems programming with `Ptr<T>`, `alloc`/`free`, `bitcast`, `cstr`, `unsafe` blocks, `loadByte`/`storeByte`, `extern` C functions, `@CRepr` structs. The runtime itself (`Runtime/rockit/`) is written in Rockit using this mode.
+Compiles Rockit programs without the standard runtime. Enables low-level systems programming with `Ptr<T>`, `alloc`/`free`, `bitcast`, `cstr`, `unsafe` blocks, `loadByte`/`storeByte`, `extern` C functions, `@CRepr` structs. The runtime itself (`runtime/rockit/`) is written in Rockit using this mode.
 
 ## Project Structure
 
@@ -150,7 +150,7 @@ RockitCompiler/
 ├── Package.swift                    # Swift Package Manager manifest
 ├── CLAUDE.md                        # This file
 ├── README.md                        # Compiler README
-├── Sources/
+├── bootstrap-swift/                 # Stage 0 Swift compiler
 │   ├── RockitKit/                   # Core compiler library
 │   │   ├── Token.swift              # Token types and source locations
 │   │   ├── Lexer.swift              # Tokenizer
@@ -164,11 +164,12 @@ RockitCompiler/
 │   │   ├── VM.swift                 # Bytecode interpreter
 │   │   ├── Heap.swift               # Object heap (RockitObject)
 │   │   └── ...                      # 37+ files total
-│   └── RockitCLI/                   # CLI entry point
-│       └── main.swift               # command tool
-├── Tests/
-│   └── RockitKitTests/              # 14+ test files, 542 tests
-├── Stage1/                          # Self-hosting compiler in Rockit (~12K lines)
+│   ├── RockitCLI/                   # CLI entry point
+│   │   └── main.swift               # command tool
+│   └── Tests/RockitKitTests/        # 14+ test files, 542 tests
+├── lsp/
+│   └── RockitLSP/                   # Language server (12 files)
+├── self-hosted-rockit/              # Self-hosting compiler in Rockit (~12K lines)
 │   ├── lexer.rok                    # Stage 1 lexer
 │   ├── parser.rok                   # Stage 1 parser
 │   ├── typechecker.rok              # Stage 1 type checker
@@ -194,7 +195,10 @@ RockitCompiler/
 │           ├── networking/websocket.rok # WebSocket client (RFC 6455)
 │           ├── testing/probe.rok      # Probe test framework (20+ assertions)
 │           └── time/datetime.rok      # Date/time utilities (ISO 8601)
-├── Runtime/
+├── tests/                           # Rockit integration tests
+│   ├── advanced/ core/ collections/ concurrency/
+│   ├── functions/ patterns/ stdlib/ types/ ui/
+├── runtime/
 │   ├── rockit_runtime.c             # C runtime (ARC, task scheduler, event loop, actor wrappers)
 │   └── rockit/                      # Modular Rockit runtime (freestanding)
 │       ├── memory.rok               # malloc/free wrappers, ARC retain/release
@@ -210,15 +214,19 @@ RockitCompiler/
 │       ├── math.rok                 # sqrt, sin, cos, tan, floor, ceil, round, etc.
 │       ├── concurrency.rok          # Task scheduler, frame alloc/free, event loop
 │       └── build.sh                 # Concatenates and compiles all modules
-└── Examples/
-    └── test_*.rok                   # 48 feature test files
+├── examples/                        # 48 feature test files
+├── benchmarks/                      # Benchmark suite
+└── scripts/                         # Install and packaging scripts
+    ├── install.sh
+    ├── install.ps1
+    └── package.sh
 ```
 
 RockitKit is a standalone library so it can be imported by other tools (editor plugins, LSP server, Fuel) without the CLI.
 
 ## Standard Library
 
-15 modules in `Stage1/stdlib/rockit/` (submodule from [dark-matter-tech/launchpad](https://github.com/dark-matter-tech/launchpad)). Import via dot-separated paths: `import rockit.encoding.json`, `import rockit.core.collections`.
+15 modules in `self-hosted-rockit/stdlib/rockit/` (submodule from [dark-matter-tech/launchpad](https://github.com/dark-matter-tech/launchpad)). Import via dot-separated paths: `import rockit.encoding.json`, `import rockit.core.collections`.
 
 | Module | Import | Key Functions |
 |--------|--------|--------------|
@@ -240,12 +248,12 @@ RockitKit is a standalone library so it can be imported by other tools (editor p
 
 ### Key constraints for stdlib development
 
-- Only Stage 1 builtins are available (registered in `Stage1/typechecker.rok` lines 105-199)
+- Only Stage 1 builtins are available (registered in `self-hosted-rockit/typechecker.rok` lines 105-199)
 - **NOT available in native codegen**: `toFloat`, `formatFloat`, `stringContains`, `stringSubstring` (use `substring`), `intToString` (use `toString`), `mapContainsKey` (use `mapGet` + null check)
 - **Available**: `toString`, `toInt`, `charAt`, `charCodeAt`, `intToChar`, `substring`, `stringLength`, `stringConcat`, `stringIndexOf`, `mapGet`, `mapPut`, `mapKeys`, `listCreate`, `listAppend`, `listGet`, `listSet`, `listSize`, `fileRead`, `fileWriteBytes`, `processArgs`, `getEnv`, `typeOf`, `isMap`, `isList`
 - No `continue` in loops — use if/else chains
 - `mapGet` returns `null` for missing keys — always check before `toString`
-- Tests follow the `test_stdlib_*.rok` naming convention in `Examples/`
+- Tests follow the `test_stdlib_*.rok` naming convention in `examples/`
 
 ## Coding Standards
 
@@ -288,10 +296,10 @@ lambda        = "{" [params "->"] statements "}" ;
 
 ## Key Files to Reference
 
-- `Sources/RockitKit/Token.swift` — All token definitions. Start here to understand the lexical grammar.
-- `Sources/RockitKit/Lexer.swift` — The lexer implementation. Working and tested.
-- `Examples/hello.rok` — A comprehensive test file that exercises most language features.
-- `Tests/RockitKitTests/LexerTests.swift` — Shows expected tokenization for various constructs.
+- `bootstrap-swift/RockitKit/Token.swift` — All token definitions. Start here to understand the lexical grammar.
+- `bootstrap-swift/RockitKit/Lexer.swift` — The lexer implementation. Working and tested.
+- `examples/hello.rok` — A comprehensive test file that exercises most language features.
+- `bootstrap-swift/Tests/RockitKitTests/LexerTests.swift` — Shows expected tokenization for various constructs.
 
 ## Owner
 

@@ -19,25 +19,25 @@ let package = Package(
         // Core compiler library
         .target(
             name: "RockitKit",
-            path: "Sources/RockitKit"
+            path: "bootstrap-swift/RockitKit"
         ),
         // Language Server Protocol
         .target(
             name: "RockitLSP",
             dependencies: ["RockitKit"],
-            path: "Sources/RockitLSP"
+            path: "lsp/RockitLSP"
         ),
         // CLI entry point
         .executableTarget(
             name: "RockitCLI",
             dependencies: ["RockitKit", "RockitLSP"],
-            path: "Sources/RockitCLI"
+            path: "bootstrap-swift/RockitCLI"
         ),
         // Tests
         .testTarget(
             name: "RockitKitTests",
             dependencies: ["RockitKit"],
-            path: "Tests/RockitKitTests"
+            path: "bootstrap-swift/Tests/RockitKitTests"
         ),
     ]
 )

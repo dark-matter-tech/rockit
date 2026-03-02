@@ -3,7 +3,7 @@
 # Dark Matter Tech
 #
 # Usage:
-#   curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
+#   curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.sh | bash
 #
 # Or clone and run locally:
 #   ./install.sh
@@ -105,27 +105,27 @@ install_source() {
     # Build Stage 1 compiler
     info "Building compiler (this takes a minute)..."
     cd "${tmp}/moon/RockitCompiler"
-    swift run rockit build-native Stage1/command.rok 2>&1
+    swift run rockit build-native self-hosted-rockit/command.rok 2>&1
 
     # Clone and build Fuel
     info "Building Fuel package manager..."
     git clone --depth 1 --branch develop "${GITEA}/${REPO_FUEL}.git" "${tmp}/fuel" 2>&1 | tail -1
-    Stage1/command build-native "${tmp}/fuel/src/fuel.rok" -o "${tmp}/fuel/fuel"
+    self-hosted-rockit/command build-native "${tmp}/fuel/src/fuel.rok" -o "${tmp}/fuel/fuel"
 
     # Install
     info "Installing to ${BIN_DIR}..."
     sudo mkdir -p "${BIN_DIR}" "${SHARE_DIR}"
-    sudo cp Stage1/command "${BIN_DIR}/rockit"
+    sudo cp self-hosted-rockit/command "${BIN_DIR}/rockit"
     sudo cp "${tmp}/fuel/fuel" "${BIN_DIR}/fuel"
     sudo chmod +x "${BIN_DIR}/rockit" "${BIN_DIR}/fuel"
     # Build and install the Rockit runtime
-    if [ -d Runtime/rockit ]; then
-        cd Runtime/rockit && bash build.sh && cd ../..
-        sudo cp Runtime/rockit_runtime.o "${SHARE_DIR}/rockit_runtime.o"
+    if [ -d runtime/rockit ]; then
+        cd runtime/rockit && bash build.sh && cd ../..
+        sudo cp runtime/rockit_runtime.o "${SHARE_DIR}/rockit_runtime.o"
     fi
     # Install standard library
-    if [ -d Stage1/stdlib ]; then
-        sudo cp -r Stage1/stdlib "${SHARE_DIR}/stdlib"
+    if [ -d self-hosted-rockit/stdlib ]; then
+        sudo cp -r self-hosted-rockit/stdlib "${SHARE_DIR}/stdlib"
     fi
 
     rm -rf "$tmp"

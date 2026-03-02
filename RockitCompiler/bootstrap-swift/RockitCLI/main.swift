@@ -1085,8 +1085,8 @@ func benchCommand(target: String?, runs: Int, warmup: Int, save: Bool) {
             benchFiles = [target]
         }
     } else {
-        // Default: look for Benchmarks/ directory
-        let benchDir = Platform.pathJoin(fm.currentDirectoryPath, "Benchmarks")
+        // Default: look for benchmarks/ directory
+        let benchDir = Platform.pathJoin(fm.currentDirectoryPath, "benchmarks")
         if fm.fileExists(atPath: benchDir) {
             if let enumerator = fm.enumerator(atPath: benchDir) {
                 while let item = enumerator.nextObject() as? String {
@@ -1098,7 +1098,7 @@ func benchCommand(target: String?, runs: Int, warmup: Int, save: Bool) {
             benchFiles.sort()
         }
         if benchFiles.isEmpty {
-            print("error: no benchmark files found. Provide a file/directory or create Benchmarks/")
+            print("error: no benchmark files found. Provide a file/directory or create benchmarks/")
             exit(1)
         }
     }
@@ -1851,17 +1851,17 @@ func findRuntimeDir() -> String {
 
     // Try relative to current working directory
     let cwd = fm.currentDirectoryPath
-    let cwdRuntime = Platform.pathJoin(cwd, "Runtime")
+    let cwdRuntime = Platform.pathJoin(cwd, "runtime")
     if searchDir(cwdRuntime) { return cwdRuntime }
 
     // Try relative to the executable
     let execPath = CommandLine.arguments[0]
     let execDir = (execPath as NSString).deletingLastPathComponent
-    let execRuntime = Platform.pathJoin(execDir, "..", "Runtime")
+    let execRuntime = Platform.pathJoin(execDir, "..", "runtime")
     if searchDir(execRuntime) { return execRuntime }
 
     // Try the project source tree (common during development)
-    let devRuntime = Platform.pathJoin(execDir, "..", "..", "Runtime")
+    let devRuntime = Platform.pathJoin(execDir, "..", "..", "runtime")
     if searchDir(devRuntime) { return devRuntime }
 
     // Try installed location
@@ -1881,9 +1881,9 @@ func findStdlibDir() -> String? {
         return envDir
     }
 
-    // Try Stage1/stdlib relative to CWD (development)
+    // Try self-hosted-rockit/stdlib relative to CWD (development)
     let cwd = fm.currentDirectoryPath
-    let cwdStdlib = Platform.pathJoin(cwd, "Stage1", "stdlib")
+    let cwdStdlib = Platform.pathJoin(cwd, "self-hosted-rockit", "stdlib")
     if fm.fileExists(atPath: Platform.pathJoin(cwdStdlib, "rockit")) { return cwdStdlib }
 
     // Try relative to the executable (installed: share/rockit/stdlib)

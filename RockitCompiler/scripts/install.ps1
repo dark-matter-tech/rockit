@@ -2,7 +2,7 @@
 # Dark Matter Tech
 #
 # Usage (PowerShell):
-#   irm https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
+#   irm https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.ps1 | iex
 #
 # Or run locally:
 #   .\install.ps1
@@ -397,7 +397,7 @@ if ($downloaded) {
     # Build Stage 1
     Write-Info "Building compiler (this takes a minute)..."
     Push-Location "$tmp\moon\RockitCompiler"
-    swift run rockit build-native Stage1\command.rok 2>&1 | ForEach-Object { "$_" }
+    swift run rockit build-native self-hosted-rockit\command.rok 2>&1 | ForEach-Object { "$_" }
     if ($LASTEXITCODE -ne 0) { Pop-Location; $ErrorActionPreference = $savedEAP; Write-Fail "Compiler build failed." }
     Pop-Location
 
@@ -410,7 +410,7 @@ if ($downloaded) {
     Pop-Location
 
     if (Test-Path "$tmp\fuel\src\fuel.rok") {
-        & "$tmp\moon\RockitCompiler\Stage1\command.exe" build-native "$tmp\fuel\src\fuel.rok" -o "$tmp\fuel\fuel.exe" --runtime-path "$tmp\moon\RockitCompiler\Runtime\rockit_runtime.c" 2>&1 | ForEach-Object { "$_" }
+        & "$tmp\moon\RockitCompiler\self-hosted-rockit\command.exe" build-native "$tmp\fuel\src\fuel.rok" -o "$tmp\fuel\fuel.exe" --runtime-path "$tmp\moon\RockitCompiler\runtime\rockit_runtime.c" 2>&1 | ForEach-Object { "$_" }
     }
 
     # Install
@@ -418,14 +418,14 @@ if ($downloaded) {
     New-Item -ItemType Directory -Force -Path $INSTALL_DIR | Out-Null
     New-Item -ItemType Directory -Force -Path $SHARE_DIR | Out-Null
 
-    Copy-Item "$tmp\moon\RockitCompiler\Stage1\command.exe" "$INSTALL_DIR\rockit.exe" -Force
+    Copy-Item "$tmp\moon\RockitCompiler\self-hosted-rockit\command.exe" "$INSTALL_DIR\rockit.exe" -Force
     if (Test-Path "$tmp\fuel\fuel.exe") {
         Copy-Item "$tmp\fuel\fuel.exe" "$INSTALL_DIR\fuel.exe" -Force
     }
-    Copy-Item "$tmp\moon\RockitCompiler\Runtime\rockit_runtime.c" "$SHARE_DIR\rockit_runtime.c" -Force
-    Copy-Item "$tmp\moon\RockitCompiler\Runtime\rockit_runtime.h" "$SHARE_DIR\rockit_runtime.h" -Force
-    if (Test-Path "$tmp\moon\RockitCompiler\Stage1\stdlib") {
-        Copy-Item "$tmp\moon\RockitCompiler\Stage1\stdlib" "$SHARE_DIR\stdlib" -Recurse -Force
+    Copy-Item "$tmp\moon\RockitCompiler\runtime\rockit_runtime.c" "$SHARE_DIR\rockit_runtime.c" -Force
+    Copy-Item "$tmp\moon\RockitCompiler\runtime\rockit_runtime.h" "$SHARE_DIR\rockit_runtime.h" -Force
+    if (Test-Path "$tmp\moon\RockitCompiler\self-hosted-rockit\stdlib") {
+        Copy-Item "$tmp\moon\RockitCompiler\self-hosted-rockit\stdlib" "$SHARE_DIR\stdlib" -Recurse -Force
     }
 
     $ErrorActionPreference = $savedEAP

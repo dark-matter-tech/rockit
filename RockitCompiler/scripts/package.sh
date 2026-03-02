@@ -15,7 +15,8 @@ set -euo pipefail
 
 VERSION="0.1.0"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DIST_DIR="${SCRIPT_DIR}/dist"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+DIST_DIR="${PROJECT_DIR}/dist"
 FUEL_REPO="${FUEL_REPO:-https://rustygits.com/Dark-Matter/fuel.git}"
 
 RED='\033[0;31m'
@@ -62,13 +63,13 @@ ARCHIVE_NAME="rockit-${VERSION}-${PLATFORM}"
 info "Packaging Rockit ${VERSION} for ${PLATFORM}"
 
 # --- Step 1: Build Stage 1 compiler ---
-COMPILER="${SCRIPT_DIR}/Stage1/command"
-RUNTIME="${SCRIPT_DIR}/Runtime/rockit_runtime.c"
+COMPILER="${PROJECT_DIR}/self-hosted-rockit/command"
+RUNTIME="${PROJECT_DIR}/runtime/rockit_runtime.c"
 
 if [[ ! -f "$COMPILER" ]]; then
     info "Building Stage 1 compiler..."
-    cd "$SCRIPT_DIR"
-    swift run rockit build-native Stage1/command.rok
+    cd "$PROJECT_DIR"
+    swift run rockit build-native self-hosted-rockit/command.rok
 fi
 
 [[ -f "$COMPILER" ]] || fail "Stage 1 compiler not found at ${COMPILER}"
@@ -97,8 +98,8 @@ mkdir -p "${STAGING}/bin" "${STAGING}/share/rockit"
 cp "$COMPILER"                    "${STAGING}/bin/rockit"
 cp "${FUEL_SRC}/fuel"             "${STAGING}/bin/fuel"
 cp "$RUNTIME"                     "${STAGING}/share/rockit/rockit_runtime.c"
-cp "${SCRIPT_DIR}/Runtime/rockit_runtime.h" "${STAGING}/share/rockit/rockit_runtime.h"
-cp -r "${SCRIPT_DIR}/Stage1/stdlib"          "${STAGING}/share/rockit/stdlib"
+cp "${PROJECT_DIR}/runtime/rockit_runtime.h" "${STAGING}/share/rockit/rockit_runtime.h"
+cp -r "${PROJECT_DIR}/self-hosted-rockit/stdlib"          "${STAGING}/share/rockit/stdlib"
 chmod +x "${STAGING}/bin/rockit" "${STAGING}/bin/fuel"
 
 # Clean up temp clone

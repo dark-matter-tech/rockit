@@ -1,4 +1,4 @@
 [submodule "RockitCompiler/Stage1/stdlib"]
-	path = RockitCompiler/Stage1/stdlib
+	path = RockitCompiler/self-hosted-rockit/stdlib
 	url = https://github.com/dark-matter-tech/launchpad.git
 	branch = develop

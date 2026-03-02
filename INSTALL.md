@@ -9,7 +9,7 @@ Rockit is a compiled programming language by Dark Matter Tech. This guide covers
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.sh | bash
 ```
 
 This installs the `rockit` binary to `/usr/local/bin` and the runtime to `/usr/local/share/rockit/`.
@@ -17,7 +17,7 @@ This installs the `rockit` binary to `/usr/local/bin` and the runtime to `/usr/l
 ### Windows (PowerShell)
 
 ```powershell
-iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.ps1 | iex
 ```
 
 This installs to `%LOCALAPPDATA%\Rockit\bin` and adds it to your user PATH.
@@ -76,7 +76,7 @@ make install PREFIX=$HOME/.local
 
 ```bash
 rockit --version
-rockit run Examples/hello.rok
+rockit run examples/hello.rok
 ```
 
 ---
@@ -88,13 +88,13 @@ Set `ROCKIT_PREFIX` before running the install script:
 ```bash
 # macOS / Linux
 export ROCKIT_PREFIX=$HOME/.rockit
-curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.sh | bash
 ```
 
 ```powershell
 # Windows
 $env:ROCKIT_PREFIX = "$env:USERPROFILE\.rockit"
-iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.ps1 | iex
 ```
 
 If the runtime is in a non-standard location, set:

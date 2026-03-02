@@ -247,7 +247,7 @@ jobs:
           FAILED_TESTS=""
           FEATURES=""
           START=$(date +%s)
-          for f in Examples/test_*.rok; do
+          for f in examples/test_*.rok; do
             name=$(basename "$f" .rok)
             # Skip Stage 1-only tests (compiled with Stage 1 binary after bootstrap)
             case "$name" in test_unsafe*|test_crepr*|test_funptr*|test_freestanding*|test_byte_ops*|test_stdlib_*) echo "  ┌──────────────────────────────────────────────"; printf "  │ ⏭️  %-42s" "$name"; echo "⏭️  SKIP (Stage 1 only)"; echo "  └──────────────────────────────────────────────"; continue;; esac
@@ -255,7 +255,7 @@ jobs:
             echo "  ┌──────────────────────────────────────────────"
             printf "  │ 🚀 %-42s" "$name"
             if $ROCKIT build-native "$f" > /tmp/build_log 2>&1; then
-              output=$("Examples/$name" 2>&1) || true
+              output=$("examples/$name" 2>&1) || true
               echo "✅ PASS"
               if [ -n "$output" ]; then
                 echo "$output" | while IFS= read -r line; do
@@ -347,7 +347,7 @@ jobs:
           echo "  ║  Swift compiler builds Rockit compiler    ║"
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
-          $ROCKIT build-native Stage1/command.rok 2>&1
+          $ROCKIT build-native self-hosted-rockit/command.rok 2>&1
           END=$(date +%s)
           echo "  ✅ Stage 1 built ($(($END - $START))s)"
           echo ""
@@ -368,7 +368,7 @@ jobs:
           echo "  ╔═══════════════════════════════════════════╗"
           echo "  ║  ⚙️  Building Rockit Runtime (.o)          ║"
           echo "  ╚═══════════════════════════════════════════╝"
-          bash Runtime/rockit/build.sh 2>&1
+          bash runtime/rockit/build.sh 2>&1
           echo "  ✅ rockit_runtime.o built"
           echo ""
 
@@ -380,7 +380,7 @@ jobs:
           echo "  ║  Rockit compiler builds itself            ║"
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
-          Stage1/command build-native Stage1/command.rok -o /tmp/stage2 --runtime-path Runtime/rockit_runtime.o --target-triple $TRIPLE 2>&1
+          self-hosted-rockit/command build-native self-hosted-rockit/command.rok -o /tmp/stage2 --runtime-path runtime/rockit_runtime.o --target-triple $TRIPLE 2>&1
           END=$(date +%s)
           echo "  ✅ Stage 2 built ($(($END - $START))s)"
           echo ""
@@ -409,8 +409,8 @@ jobs:
           echo "  ╚═══════════════════════════════════════════╝"
           START=$(date +%s)
           # Generate bytecode from Stage 1 and Stage 2, then compare
-          Stage1/command compile Stage1/command.rok -o /tmp/stage2.rokb 2>&1
-          /tmp/stage2 compile Stage1/command.rok -o /tmp/stage3.rokb 2>&1
+          self-hosted-rockit/command compile self-hosted-rockit/command.rok -o /tmp/stage2.rokb 2>&1
+          /tmp/stage2 compile self-hosted-rockit/command.rok -o /tmp/stage3.rokb 2>&1
           END=$(date +%s)
           if diff /tmp/stage2.rokb /tmp/stage3.rokb > /dev/null 2>&1; then
             echo "  ✅ Stage 3 verified — bytecode identical ($(($END - $START))s)"
@@ -482,17 +482,17 @@ jobs:
           echo "  ╔═══════════════════════════════════════════╗"
           echo "  ║  🔬 Stage 1 Feature Tests                  ║"
           echo "  ╚═══════════════════════════════════════════╝"
-          STAGE1_CMD=Stage1/command
+          STAGE1_CMD=self-hosted-rockit/command
           S1_PASS=0; S1_FAIL=0; S1_TOTAL=0
           S1_FAILED=""
-          for f in Examples/test_unsafe*.rok Examples/test_crepr*.rok Examples/test_funptr*.rok; do
+          for f in examples/test_unsafe*.rok examples/test_crepr*.rok examples/test_funptr*.rok; do
             [ -f "$f" ] || continue
             S1_TOTAL=$((S1_TOTAL + 1))
             name=$(basename "$f" .rok)
             echo "  ┌──────────────────────────────────────────────"
             printf "  │ 🔬 %-42s" "$name"
-            if $STAGE1_CMD build-native "$f" -o "Examples/$name" --runtime-path Runtime/rockit_runtime.o --target-triple $TRIPLE > /tmp/s1_build_log 2>&1; then
-              output=$("Examples/$name" 2>&1) || true
+            if $STAGE1_CMD build-native "$f" -o "examples/$name" --runtime-path runtime/rockit_runtime.o --target-triple $TRIPLE > /tmp/s1_build_log 2>&1; then
+              output=$("examples/$name" 2>&1) || true
               echo "✅ PASS"
               if [ -n "$output" ]; then
                 echo "$output" | while IFS= read -r line; do
@@ -526,13 +526,13 @@ jobs:
 
           # Verify command.rok matches concatenated Stage 1 modules
           echo "  Verifying Stage 1 command.rok consistency..."
-          cp Stage1/command.rok /tmp/command_before.rok
-          bash Stage1/build.sh > /dev/null 2>&1
-          if diff /tmp/command_before.rok Stage1/command.rok > /dev/null 2>&1; then
+          cp self-hosted-rockit/command.rok /tmp/command_before.rok
+          bash self-hosted-rockit/build.sh > /dev/null 2>&1
+          if diff /tmp/command_before.rok self-hosted-rockit/command.rok > /dev/null 2>&1; then
             echo "  ✅ command.rok matches source modules"
           else
             echo "  ❌ command.rok is out of sync with Stage 1 modules!"
-            echo "     Run: bash Stage1/build.sh"
+            echo "     Run: bash self-hosted-rockit/build.sh"
             exit 1
           fi
           echo ""
@@ -546,14 +546,14 @@ jobs:
           echo "  ╚═══════════════════════════════════════════╝"
           SL_PASS=0; SL_FAIL=0; SL_TOTAL=0
           SL_FAILED=""
-          for f in Examples/test_stdlib_*.rok; do
+          for f in examples/test_stdlib_*.rok; do
             [ -f "$f" ] || continue
             SL_TOTAL=$((SL_TOTAL + 1))
             name=$(basename "$f" .rok)
             echo "  ┌──────────────────────────────────────────────"
             printf "  │ 📚 %-42s" "$name"
-            if $STAGE1_CMD build-native "$f" -o "Examples/$name" --lib-path Stage1/stdlib --runtime-path Runtime/rockit_runtime.o --target-triple $TRIPLE > /tmp/sl_build_log 2>&1; then
-              output=$("Examples/$name" 2>&1) || true
+            if $STAGE1_CMD build-native "$f" -o "examples/$name" --lib-path self-hosted-rockit/stdlib --runtime-path runtime/rockit_runtime.o --target-triple $TRIPLE > /tmp/sl_build_log 2>&1; then
+              output=$("examples/$name" 2>&1) || true
               echo "✅ PASS"
               if [ -n "$output" ]; then
                 echo "$output" | while IFS= read -r line; do

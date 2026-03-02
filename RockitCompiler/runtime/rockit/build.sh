@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # Find the Stage 1 compiler
-COMMAND="$SCRIPT_DIR/../../Stage1/command"
+COMMAND="$SCRIPT_DIR/../../self-hosted-rockit/command"
 if [ ! -f "$COMMAND" ]; then
     echo "Error: Stage 1 compiler not found at $COMMAND"
     exit 1

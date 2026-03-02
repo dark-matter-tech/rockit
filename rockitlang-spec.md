@@ -102,14 +102,14 @@ Rockit releases bundle the compiler, Fuel, stdlib, and prebuilt runtime into a s
 
 **macOS / Linux (one-liner):**
 ```bash
-curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.sh | bash
 ```
 
 This installs the `rockit` binary to `/usr/local/bin` and the runtime to `/usr/local/share/rockit/`.
 
 **Windows (PowerShell):**
 ```powershell
-iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.ps1 | iex
 ```
 
 This installs to `%LOCALAPPDATA%\Rockit\bin` and adds it to your user PATH.
@@ -163,7 +163,7 @@ make install PREFIX=$HOME/.local
 
 # Verify
 rockit version
-rockit run Examples/hello.rok
+rockit run examples/hello.rok
 ```
 
 ### Custom Install Location
@@ -171,7 +171,7 @@ rockit run Examples/hello.rok
 ```bash
 # macOS / Linux
 export ROCKIT_PREFIX=$HOME/.rockit
-curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.sh | bash
 ```
 
 If the runtime is in a non-standard location:
@@ -1404,12 +1404,12 @@ Built-in benchmarking with history tracking and regression detection.
 
 ### Whole-file Benchmarks
 
-Any `.rok` file in `Benchmarks/` is treated as a benchmark:
+Any `.rok` file in `benchmarks/` is treated as a benchmark:
 
 ```bash
-rockit bench Benchmarks/bench_fib.rok         # single file
-rockit bench Benchmarks/                       # all benchmarks in directory
-rockit bench                                   # default: Benchmarks/ directory
+rockit bench benchmarks/bench_fib.rok         # single file
+rockit bench benchmarks/                       # all benchmarks in directory
+rockit bench                                   # default: benchmarks/ directory
 ```
 
 ### @Benchmark Annotated Functions
