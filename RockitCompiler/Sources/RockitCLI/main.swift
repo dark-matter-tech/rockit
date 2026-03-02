@@ -1887,7 +1887,17 @@ func findStdlibDir() -> String? {
     if fm.fileExists(atPath: Platform.pathJoin(cwdStdlib, "rockit")) { return cwdStdlib }
 
     // Try relative to the executable (installed: share/rockit/stdlib)
-    let execPath = CommandLine.arguments[0]
+    var execPath = CommandLine.arguments[0]
+    if !execPath.contains("/"),
+       let pathEnv = ProcessInfo.processInfo.environment["PATH"] {
+        for dir in pathEnv.split(separator: ":") {
+            let candidate = "\(dir)/\(execPath)"
+            if fm.isExecutableFile(atPath: candidate) {
+                execPath = candidate
+                break
+            }
+        }
+    }
     let execDir = (execPath as NSString).deletingLastPathComponent
     let installedStdlib = Platform.pathJoin(execDir, "..", "share", "rockit", "stdlib")
     if fm.fileExists(atPath: Platform.pathJoin(installedStdlib, "rockit")) { return installedStdlib }

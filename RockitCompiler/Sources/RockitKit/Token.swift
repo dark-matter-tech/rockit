@@ -67,7 +67,7 @@ public enum TokenKind: Equatable {
     case kwTypealias                      // typealias
     case kwVararg                         // vararg
 
-    // MARK: - Keywords — Moon-Specific
+    // MARK: - Keywords — Rockit-Specific
 
     case kwView                           // view
     case kwActor                          // actor
