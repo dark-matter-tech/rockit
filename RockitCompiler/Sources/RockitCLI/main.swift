@@ -707,7 +707,7 @@ func initCommand(name: String) {
 
         // tests/test_main.rok
         let testRok = """
-        import rockit.test.probe
+        import rockit.testing.probe
 
         // Top-level @Test functions
         @Test

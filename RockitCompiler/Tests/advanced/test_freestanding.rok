@@ -1,5 +1,5 @@
 // test_freestanding.rok — Freestanding mode test (--no-runtime)
-// Cannot use import rockit.test.probe — no runtime available
+// Cannot use import rockit.testing.probe — no runtime available
 // Run with: rockit run --no-runtime tests/advanced/test_freestanding.rok
 
 extern fun puts(str: Ptr<Int>): Int

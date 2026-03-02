@@ -1,4 +1,4 @@
-import rockit.test.probe
+import rockit.testing.probe
 
 @Test
 fun testFloatComparison() {

@@ -151,7 +151,7 @@ navigation AppRouter {
 
 ## Standard Library
 
-15 modules ship with Rockit in the [launchpad](https://github.com/dark-matter-tech/launchpad) repo. Import with `import rockit.<module>`.
+15 modules ship with Rockit in the [launchpad](https://github.com/dark-matter-tech/launchpad) repo. Import with `import rockit.<domain>.<module>`.
 
 | Module | Import | Description |
 |--------|--------|-------------|
@@ -159,22 +159,22 @@ navigation AppRouter {
 | Math | `import rockit.core.math` | Integer/float math, trig, gcd, lcm, constants |
 | Strings | `import rockit.core.strings` | Pad, repeat, join, split, replace, truncate |
 | Result | `import rockit.core.result` | Result type (Success/Failure) for error handling |
-| UUID | `import rockit.core.uuid` | UUID v4 random generation |
-| File I/O | `import rockit.io.file` | Read, write, exists, delete files |
-| Path | `import rockit.io.path` | Join, dir, base, ext, normalize paths |
-| HTTP | `import rockit.net.http` | HTTP/1.1 client (GET/POST/PUT/DELETE, HTTPS via curl) |
-| WebSocket | `import rockit.net.ws` | WebSocket client (RFC 6455) |
-| URL | `import rockit.net.url` | URL parsing, encoding, query parameters |
-| Base64 | `import rockit.encoding.base64` | Base64 encode/decode |
-| XML | `import rockit.encoding.xml` | XML parsing and generation |
-| DateTime | `import rockit.time.datetime` | Date/time, formatting, epoch conversion |
-| JSON | `import rockit.json` | JSON parse, stringify, pretty-print |
-| Probe | `import rockit.test.probe` | Test assertions for `@Test` annotated functions |
+| UUID | `import rockit.core.uuid` | UUID v4 random generation (RFC 9562) |
+| File I/O | `import rockit.filesystem.file` | Read, write, exists, delete files |
+| Path | `import rockit.filesystem.path` | Join, dir, base, ext, normalize paths |
+| HTTP | `import rockit.networking.http` | HTTP/1.1 client (RFC 9110, HTTPS via curl) |
+| WebSocket | `import rockit.networking.websocket` | WebSocket client (RFC 6455) |
+| URL | `import rockit.networking.url` | URL parsing, encoding, query parameters (RFC 3986) |
+| Base64 | `import rockit.encoding.base64` | Base64 encode/decode (RFC 4648) |
+| XML | `import rockit.encoding.xml` | XML parsing and generation (W3C XML 1.0) |
+| DateTime | `import rockit.time.datetime` | Date/time, formatting, epoch conversion (ISO 8601) |
+| JSON | `import rockit.encoding.json` | JSON parse, stringify, pretty-print (RFC 8259) |
+| Probe | `import rockit.testing.probe` | Test assertions for `@Test` annotated functions |
 
 ```kotlin
-import rockit.json
-import rockit.net.http
-import rockit.test.probe
+import rockit.encoding.json
+import rockit.networking.http
+import rockit.testing.probe
 
 // JSON
 val obj = jsonParse("{\"name\": \"Rockit\"}")

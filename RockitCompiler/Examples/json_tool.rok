@@ -1,4 +1,4 @@
-import rockit.json
+import rockit.encoding.json
 
 fun printUsage(): Unit {
     println("Usage: json_tool <file> [command]")

@@ -1,10 +1,10 @@
 // test_stdlib_http.rok — Integration test for stdlib Foundation modules
-import rockit.net.http
-import rockit.net.url
+import rockit.networking.http
+import rockit.networking.url
 import rockit.encoding.base64
 import rockit.time.datetime
 import rockit.core.uuid
-import rockit.io.path
+import rockit.filesystem.path
 
 fun check(label: String, ok: Bool): Unit {
     if (ok) {

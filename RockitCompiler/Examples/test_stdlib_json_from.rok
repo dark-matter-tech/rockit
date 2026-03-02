@@ -1,4 +1,4 @@
-import rockit.json
+import rockit.encoding.json
 
 var passed: Int = 0
 var failed: Int = 0

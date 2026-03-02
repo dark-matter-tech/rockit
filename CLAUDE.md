@@ -179,21 +179,21 @@ RockitCompiler/
 │   ├── command                      # Stage 1 native binary
 │   └── stdlib/                      # Standard library submodule (dark-matter-tech/launchpad, 15 modules)
 │       └── rockit/                  # 15 stdlib modules (from launchpad submodule)
-│           ├── core/collections.rok # List map/filter/fold/sort/zip/flatten
-│           ├── core/math.rok        # Integer & float math, trig, constants
-│           ├── core/strings.rok     # pad, repeat, join, split, replace
-│           ├── core/result.rok      # Result type (Success/Failure)
-│           ├── core/uuid.rok        # UUID v4 generation
-│           ├── io/file.rok          # File I/O wrappers
-│           ├── io/path.rok          # Path join/dir/base/ext/normalize
-│           ├── net/http.rok         # HTTP/1.1 client (TCP + curl HTTPS)
-│           ├── net/ws.rok           # WebSocket client (RFC 6455)
-│           ├── net/url.rok          # URL parser and encoder
-│           ├── encoding/base64.rok  # Base64 encode/decode
-│           ├── encoding/xml.rok     # XML parsing and generation
-│           ├── time/datetime.rok    # Date/time utilities
-│           ├── test/probe.rok       # Probe test framework (assertions)
-│           └── json.rok             # JSON encoder/decoder (parse, stringify, pretty-print)
+│           ├── core/collections.rok   # List map/filter/fold/sort/zip/flatten
+│           ├── core/math.rok          # Integer & float math, trig, constants
+│           ├── core/strings.rok       # pad, repeat, join, split, replace
+│           ├── core/result.rok        # Result type (Success/Failure)
+│           ├── core/uuid.rok          # UUID v4 generation
+│           ├── encoding/base64.rok    # Base64 encode/decode (RFC 4648)
+│           ├── encoding/json.rok      # JSON encoder/decoder (RFC 8259)
+│           ├── encoding/xml.rok       # XML parsing and generation (W3C XML 1.0)
+│           ├── filesystem/file.rok    # File I/O wrappers
+│           ├── filesystem/path.rok    # Path join/dir/base/ext/normalize
+│           ├── networking/http.rok    # HTTP/1.1 client (RFC 9110)
+│           ├── networking/url.rok     # URL parser and encoder (RFC 3986)
+│           ├── networking/websocket.rok # WebSocket client (RFC 6455)
+│           ├── testing/probe.rok      # Probe test framework (20+ assertions)
+│           └── time/datetime.rok      # Date/time utilities (ISO 8601)
 ├── Runtime/
 │   ├── rockit_runtime.c             # C runtime (ARC, task scheduler, event loop, actor wrappers)
 │   └── rockit/                      # Modular Rockit runtime (freestanding)
@@ -218,7 +218,7 @@ RockitKit is a standalone library so it can be imported by other tools (editor p
 
 ## Standard Library
 
-15 modules in `Stage1/stdlib/rockit/` (submodule from [dark-matter-tech/launchpad](https://github.com/dark-matter-tech/launchpad)). Import via dot-separated paths: `import rockit.json`, `import rockit.core.collections`.
+15 modules in `Stage1/stdlib/rockit/` (submodule from [dark-matter-tech/launchpad](https://github.com/dark-matter-tech/launchpad)). Import via dot-separated paths: `import rockit.encoding.json`, `import rockit.core.collections`.
 
 | Module | Import | Key Functions |
 |--------|--------|--------------|
@@ -227,16 +227,16 @@ RockitKit is a standalone library so it can be imported by other tools (editor p
 | Strings | `rockit.core.strings` | pad, repeat, join, split, reversed, replace, truncate |
 | Result | `rockit.core.result` | Success/Failure, resultOrElse, resultMap |
 | UUID | `rockit.core.uuid` | uuid4 |
-| File I/O | `rockit.io.file` | readFile, writeFile, readLines, exists, deleteFile |
-| Path | `rockit.io.path` | pathJoin, pathDir, pathBase, pathExt, pathNormalize |
-| HTTP | `rockit.net.http` | httpGet, httpPost, httpPut, httpDelete, httpRequest |
-| WebSocket | `rockit.net.ws` | wsConnect, wsSend, wsRecv, wsClose |
-| URL | `rockit.net.url` | urlParse, urlEncode, urlDecode, urlQueryParams |
+| File I/O | `rockit.filesystem.file` | readFile, writeFile, readLines, exists, deleteFile |
+| Path | `rockit.filesystem.path` | pathJoin, pathDir, pathBase, pathExt, pathNormalize |
+| HTTP | `rockit.networking.http` | httpGet, httpPost, httpPut, httpDelete, httpRequest |
+| WebSocket | `rockit.networking.websocket` | wsConnect, wsSend, wsRecv, wsClose |
+| URL | `rockit.networking.url` | urlParse, urlEncode, urlDecode, urlQueryParams |
 | Base64 | `rockit.encoding.base64` | base64Encode, base64Decode |
 | XML | `rockit.encoding.xml` | xmlParse, xmlStringify, xmlElement, xmlAttribute |
 | DateTime | `rockit.time.datetime` | now, dateFromEpoch, formatDate, dayOfWeek |
-| JSON | `rockit.json` | jsonParse, jsonStringify, jsonObject, jsonArray |
-| Probe | `rockit.test.probe` | 20 assertions: assertEquals, assertEqualsStr, assertEqualsBool, assertNotEquals, assertNotEqualsStr, assertTrue, assertFalse, assertGreaterThan, assertLessThan, assertGreaterThanOrEqual, assertLessThanOrEqual, assertBetween, assertStringContains, assertStartsWith, assertEndsWith, assertStringEmpty, assertStringNotEmpty, assertStringLength, assert, fail |
+| JSON | `rockit.encoding.json` | jsonParse, jsonStringify, jsonObject, jsonArray, jsonFrom |
+| Probe | `rockit.testing.probe` | 20+ assertions: assertEquals, assertEqualsStr, assertEqualsBool, assertNotEquals, assertNotEqualsStr, assertTrue, assertFalse, assertGreaterThan, assertLessThan, assertGreaterThanOrEqual, assertLessThanOrEqual, assertBetween, assertStringContains, assertStartsWith, assertEndsWith, assertStringEmpty, assertStringNotEmpty, assertStringLength, assert, fail |
 
 ### Key constraints for stdlib development
 

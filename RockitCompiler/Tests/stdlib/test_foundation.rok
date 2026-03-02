@@ -1,10 +1,10 @@
-import rockit.test.probe
-import rockit.net.http
-import rockit.net.url
+import rockit.testing.probe
+import rockit.networking.http
+import rockit.networking.url
 import rockit.encoding.base64
 import rockit.time.datetime
 import rockit.core.uuid
-import rockit.io.path
+import rockit.filesystem.path
 
 // --- Base64 ---
 @Test

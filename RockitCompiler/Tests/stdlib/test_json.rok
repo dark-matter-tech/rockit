@@ -1,5 +1,5 @@
-import rockit.test.probe
-import rockit.json
+import rockit.testing.probe
+import rockit.encoding.json
 
 // --- Constructors & Type Checks ---
 @Test
