@@ -15,3 +15,8 @@ RockitCompiler/Stage1/command_s3
 ide/intellij-rockit/.gradle/
 ide/intellij-rockit/.intellijPlatform/
 ide/intellij-rockit/build/
+__pycache__/
+RockitCompiler/Benchmarks/build/
+RockitCompiler/Stage1/command_backup*
+RockitCompiler/dist/
+RockitCompiler/--*
