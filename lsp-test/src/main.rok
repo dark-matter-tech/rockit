@@ -1,0 +1,111 @@
+// LSP Test File — exercises all 26 LSP features
+// Open this in IntelliJ to test the Rockit language server.
+
+// --- Classes & Interfaces (type hierarchy, go-to-impl, references) ---
+import something
+interface Animal {
+    fun speak(): String
+    fun name(): String
+}
+
+class Dog(val dogName: String) : Animal {
+    fun speak(): String {
+        return "Woof!"
+    }
+    fun name(): String {
+        return dogName
+    }
+}
+
+class Cat(val catName: String) : Animal {
+    fun speak(): String {
+        return "Meow!"
+    }
+    fun name(): String {
+        return catName
+    }
+}
+
+data class Point(val x: Int, val y: Int)
+
+// --- Functions (call hierarchy, signature help, hover) ---
+
+fun greet(who: String, times: Int): String {
+    var result: String = ""
+    var i: Int = 0
+    while (i < times) {
+        result = result + "Hello, " + who + "!\n"
+        i = i + 1
+    }
+    return result
+}
+
+fun add(a: Int, b: Int): Int {
+    return a + b
+}
+
+fun distance(p1: Point, p2: Point): Int {
+    val dx = p2.x - p1.x
+    val dy = p2.y - p1.y
+    return dx * dx + dy * dy
+}
+
+// --- Enum (semantic tokens, document symbols) ---
+
+enum class Color {
+    RED,
+    GREEN,
+    BLUE
+}
+
+fun colorName(c: Color): String {
+    return when (c) {
+        Color.RED -> "Red"
+        Color.GREEN -> "Green"
+        Color.BLUE -> "Blue"
+        else -> "Unknown"
+    }
+}
+
+// --- Main (inlay hints on val, code actions, formatting) ---
+
+fun main(): Unit {
+    val dog = Dog("Rusty")
+    val cat = Cat("Whiskers")
+
+    println(dog.speak())
+    println(cat.speak())
+
+    val message = greet("World", 3)
+    println(message)
+
+    val sum = add(10, 20)
+    println(sum)
+
+    val p1 = Point(0, 0)
+    val p2 = Point(3, 4)
+    val dist = distance(p1, p2)
+    println(dist)
+
+    println(colorName(Color.RED))
+
+    // Test string interpolation
+    val name = "Rockit"
+    println("Language: $name")
+    println("Sum is: ${add(5, 7)}")
+
+    // Test if/else
+    if (sum > 10) {
+        println("Big number")
+    } else {
+        println("Small number")
+    }
+
+    // Test for loop
+    var total: Int = 0
+    for (i in 1..10) {
+        total = total + i
+    }
+    println(total)
+
+}

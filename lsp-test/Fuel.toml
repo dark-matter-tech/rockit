@@ -1,0 +1,6 @@
+[package]
+name = lsp-test
+version = 0.1.0
+description = LSP feature testing project
+
+[dependencies]
