@@ -1,8 +1,13 @@
-// BuiltinFunctions.swift
+// BuiltinRegistry.swift
 // RockitKit — Rockit Language Compiler
 // Copyright © 2026 Dark Matter Tech. All rights reserved.
 
 import Foundation
+import CryptoKit
+import Security
+#if canImport(CommonCrypto)
+import CommonCrypto
+#endif
 
 // MARK: - Builtin Function Type
 
@@ -569,6 +574,7 @@ public final class BuiltinRegistry {
         registerNetworkBuiltins(heap: heap)
         registerTypeCheckBuiltins(heap: heap)
         registerCompilerBuiltins()
+        registerSecurityBuiltins()
     }
 
     // MARK: Type Check Builtins
@@ -1237,6 +1243,344 @@ public final class BuiltinRegistry {
             } catch {
                 throw VMError.userException(message: "fileWriteBytes: failed to write to '\(path)': \(error.localizedDescription)")
             }
+        }
+    }
+
+    // MARK: Security Builtins
+
+    private func registerSecurityBuiltins() {
+        // TLS builtins remain LLVM-only (require OpenSSL C library)
+        let tlsOnlyNames = [
+            "tlsCreateContext", "tlsCreateServerContext",
+            "tlsSetCertificate", "tlsSetPrivateKey", "tlsSetVerifyPeer", "tlsSetAlpn",
+            "tlsConnect", "tlsSend", "tlsRecv", "tlsClose",
+            "tlsGetAlpn", "tlsGetPeerCert",
+            "tlsListen", "tlsAccept",
+            "tlsLastError",
+        ]
+        for name in tlsOnlyNames {
+            register(name: name) { _ in
+                throw VMError.userException(
+                    message: "\(name) requires OpenSSL — use LLVM-compiled binary"
+                )
+            }
+        }
+
+        // X.509 certificate parsing via Security framework
+        registerX509Builtins()
+
+        // Crypto hashing — implemented via CryptoKit
+        register(name: "cryptoSha256") { args in
+            guard case .string(let input) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "cryptoSha256")
+            }
+            let data = Data(input.utf8)
+            let digest = SHA256.hash(data: data)
+            return .string(String(bytes: Array(digest), encoding: .isoLatin1) ?? "")
+        }
+
+        register(name: "cryptoSha1") { args in
+            guard case .string(let input) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "cryptoSha1")
+            }
+            let data = Data(input.utf8)
+            let digest = Insecure.SHA1.hash(data: data)
+            return .string(String(bytes: Array(digest), encoding: .isoLatin1) ?? "")
+        }
+
+        register(name: "cryptoSha512") { args in
+            guard case .string(let input) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "cryptoSha512")
+            }
+            let data = Data(input.utf8)
+            let digest = SHA512.hash(data: data)
+            return .string(String(bytes: Array(digest), encoding: .isoLatin1) ?? "")
+        }
+
+        register(name: "cryptoMd5") { args in
+            guard case .string(let input) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "cryptoMd5")
+            }
+            let data = Data(input.utf8)
+            let digest = Insecure.MD5.hash(data: data)
+            return .string(String(bytes: Array(digest), encoding: .isoLatin1) ?? "")
+        }
+
+        // HMAC
+        register(name: "cryptoHmacSha256") { args in
+            guard args.count >= 2,
+                  case .string(let key) = args[0],
+                  case .string(let msg) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, String", actual: "invalid args", operation: "cryptoHmacSha256")
+            }
+            let keyData = SymmetricKey(data: Data(key.utf8))
+            let mac = HMAC<SHA256>.authenticationCode(for: Data(msg.utf8), using: keyData)
+            return .string(String(bytes: Array(Data(mac)), encoding: .isoLatin1) ?? "")
+        }
+
+        register(name: "cryptoHmacSha1") { args in
+            guard args.count >= 2,
+                  case .string(let key) = args[0],
+                  case .string(let msg) = args[1] else {
+                throw VMError.typeMismatch(expected: "String, String", actual: "invalid args", operation: "cryptoHmacSha1")
+            }
+            let keyData = SymmetricKey(data: Data(key.utf8))
+            let mac = HMAC<Insecure.SHA1>.authenticationCode(for: Data(msg.utf8), using: keyData)
+            return .string(String(bytes: Array(Data(mac)), encoding: .isoLatin1) ?? "")
+        }
+
+        // Random bytes
+        register(name: "cryptoRandomBytes") { args in
+            guard case .int(let count) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "cryptoRandomBytes")
+            }
+            if count <= 0 { return .string("") }
+            var bytes = [UInt8](repeating: 0, count: Int(count))
+            _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+            return .string(String(bytes: bytes, encoding: .isoLatin1) ?? "")
+        }
+
+        // AES encrypt (mode 0=CBC, 1=GCM)
+        register(name: "cryptoAesEncrypt") { args in
+            guard args.count >= 4,
+                  case .string(let key) = args[0],
+                  case .string(let iv) = args[1],
+                  case .string(let plaintext) = args[2],
+                  case .int(let mode) = args[3] else {
+                throw VMError.typeMismatch(expected: "String, String, String, Int", actual: "invalid args", operation: "cryptoAesEncrypt")
+            }
+            let keyBytes = Array(key.unicodeScalars.map { UInt8($0.value & 0xFF) })
+            let ivBytes = Array(iv.unicodeScalars.map { UInt8($0.value & 0xFF) })
+            let ptBytes = Array(plaintext.unicodeScalars.map { UInt8($0.value & 0xFF) })
+
+            if mode == 1 {
+                // AES-GCM
+                let symmetricKey = SymmetricKey(data: keyBytes)
+                let nonce = try AES.GCM.Nonce(data: ivBytes)
+                let sealed = try AES.GCM.seal(Data(ptBytes), using: symmetricKey, nonce: nonce)
+                // Return ciphertext + tag (same as C implementation)
+                var result = Array(sealed.ciphertext)
+                result.append(contentsOf: sealed.tag)
+                return .string(String(bytes: result, encoding: .isoLatin1) ?? "")
+            } else {
+                // AES-CBC via CommonCrypto
+                let bufferSize = ptBytes.count + kCCBlockSizeAES128
+                var buffer = [UInt8](repeating: 0, count: bufferSize)
+                var numBytesEncrypted = 0
+                let status = CCCrypt(CCOperation(kCCEncrypt), CCAlgorithm(kCCAlgorithmAES),
+                                     CCOptions(kCCOptionPKCS7Padding),
+                                     keyBytes, keyBytes.count,
+                                     ivBytes,
+                                     ptBytes, ptBytes.count,
+                                     &buffer, bufferSize, &numBytesEncrypted)
+                guard status == kCCSuccess else { return .string("") }
+                return .string(String(bytes: Array(buffer[0..<numBytesEncrypted]), encoding: .isoLatin1) ?? "")
+            }
+        }
+
+        // AES decrypt (mode 0=CBC, 1=GCM)
+        register(name: "cryptoAesDecrypt") { args in
+            guard args.count >= 4,
+                  case .string(let key) = args[0],
+                  case .string(let iv) = args[1],
+                  case .string(let ciphertext) = args[2],
+                  case .int(let mode) = args[3] else {
+                throw VMError.typeMismatch(expected: "String, String, String, Int", actual: "invalid args", operation: "cryptoAesDecrypt")
+            }
+            let keyBytes = Array(key.unicodeScalars.map { UInt8($0.value & 0xFF) })
+            let ivBytes = Array(iv.unicodeScalars.map { UInt8($0.value & 0xFF) })
+            let ctBytes = Array(ciphertext.unicodeScalars.map { UInt8($0.value & 0xFF) })
+
+            if mode == 1 {
+                // AES-GCM: last 16 bytes are tag
+                guard ctBytes.count >= 16 else { return .string("") }
+                let cipherLen = ctBytes.count - 16
+                let ct = Array(ctBytes[0..<cipherLen])
+                let tag = Array(ctBytes[cipherLen...])
+                let symmetricKey = SymmetricKey(data: keyBytes)
+                let nonce = try AES.GCM.Nonce(data: ivBytes)
+                let sealedBox = try AES.GCM.SealedBox(nonce: nonce, ciphertext: Data(ct), tag: Data(tag))
+                let decrypted = try AES.GCM.open(sealedBox, using: symmetricKey)
+                return .string(String(bytes: Array(decrypted), encoding: .isoLatin1) ?? "")
+            } else {
+                // AES-CBC via CommonCrypto
+                let bufferSize = ctBytes.count + kCCBlockSizeAES128
+                var buffer = [UInt8](repeating: 0, count: bufferSize)
+                var numBytesDecrypted = 0
+                let status = CCCrypt(CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES),
+                                     CCOptions(kCCOptionPKCS7Padding),
+                                     keyBytes, keyBytes.count,
+                                     ivBytes,
+                                     ctBytes, ctBytes.count,
+                                     &buffer, bufferSize, &numBytesDecrypted)
+                guard status == kCCSuccess else { return .string("") }
+                return .string(String(bytes: Array(buffer[0..<numBytesDecrypted]), encoding: .isoLatin1) ?? "")
+            }
+        }
+    }
+
+    // MARK: - X.509 Certificate Builtins (Security framework)
+
+    /// Handle table for parsed certificates
+    private static var x509Handles: [Int: SecCertificate] = [:]
+    private static var x509NextHandle: Int = 0
+    /// Store raw PEM data for fields Security framework can't extract directly
+    private static var x509PemData: [Int: Data] = [:]
+
+    private func registerX509Builtins() {
+
+        // x509ParsePem(pemData: String) -> Int (handle, or -1 on error)
+        register(name: "x509ParsePem") { args in
+            guard case .string(let pemString) = args.first else {
+                throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "x509ParsePem")
+            }
+            // Strip PEM headers and decode base64
+            let lines = pemString.components(separatedBy: "\n")
+            var base64 = ""
+            var inBlock = false
+            for line in lines {
+                if line.hasPrefix("-----BEGIN") { inBlock = true; continue }
+                if line.hasPrefix("-----END") { break }
+                if inBlock { base64 += line.trimmingCharacters(in: .whitespaces) }
+            }
+            guard let derData = Data(base64Encoded: base64) else {
+                return .int(-1)
+            }
+            guard let cert = SecCertificateCreateWithData(nil, derData as CFData) else {
+                return .int(-1)
+            }
+            let handle = BuiltinRegistry.x509NextHandle
+            BuiltinRegistry.x509NextHandle += 1
+            BuiltinRegistry.x509Handles[handle] = cert
+            BuiltinRegistry.x509PemData[handle] = derData
+            return .int(Int64(handle))
+        }
+
+        // x509Subject(handle: Int) -> String
+        register(name: "x509Subject") { args in
+            guard case .int(let h) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509Subject")
+            }
+            guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .string("") }
+            #if os(macOS)
+            // Use SecCertificateCopyValues on macOS for subject
+            if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1SubjectName] as CFArray, nil) as? [String: Any],
+               let subjectEntry = values[kSecOIDX509V1SubjectName as String] as? [String: Any],
+               let subjectValue = subjectEntry[kSecPropertyKeyValue as String] {
+                // subjectValue is an array of label/value pairs
+                if let pairs = subjectValue as? [[String: Any]] {
+                    let parts = pairs.compactMap { pair -> String? in
+                        guard let label = pair[kSecPropertyKeyLabel as String] as? String,
+                              let value = pair[kSecPropertyKeyValue as String] as? String else { return nil }
+                        return "\(label)=\(value)"
+                    }
+                    return .string(parts.joined(separator: ", "))
+                }
+            }
+            // Fallback to summary
+            let summary = SecCertificateCopySubjectSummary(cert) as String? ?? ""
+            return .string("CN=\(summary)")
+            #else
+            let summary = SecCertificateCopySubjectSummary(cert) as String? ?? ""
+            return .string("CN=\(summary)")
+            #endif
+        }
+
+        // x509Issuer(handle: Int) -> String
+        register(name: "x509Issuer") { args in
+            guard case .int(let h) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509Issuer")
+            }
+            guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .string("") }
+            #if os(macOS)
+            if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1IssuerName] as CFArray, nil) as? [String: Any],
+               let issuerEntry = values[kSecOIDX509V1IssuerName as String] as? [String: Any],
+               let issuerValue = issuerEntry[kSecPropertyKeyValue as String] {
+                if let pairs = issuerValue as? [[String: Any]] {
+                    let parts = pairs.compactMap { pair -> String? in
+                        guard let label = pair[kSecPropertyKeyLabel as String] as? String,
+                              let value = pair[kSecPropertyKeyValue as String] as? String else { return nil }
+                        return "\(label)=\(value)"
+                    }
+                    return .string(parts.joined(separator: ", "))
+                }
+            }
+            // Self-signed fallback: issuer = subject
+            let summary = SecCertificateCopySubjectSummary(cert) as String? ?? ""
+            return .string("CN=\(summary)")
+            #else
+            let summary = SecCertificateCopySubjectSummary(cert) as String? ?? ""
+            return .string("CN=\(summary)")
+            #endif
+        }
+
+        // x509NotBefore(handle: Int) -> Int (epoch seconds)
+        register(name: "x509NotBefore") { args in
+            guard case .int(let h) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509NotBefore")
+            }
+            guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .int(0) }
+            #if os(macOS)
+            if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1ValidityNotBefore] as CFArray, nil) as? [String: Any],
+               let entry = values[kSecOIDX509V1ValidityNotBefore as String] as? [String: Any],
+               let number = entry[kSecPropertyKeyValue as String] as? NSNumber {
+                // Value is CFAbsoluteTime (seconds since 2001-01-01)
+                let cfAbsTime = number.doubleValue
+                // Convert to Unix epoch: add seconds between 1970-01-01 and 2001-01-01
+                let epoch = Int64(cfAbsTime + 978307200)
+                return .int(epoch)
+            }
+            #endif
+            return .int(0)
+        }
+
+        // x509NotAfter(handle: Int) -> Int (epoch seconds)
+        register(name: "x509NotAfter") { args in
+            guard case .int(let h) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509NotAfter")
+            }
+            guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .int(0) }
+            #if os(macOS)
+            if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1ValidityNotAfter] as CFArray, nil) as? [String: Any],
+               let entry = values[kSecOIDX509V1ValidityNotAfter as String] as? [String: Any],
+               let number = entry[kSecPropertyKeyValue as String] as? NSNumber {
+                let cfAbsTime = number.doubleValue
+                let epoch = Int64(cfAbsTime + 978307200)
+                return .int(epoch)
+            }
+            #endif
+            return .int(0)
+        }
+
+        // x509SerialNumber(handle: Int) -> String (hex)
+        register(name: "x509SerialNumber") { args in
+            guard case .int(let h) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509SerialNumber")
+            }
+            guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .string("") }
+            #if os(macOS)
+            if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1SerialNumber] as CFArray, nil) as? [String: Any],
+               let entry = values[kSecOIDX509V1SerialNumber as String] as? [String: Any],
+               let serialStr = entry[kSecPropertyKeyValue as String] as? String {
+                return .string(serialStr)
+            }
+            #endif
+            // Fallback: use SecCertificateCopySerialNumberData
+            if let serialData = SecCertificateCopySerialNumberData(cert, nil) as Data? {
+                let hex = serialData.map { String(format: "%02X", $0) }.joined()
+                return .string(hex)
+            }
+            return .string("")
+        }
+
+        // x509Free(handle: Int) -> Unit
+        register(name: "x509Free") { args in
+            guard case .int(let h) = args.first else {
+                throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509Free")
+            }
+            BuiltinRegistry.x509Handles.removeValue(forKey: Int(h))
+            BuiltinRegistry.x509PemData.removeValue(forKey: Int(h))
+            return .null
         }
     }
 }

@@ -241,4 +241,55 @@ double toFloat(int64_t value);
 void listSetFloat(RockitList* list, int64_t index, double value);
 double listGetFloat(RockitList* list, int64_t index);
 
+// ── OpenSSL: TLS, Crypto, X.509 ────────────────────────────────────────────
+
+// TLS context
+int64_t tlsCreateContext(void);
+int64_t tlsCreateServerContext(void);
+int64_t tlsSetCertificate(int64_t ctx, const char *path);
+int64_t tlsSetPrivateKey(int64_t ctx, const char *path);
+void    tlsSetVerifyPeer(int64_t ctx, int64_t verify);
+int64_t tlsSetAlpn(int64_t ctx, const char *protos);
+
+// TLS connection
+int64_t      tlsConnect(int64_t ctx, const char *host, int64_t port);
+int64_t      tlsSend(int64_t conn, const char *data);
+RockitString* tlsRecv(int64_t conn, int64_t maxBytes);
+void         tlsClose(int64_t conn);
+RockitString* tlsGetAlpn(int64_t conn);
+int64_t      tlsGetPeerCert(int64_t conn);
+
+// TLS server
+int64_t tlsListen(int64_t ctx, int64_t port);
+int64_t tlsAccept(int64_t ctx, int64_t serverFd);
+
+// Crypto hashing
+RockitString* cryptoSha256(const char *data);
+RockitString* cryptoSha1(const char *data);
+RockitString* cryptoSha512(const char *data);
+RockitString* cryptoMd5(const char *data);
+
+// Crypto HMAC
+RockitString* cryptoHmacSha256(const char *key, const char *data);
+RockitString* cryptoHmacSha1(const char *key, const char *data);
+
+// Crypto random
+RockitString* cryptoRandomBytes(int64_t count);
+
+// Crypto AES
+RockitString* cryptoAesEncrypt(const char *key, const char *iv, const char *data, int64_t mode);
+RockitString* cryptoAesDecrypt(const char *key, const char *iv, const char *data, int64_t mode);
+
+// X.509
+int64_t      x509ParsePem(const char *pemData);
+RockitString* x509Subject(int64_t handle);
+RockitString* x509Issuer(int64_t handle);
+int64_t      x509NotBefore(int64_t handle);
+int64_t      x509NotAfter(int64_t handle);
+RockitString* x509SerialNumber(int64_t handle);
+void         x509Free(int64_t handle);
+
+// Error reporting
+RockitString* tlsLastError(void);
+
 #endif // ROCKIT_RUNTIME_H

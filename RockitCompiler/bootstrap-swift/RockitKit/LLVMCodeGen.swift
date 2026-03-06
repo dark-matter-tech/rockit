@@ -555,6 +555,41 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare i64 @tcpSend(i64, ptr)")
         externalDecls.insert("declare ptr @tcpRecv(i64, i64)")
         externalDecls.insert("declare void @tcpClose(i64)")
+        // TLS
+        externalDecls.insert("declare i64 @tlsCreateContext()")
+        externalDecls.insert("declare i64 @tlsCreateServerContext()")
+        externalDecls.insert("declare i64 @tlsSetCertificate(i64, ptr)")
+        externalDecls.insert("declare i64 @tlsSetPrivateKey(i64, ptr)")
+        externalDecls.insert("declare void @tlsSetVerifyPeer(i64, i64)")
+        externalDecls.insert("declare i64 @tlsSetAlpn(i64, ptr)")
+        externalDecls.insert("declare i64 @tlsConnect(i64, ptr, i64)")
+        externalDecls.insert("declare i64 @tlsSend(i64, ptr)")
+        externalDecls.insert("declare ptr @tlsRecv(i64, i64)")
+        externalDecls.insert("declare void @tlsClose(i64)")
+        externalDecls.insert("declare ptr @tlsGetAlpn(i64)")
+        externalDecls.insert("declare i64 @tlsGetPeerCert(i64)")
+        externalDecls.insert("declare i64 @tlsListen(i64, i64)")
+        externalDecls.insert("declare i64 @tlsAccept(i64, i64)")
+        // Crypto
+        externalDecls.insert("declare ptr @cryptoSha256(ptr)")
+        externalDecls.insert("declare ptr @cryptoSha1(ptr)")
+        externalDecls.insert("declare ptr @cryptoSha512(ptr)")
+        externalDecls.insert("declare ptr @cryptoMd5(ptr)")
+        externalDecls.insert("declare ptr @cryptoHmacSha256(ptr, ptr)")
+        externalDecls.insert("declare ptr @cryptoHmacSha1(ptr, ptr)")
+        externalDecls.insert("declare ptr @cryptoRandomBytes(i64)")
+        externalDecls.insert("declare ptr @cryptoAesEncrypt(ptr, ptr, ptr, i64)")
+        externalDecls.insert("declare ptr @cryptoAesDecrypt(ptr, ptr, ptr, i64)")
+        // X.509
+        externalDecls.insert("declare i64 @x509ParsePem(ptr)")
+        externalDecls.insert("declare ptr @x509Subject(i64)")
+        externalDecls.insert("declare ptr @x509Issuer(i64)")
+        externalDecls.insert("declare i64 @x509NotBefore(i64)")
+        externalDecls.insert("declare i64 @x509NotAfter(i64)")
+        externalDecls.insert("declare ptr @x509SerialNumber(i64)")
+        externalDecls.insert("declare void @x509Free(i64)")
+        // TLS error
+        externalDecls.insert("declare ptr @tlsLastError()")
         // Time
         externalDecls.insert("declare i64 @currentTimeMillis()")
         externalDecls.insert("declare void @sleepMillis(i64)")
@@ -4754,7 +4789,15 @@ extension LLVMCodeGen {
             runtimeObjPath = Platform.tempFilePath("rockit_runtime" + Platform.objectFileExtension)
             let compileRuntime = Process()
             compileRuntime.executableURL = URL(fileURLWithPath: clangPath)
-            compileRuntime.arguments = ["-c", "-O2", "-I", runtimeDir, runtimeSrcPath, "-o", runtimeObjPath]
+            var compileArgs = ["-c", "-O2", "-I", runtimeDir, runtimeSrcPath, "-o", runtimeObjPath]
+            #if os(macOS) || os(iOS)
+            // Homebrew OpenSSL include path
+            let brewOpenSSLInclude = "/opt/homebrew/opt/openssl@3/include"
+            if FileManager.default.fileExists(atPath: brewOpenSSLInclude) {
+                compileArgs += ["-I", brewOpenSSLInclude]
+            }
+            #endif
+            compileRuntime.arguments = compileArgs
             try compileRuntime.run()
             compileRuntime.waitUntilExit()
             guard compileRuntime.terminationStatus == 0 else {
@@ -4769,6 +4812,14 @@ extension LLVMCodeGen {
         let link = Process()
         link.executableURL = URL(fileURLWithPath: clangPath)
         var linkArgs = ["-O2", llPath, runtimeObjPath, "-o", finalOutputPath]
+        // OpenSSL libraries
+        linkArgs += ["-lssl", "-lcrypto"]
+        #if os(macOS) || os(iOS)
+        let brewOpenSSLLib = "/opt/homebrew/opt/openssl@3/lib"
+        if FileManager.default.fileExists(atPath: brewOpenSSLLib) {
+            linkArgs += ["-L", brewOpenSSLLib]
+        }
+        #endif
         #if os(Linux)
         linkArgs += ["-lm"]  // Linux requires explicit libm for math functions
         #endif

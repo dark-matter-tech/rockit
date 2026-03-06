@@ -1588,3 +1588,499 @@ RockitString *tcpRecv(int64_t fd, int64_t maxBytes) {
 void tcpClose(int64_t fd) {
     close((int)fd);
 }
+
+// ── OpenSSL: TLS, Crypto, X.509 Builtins ────────────────────────────────────
+
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/rand.h>
+#include <openssl/pem.h>
+#include <openssl/x509.h>
+
+// Handle tables
+static SSL_CTX* tls_ctx_table[256] = {0};
+static SSL*     tls_ssl_table[1024] = {0};
+static int      tls_fd_table[1024] = {0};
+static X509*    tls_x509_table[256] = {0};
+static int      tls_initialized = 0;
+
+static void tls_ensure_init(void) {
+    if (!tls_initialized) {
+        SSL_library_init();
+        SSL_load_error_strings();
+        OpenSSL_add_all_algorithms();
+        tls_initialized = 1;
+    }
+}
+
+// Helper: extract chars/len from Rockit string pointer
+static void rockit_str_extract(const char *str, char **out_chars, int64_t *out_len) {
+    int64_t *hdr = (int64_t *)str;
+    *out_len = hdr[1];
+    *out_chars = (char *)hdr[2];
+}
+
+// Helper: build a RockitString from raw bytes (handles embedded nulls)
+static RockitString* rockit_string_from_bytes(const unsigned char *data, int64_t len) {
+    RockitString *s = string_alloc(len);
+    s->refCount = 1;
+    s->length = len;
+    s->base = NULL;
+    s->capacity = (len <= POOL_MAX_LEN) ? POOL_MAX_LEN : len;
+    memcpy(s->data, data, len);
+    s->data[len] = '\0';
+    s->chars = s->data;
+    return s;
+}
+
+// ── TLS Context Management ──────────────────────────────────────────────────
+
+int64_t tlsCreateContext(void) {
+    tls_ensure_init();
+    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+    if (!ctx) return -1;
+    SSL_CTX_set_default_verify_paths(ctx);
+    for (int i = 0; i < 256; i++) {
+        if (!tls_ctx_table[i]) {
+            tls_ctx_table[i] = ctx;
+            return (int64_t)i;
+        }
+    }
+    SSL_CTX_free(ctx);
+    return -1;
+}
+
+int64_t tlsCreateServerContext(void) {
+    tls_ensure_init();
+    SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
+    if (!ctx) return -1;
+    for (int i = 0; i < 256; i++) {
+        if (!tls_ctx_table[i]) {
+            tls_ctx_table[i] = ctx;
+            return (int64_t)i;
+        }
+    }
+    SSL_CTX_free(ctx);
+    return -1;
+}
+
+int64_t tlsSetCertificate(int64_t ctx_id, const char *path_str) {
+    if (ctx_id < 0 || ctx_id >= 256 || !tls_ctx_table[ctx_id]) return -1;
+    char *chars; int64_t len;
+    rockit_str_extract(path_str, &chars, &len);
+    char pathbuf[1024];
+    if (len >= 1024) len = 1023;
+    memcpy(pathbuf, chars, len);
+    pathbuf[len] = '\0';
+    return SSL_CTX_use_certificate_file(tls_ctx_table[ctx_id], pathbuf, SSL_FILETYPE_PEM) == 1 ? 0 : -1;
+}
+
+int64_t tlsSetPrivateKey(int64_t ctx_id, const char *path_str) {
+    if (ctx_id < 0 || ctx_id >= 256 || !tls_ctx_table[ctx_id]) return -1;
+    char *chars; int64_t len;
+    rockit_str_extract(path_str, &chars, &len);
+    char pathbuf[1024];
+    if (len >= 1024) len = 1023;
+    memcpy(pathbuf, chars, len);
+    pathbuf[len] = '\0';
+    return SSL_CTX_use_PrivateKey_file(tls_ctx_table[ctx_id], pathbuf, SSL_FILETYPE_PEM) == 1 ? 0 : -1;
+}
+
+void tlsSetVerifyPeer(int64_t ctx_id, int64_t verify) {
+    if (ctx_id < 0 || ctx_id >= 256 || !tls_ctx_table[ctx_id]) return;
+    SSL_CTX_set_verify(tls_ctx_table[ctx_id],
+                       verify ? SSL_VERIFY_PEER : SSL_VERIFY_NONE, NULL);
+}
+
+int64_t tlsSetAlpn(int64_t ctx_id, const char *protos_str) {
+    if (ctx_id < 0 || ctx_id >= 256 || !tls_ctx_table[ctx_id]) return -1;
+    char *chars; int64_t len;
+    rockit_str_extract(protos_str, &chars, &len);
+    // protos_str is already in wire format: length-prefixed protocol names
+    return SSL_CTX_set_alpn_protos(tls_ctx_table[ctx_id],
+                                   (const unsigned char *)chars, (unsigned int)len) == 0 ? 0 : -1;
+}
+
+// ── TLS Connection ──────────────────────────────────────────────────────────
+
+int64_t tlsConnect(int64_t ctx_id, const char *host_str, int64_t port) {
+    if (ctx_id < 0 || ctx_id >= 256 || !tls_ctx_table[ctx_id]) return -1;
+    char *chars; int64_t len;
+    rockit_str_extract(host_str, &chars, &len);
+
+    char hostname[256];
+    if (len >= 256) len = 255;
+    memcpy(hostname, chars, len);
+    hostname[len] = '\0';
+
+    // TCP connect (reuse the same pattern as tcpConnect)
+    char portstr[16];
+    snprintf(portstr, sizeof(portstr), "%d", (int)port);
+    struct addrinfo hints = {0}, *res;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo(hostname, portstr, &hints, &res) != 0) return -1;
+
+    int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (fd < 0) { freeaddrinfo(res); return -1; }
+    if (connect(fd, res->ai_addr, res->ai_addrlen) < 0) {
+        close(fd); freeaddrinfo(res); return -1;
+    }
+    freeaddrinfo(res);
+
+    // SSL handshake
+    SSL *ssl = SSL_new(tls_ctx_table[ctx_id]);
+    if (!ssl) { close(fd); return -1; }
+    SSL_set_fd(ssl, fd);
+    SSL_set_tlsext_host_name(ssl, hostname);
+
+    if (SSL_connect(ssl) != 1) {
+        SSL_free(ssl); close(fd); return -1;
+    }
+
+    // Store in table
+    for (int i = 0; i < 1024; i++) {
+        if (!tls_ssl_table[i]) {
+            tls_ssl_table[i] = ssl;
+            tls_fd_table[i] = fd;
+            return (int64_t)i;
+        }
+    }
+    SSL_shutdown(ssl); SSL_free(ssl); close(fd);
+    return -1;
+}
+
+int64_t tlsSend(int64_t conn_id, const char *data_str) {
+    if (conn_id < 0 || conn_id >= 1024 || !tls_ssl_table[conn_id]) return -1;
+    char *chars; int64_t len;
+    rockit_str_extract(data_str, &chars, &len);
+    int n = SSL_write(tls_ssl_table[conn_id], chars, (int)len);
+    return (int64_t)n;
+}
+
+RockitString* tlsRecv(int64_t conn_id, int64_t maxBytes) {
+    if (conn_id < 0 || conn_id >= 1024 || !tls_ssl_table[conn_id])
+        return rockit_string_new("");
+    char *buf = malloc(maxBytes + 1);
+    if (!buf) return rockit_string_new("");
+    int n = SSL_read(tls_ssl_table[conn_id], buf, (int)maxBytes);
+    if (n <= 0) { free(buf); return rockit_string_new(""); }
+    RockitString *result = rockit_string_from_bytes((unsigned char *)buf, n);
+    free(buf);
+    return result;
+}
+
+void tlsClose(int64_t conn_id) {
+    if (conn_id < 0 || conn_id >= 1024 || !tls_ssl_table[conn_id]) return;
+    SSL_shutdown(tls_ssl_table[conn_id]);
+    SSL_free(tls_ssl_table[conn_id]);
+    close(tls_fd_table[conn_id]);
+    tls_ssl_table[conn_id] = NULL;
+    tls_fd_table[conn_id] = 0;
+}
+
+RockitString* tlsGetAlpn(int64_t conn_id) {
+    if (conn_id < 0 || conn_id >= 1024 || !tls_ssl_table[conn_id])
+        return rockit_string_new("");
+    const unsigned char *proto = NULL;
+    unsigned int proto_len = 0;
+    SSL_get0_alpn_selected(tls_ssl_table[conn_id], &proto, &proto_len);
+    if (!proto || proto_len == 0) return rockit_string_new("");
+    return rockit_string_from_bytes(proto, (int64_t)proto_len);
+}
+
+int64_t tlsGetPeerCert(int64_t conn_id) {
+    if (conn_id < 0 || conn_id >= 1024 || !tls_ssl_table[conn_id]) return -1;
+    X509 *cert = SSL_get1_peer_certificate(tls_ssl_table[conn_id]);
+    if (!cert) return -1;
+    for (int i = 0; i < 256; i++) {
+        if (!tls_x509_table[i]) {
+            tls_x509_table[i] = cert;
+            return (int64_t)i;
+        }
+    }
+    X509_free(cert);
+    return -1;
+}
+
+// ── TLS Server ──────────────────────────────────────────────────────────────
+
+int64_t tlsListen(int64_t ctx_id, int64_t port) {
+    if (ctx_id < 0 || ctx_id >= 256 || !tls_ctx_table[ctx_id]) return -1;
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return -1;
+    int opt = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((uint16_t)port);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) { close(fd); return -1; }
+    if (listen(fd, 128) < 0) { close(fd); return -1; }
+    return (int64_t)fd;
+}
+
+int64_t tlsAccept(int64_t ctx_id, int64_t server_fd) {
+    if (ctx_id < 0 || ctx_id >= 256 || !tls_ctx_table[ctx_id]) return -1;
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    int client_fd = accept((int)server_fd, (struct sockaddr *)&client_addr, &client_len);
+    if (client_fd < 0) return -1;
+
+    SSL *ssl = SSL_new(tls_ctx_table[ctx_id]);
+    if (!ssl) { close(client_fd); return -1; }
+    SSL_set_fd(ssl, client_fd);
+
+    if (SSL_accept(ssl) != 1) {
+        SSL_free(ssl); close(client_fd); return -1;
+    }
+
+    for (int i = 0; i < 1024; i++) {
+        if (!tls_ssl_table[i]) {
+            tls_ssl_table[i] = ssl;
+            tls_fd_table[i] = client_fd;
+            return (int64_t)i;
+        }
+    }
+    SSL_shutdown(ssl); SSL_free(ssl); close(client_fd);
+    return -1;
+}
+
+// ── Crypto: Hashing ─────────────────────────────────────────────────────────
+
+static RockitString* crypto_digest(const char *data_str, const EVP_MD *md) {
+    char *chars; int64_t len;
+    rockit_str_extract(data_str, &chars, &len);
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int hash_len = 0;
+    EVP_Digest(chars, (size_t)len, hash, &hash_len, md, NULL);
+    return rockit_string_from_bytes(hash, (int64_t)hash_len);
+}
+
+RockitString* cryptoSha256(const char *data_str) {
+    return crypto_digest(data_str, EVP_sha256());
+}
+
+RockitString* cryptoSha1(const char *data_str) {
+    return crypto_digest(data_str, EVP_sha1());
+}
+
+RockitString* cryptoSha512(const char *data_str) {
+    return crypto_digest(data_str, EVP_sha512());
+}
+
+RockitString* cryptoMd5(const char *data_str) {
+    return crypto_digest(data_str, EVP_md5());
+}
+
+// ── Crypto: HMAC ────────────────────────────────────────────────────────────
+
+static RockitString* crypto_hmac(const char *key_str, const char *data_str, const EVP_MD *md) {
+    char *key_chars; int64_t key_len;
+    rockit_str_extract(key_str, &key_chars, &key_len);
+    char *data_chars; int64_t data_len;
+    rockit_str_extract(data_str, &data_chars, &data_len);
+    unsigned char result[EVP_MAX_MD_SIZE];
+    unsigned int result_len = 0;
+    HMAC(md, key_chars, (int)key_len, (unsigned char *)data_chars, (size_t)data_len,
+         result, &result_len);
+    return rockit_string_from_bytes(result, (int64_t)result_len);
+}
+
+RockitString* cryptoHmacSha256(const char *key_str, const char *data_str) {
+    return crypto_hmac(key_str, data_str, EVP_sha256());
+}
+
+RockitString* cryptoHmacSha1(const char *key_str, const char *data_str) {
+    return crypto_hmac(key_str, data_str, EVP_sha1());
+}
+
+// ── Crypto: Random ──────────────────────────────────────────────────────────
+
+RockitString* cryptoRandomBytes(int64_t count) {
+    if (count <= 0) return rockit_string_new("");
+    unsigned char *buf = malloc(count);
+    if (!buf) return rockit_string_new("");
+    RAND_bytes(buf, (int)count);
+    RockitString *result = rockit_string_from_bytes(buf, count);
+    free(buf);
+    return result;
+}
+
+// ── Crypto: AES ─────────────────────────────────────────────────────────────
+
+RockitString* cryptoAesEncrypt(const char *key_str, const char *iv_str,
+                                const char *data_str, int64_t mode) {
+    char *key_chars; int64_t key_len;
+    rockit_str_extract(key_str, &key_chars, &key_len);
+    char *iv_chars; int64_t iv_len;
+    rockit_str_extract(iv_str, &iv_chars, &iv_len);
+    char *data_chars; int64_t data_len;
+    rockit_str_extract(data_str, &data_chars, &data_len);
+
+    const EVP_CIPHER *cipher;
+    if (mode == 1) {
+        cipher = (key_len == 32) ? EVP_aes_256_gcm() : EVP_aes_128_gcm();
+    } else {
+        cipher = (key_len == 32) ? EVP_aes_256_cbc() : EVP_aes_128_cbc();
+    }
+
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) return rockit_string_new("");
+
+    EVP_EncryptInit_ex(ctx, cipher, NULL, (unsigned char *)key_chars, (unsigned char *)iv_chars);
+
+    int out_len = 0, final_len = 0;
+    int buf_size = (int)data_len + EVP_CIPHER_block_size(cipher);
+    unsigned char *out = malloc(buf_size + 16); // +16 for GCM tag
+    if (!out) { EVP_CIPHER_CTX_free(ctx); return rockit_string_new(""); }
+
+    EVP_EncryptUpdate(ctx, out, &out_len, (unsigned char *)data_chars, (int)data_len);
+    EVP_EncryptFinal_ex(ctx, out + out_len, &final_len);
+    int total = out_len + final_len;
+
+    if (mode == 1) {
+        // Append GCM tag
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, out + total);
+        total += 16;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    RockitString *result = rockit_string_from_bytes(out, total);
+    free(out);
+    return result;
+}
+
+RockitString* cryptoAesDecrypt(const char *key_str, const char *iv_str,
+                                const char *data_str, int64_t mode) {
+    char *key_chars; int64_t key_len;
+    rockit_str_extract(key_str, &key_chars, &key_len);
+    char *iv_chars; int64_t iv_len;
+    rockit_str_extract(iv_str, &iv_chars, &iv_len);
+    char *data_chars; int64_t data_len;
+    rockit_str_extract(data_str, &data_chars, &data_len);
+
+    const EVP_CIPHER *cipher;
+    if (mode == 1) {
+        cipher = (key_len == 32) ? EVP_aes_256_gcm() : EVP_aes_128_gcm();
+    } else {
+        cipher = (key_len == 32) ? EVP_aes_256_cbc() : EVP_aes_128_cbc();
+    }
+
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) return rockit_string_new("");
+
+    int cipher_len = (int)data_len;
+    if (mode == 1) {
+        // Last 16 bytes are GCM tag
+        cipher_len -= 16;
+        if (cipher_len < 0) { EVP_CIPHER_CTX_free(ctx); return rockit_string_new(""); }
+    }
+
+    EVP_DecryptInit_ex(ctx, cipher, NULL, (unsigned char *)key_chars, (unsigned char *)iv_chars);
+
+    if (mode == 1) {
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16,
+                            (unsigned char *)data_chars + cipher_len);
+    }
+
+    int out_len = 0, final_len = 0;
+    unsigned char *out = malloc(cipher_len + EVP_CIPHER_block_size(cipher));
+    if (!out) { EVP_CIPHER_CTX_free(ctx); return rockit_string_new(""); }
+
+    EVP_DecryptUpdate(ctx, out, &out_len, (unsigned char *)data_chars, cipher_len);
+    int ok = EVP_DecryptFinal_ex(ctx, out + out_len, &final_len);
+    EVP_CIPHER_CTX_free(ctx);
+
+    if (ok != 1) { free(out); return rockit_string_new(""); }
+    int total = out_len + final_len;
+    RockitString *result = rockit_string_from_bytes(out, total);
+    free(out);
+    return result;
+}
+
+// ── X.509 Certificate Inspection ────────────────────────────────────────────
+
+int64_t x509ParsePem(const char *pem_str) {
+    tls_ensure_init();
+    char *chars; int64_t len;
+    rockit_str_extract(pem_str, &chars, &len);
+    BIO *bio = BIO_new_mem_buf(chars, (int)len);
+    if (!bio) return -1;
+    X509 *cert = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+    BIO_free(bio);
+    if (!cert) return -1;
+    for (int i = 0; i < 256; i++) {
+        if (!tls_x509_table[i]) {
+            tls_x509_table[i] = cert;
+            return (int64_t)i;
+        }
+    }
+    X509_free(cert);
+    return -1;
+}
+
+RockitString* x509Subject(int64_t handle) {
+    if (handle < 0 || handle >= 256 || !tls_x509_table[handle])
+        return rockit_string_new("");
+    char buf[512];
+    X509_NAME_oneline(X509_get_subject_name(tls_x509_table[handle]), buf, sizeof(buf));
+    return rockit_string_new(buf);
+}
+
+RockitString* x509Issuer(int64_t handle) {
+    if (handle < 0 || handle >= 256 || !tls_x509_table[handle])
+        return rockit_string_new("");
+    char buf[512];
+    X509_NAME_oneline(X509_get_issuer_name(tls_x509_table[handle]), buf, sizeof(buf));
+    return rockit_string_new(buf);
+}
+
+static int64_t asn1_time_to_epoch(const ASN1_TIME *t) {
+    struct tm tm_val = {0};
+    if (ASN1_TIME_to_tm(t, &tm_val) != 1) return 0;
+    return (int64_t)timegm(&tm_val);
+}
+
+int64_t x509NotBefore(int64_t handle) {
+    if (handle < 0 || handle >= 256 || !tls_x509_table[handle]) return 0;
+    return asn1_time_to_epoch(X509_get0_notBefore(tls_x509_table[handle]));
+}
+
+int64_t x509NotAfter(int64_t handle) {
+    if (handle < 0 || handle >= 256 || !tls_x509_table[handle]) return 0;
+    return asn1_time_to_epoch(X509_get0_notAfter(tls_x509_table[handle]));
+}
+
+RockitString* x509SerialNumber(int64_t handle) {
+    if (handle < 0 || handle >= 256 || !tls_x509_table[handle])
+        return rockit_string_new("");
+    ASN1_INTEGER *serial = X509_get_serialNumber(tls_x509_table[handle]);
+    BIGNUM *bn = ASN1_INTEGER_to_BN(serial, NULL);
+    if (!bn) return rockit_string_new("");
+    char *hex = BN_bn2hex(bn);
+    BN_free(bn);
+    if (!hex) return rockit_string_new("");
+    RockitString *result = rockit_string_new(hex);
+    OPENSSL_free(hex);
+    return result;
+}
+
+void x509Free(int64_t handle) {
+    if (handle < 0 || handle >= 256 || !tls_x509_table[handle]) return;
+    X509_free(tls_x509_table[handle]);
+    tls_x509_table[handle] = NULL;
+}
+
+// ── TLS Error Reporting ─────────────────────────────────────────────────────
+
+RockitString* tlsLastError(void) {
+    unsigned long err = ERR_get_error();
+    if (err == 0) return rockit_string_new("");
+    char buf[256];
+    ERR_error_string_n(err, buf, sizeof(buf));
+    return rockit_string_new(buf);
+}
