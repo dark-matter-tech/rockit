@@ -5,7 +5,7 @@ on:
     tags:
       - 'v*'
     branches:
-      - master
+      - staging
   workflow_dispatch:
     inputs:
       version:
@@ -66,7 +66,7 @@ jobs:
           if echo "${GITHUB_REF_NAME}" | grep -q "^v"; then
             git clone --depth 1 --recurse-submodules --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
           else
-            git clone --depth 1 --recurse-submodules --branch master "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+            git clone --depth 1 --recurse-submodules --branch staging "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
           fi
         env:
           GITHUB_TOKEN: ${{ github.token }}
