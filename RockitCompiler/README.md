@@ -1,5 +1,7 @@
 # Rockit Compiler
 
+![CI](https://github.com/dark-matter-tech/rockit/actions/workflows/ci.yml/badge.svg)
+
 The Rockit language compiler. Self-hosting — Rockit compiles itself.
 
 > **Status:** All phases complete. 542 tests passing. Self-hosting bootstrap verified (Stage 2 == Stage 3). Runtime rewritten in Rockit.
@@ -22,7 +24,7 @@ The installer downloads a prebuilt binary if available, or builds from source as
 
 - `rockit` — compiler and build tool
 - `fuel` — package manager
-- Standard library (14 modules: `rockit.core.*`, `rockit.io.*`, `rockit.net.*`, `rockit.encoding.*`, `rockit.time.*`, `rockit.json`, `rockit.test.*`)
+- Standard library (22 modules: `rockit.core.*`, `rockit.encoding.*`, `rockit.filesystem.*`, `rockit.networking.*`, `rockit.security.*`, `rockit.testing.*`, `rockit.time.*`)
 - C runtime (`rockit_runtime.c`)
 
 **Update:**
@@ -223,7 +225,7 @@ fun main() {
 
 ## Standard Library
 
-The standard library ships under `self-hosted-rockit/stdlib/rockit/` and is imported with `import rockit.<module>`. 14 modules covering core utilities, networking, encoding, time, I/O, JSON, and testing.
+The standard library ships under `self-hosted-rockit/stdlib/rockit/` and is imported with `import rockit.<domain>.<module>`. 22 modules covering core utilities, encoding, filesystem, networking, security, testing, and time.
 
 ### Modules
 
@@ -678,12 +680,13 @@ RockitCompiler/
 │   ├── llvmgen.rok
 │   ├── command.rok            # Concatenated compiler source
 │   ├── command                # Stage 1 native binary
-│   └── stdlib/                # Standard library submodule (launchpad, 15 modules)
+│   └── stdlib/                # Standard library submodule (launchpad, 22 modules)
 │       └── rockit/
 │           ├── core/          # collections, math, strings, result, uuid
-│           ├── encoding/      # base64, json, xml
+│           ├── encoding/      # base64, hpack, json, xml
 │           ├── filesystem/    # file, path
-│           ├── networking/    # http, url, websocket
+│           ├── networking/    # http, http2, url, websocket
+│           ├── security/      # tls, crypto, x509, pem
 │           ├── testing/       # probe
 │           └── time/          # datetime
 ├── tests/                     # Rockit integration tests

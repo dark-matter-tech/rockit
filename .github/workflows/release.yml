@@ -16,15 +16,209 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    runs-on: ubuntu-22.04
-    container: swift:5.10.1-jammy
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-22.04
+            container: swift:5.10.1-jammy
+            archive_ext: tar.gz
+            triple: x86_64-unknown-linux-gnu
+          - platform: macos-arm64
+            runner: macos-14
+            container: ""
+            archive_ext: tar.gz
+            triple: arm64-apple-macosx
+          - platform: macos-x86_64
+            runner: macos-13
+            container: ""
+            archive_ext: tar.gz
+            triple: x86_64-apple-macosx
+          - platform: windows-x86_64
+            runner: windows-latest
+            container: ""
+            archive_ext: zip
+            triple: x86_64-unknown-windows-msvc
+
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container || null }}
+    continue-on-error: ${{ matrix.platform == 'windows-x86_64' }}
+    defaults:
+      run:
+        shell: ${{ matrix.platform == 'windows-x86_64' && 'pwsh' || 'bash' }}
 
     steps:
-      - name: Install dependencies
+      # ── Linux ──────────────────────────────────────────────────────
+      - name: Install dependencies (Linux)
+        if: matrix.platform == 'linux-x86_64'
         run: |
-          apt-get update && apt-get install -y git clang-15 curl jq openjdk-17-jdk
+          apt-get update && apt-get install -y --no-install-recommends git clang-15 curl jq openjdk-17-jdk libssl-dev pkg-config
           ln -sf /usr/bin/clang-15 /usr/bin/clang
+
+      - name: Checkout (Linux)
+        if: matrix.platform == 'linux-x86_64'
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          if echo "${GITHUB_REF_NAME}" | grep -q "^v"; then
+            git clone --depth 1 --recurse-submodules --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+          else
+            git clone --depth 1 --recurse-submodules --branch master "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # ── macOS ──────────────────────────────────────────────────────
+      - name: Install dependencies (macOS)
+        if: startsWith(matrix.platform, 'macos')
+        run: |
+          brew install openssl@3 pkg-config
+          echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "LDFLAGS=-L$(brew --prefix openssl@3)/lib" >> "$GITHUB_ENV"
+          echo "CPPFLAGS=-I$(brew --prefix openssl@3)/include" >> "$GITHUB_ENV"
+
+      - name: Checkout (macOS/Windows)
+        if: matrix.platform != 'linux-x86_64'
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── Windows ────────────────────────────────────────────────────
+      - name: Install Swift (Windows)
+        if: matrix.platform == 'windows-x86_64'
+        uses: compnerd/gha-setup-swift@main
+        with:
+          branch: swift-5.10.1-release
+          tag: 5.10.1-RELEASE
+
+      - name: Install dependencies (Windows)
+        if: matrix.platform == 'windows-x86_64'
+        run: |
+          choco install openssl -y
+          choco install jq -y
+
+      # ── Common build steps ─────────────────────────────────────────
+      - name: Set version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
+            echo "TAG=v${{ inputs.version }}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          fi
+        shell: bash
+
+      - name: Build Stage 0 compiler
+        working-directory: RockitCompiler
+        run: swift build -c release
+        shell: bash
+
+      - name: Build Stage 1 compiler
+        working-directory: RockitCompiler
+        run: |
+          .build/release/rockit build-native self-hosted-rockit/command.rok
+          echo "Stage 1 compiler built"
+        shell: bash
+
+      - name: Determine version
+        run: |
+          VERSION=$(RockitCompiler/self-hosted-rockit/command version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG=v${VERSION}" >> "$GITHUB_ENV"
+          echo "Detected version: ${VERSION}"
+        shell: bash
+
+      - name: Build Rockit runtime
+        working-directory: RockitCompiler
+        run: bash runtime/rockit/build.sh
+        shell: bash
+
+      - name: Clone and build Fuel
+        run: |
+          if [ "${{ matrix.platform }}" = "linux-x86_64" ]; then
+            echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
+            chmod 600 ~/.netrc
+            git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
+          else
+            git clone --depth 1 --branch develop "https://github.com/dark-matter-tech/fuel.git" /tmp/fuel || true
+          fi
+          if [ -d /tmp/fuel ]; then
+            RockitCompiler/self-hosted-rockit/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel \
+              --runtime-path RockitCompiler/runtime/rockit_runtime.o \
+              --target-triple ${{ matrix.triple }}
+          fi
+        shell: bash
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+      - name: Package archive (Unix)
+        if: matrix.archive_ext == 'tar.gz'
+        run: |
+          ARCHIVE="rockit-${VERSION}-${{ matrix.platform }}.tar.gz"
+          mkdir -p dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/bin
+          mkdir -p dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/share/rockit
+          cp RockitCompiler/self-hosted-rockit/command dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/bin/rockit
+          chmod +x dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/bin/rockit
+          if [ -f /tmp/fuel/fuel ]; then
+            cp /tmp/fuel/fuel dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/bin/fuel
+            chmod +x dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/bin/fuel
+          fi
+          cp RockitCompiler/runtime/rockit_runtime.o dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/share/rockit/
+          cp -r RockitCompiler/self-hosted-rockit/stdlib dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/share/rockit/
+          cd dist && tar -czf "${ARCHIVE}" "rockit-${VERSION}-${{ matrix.platform }}"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+          ls -la "${ARCHIVE}"
+        shell: bash
+
+      - name: Package archive (Windows)
+        if: matrix.archive_ext == 'zip'
+        run: |
+          $archive = "rockit-$env:VERSION-${{ matrix.platform }}.zip"
+          New-Item -ItemType Directory -Force -Path "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/bin"
+          New-Item -ItemType Directory -Force -Path "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/share/rockit"
+          Copy-Item "RockitCompiler/self-hosted-rockit/command.exe" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/bin/rockit.exe" -ErrorAction SilentlyContinue
+          Copy-Item "RockitCompiler/self-hosted-rockit/command" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/bin/rockit.exe" -ErrorAction SilentlyContinue
+          if (Test-Path "/tmp/fuel/fuel.exe") { Copy-Item "/tmp/fuel/fuel.exe" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/bin/fuel.exe" }
+          if (Test-Path "RockitCompiler/runtime/rockit_runtime.o") { Copy-Item "RockitCompiler/runtime/rockit_runtime.o" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/share/rockit/" }
+          Copy-Item -Recurse "RockitCompiler/self-hosted-rockit/stdlib" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/share/rockit/"
+          Compress-Archive -Path "dist/rockit-$env:VERSION-${{ matrix.platform }}/*" -DestinationPath "dist/$archive"
+          echo "ARCHIVE=$archive" >> $env:GITHUB_ENV
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rockit-${{ matrix.platform }}
+          path: dist/rockit-${{ env.VERSION }}-${{ matrix.platform }}.${{ matrix.archive_ext }}
+
+      # ── IntelliJ plugin (Linux only) ───────────────────────────────
+      - name: Build IntelliJ plugin
+        if: matrix.platform == 'linux-x86_64'
+        working-directory: ide/intellij-rockit
+        run: |
+          chmod +x gradlew
+          ./gradlew buildPlugin
+          PLUGIN_ZIP=$(find build/distributions -name '*.zip' -print -quit)
+          echo "PLUGIN_ZIP=${PLUGIN_ZIP}" >> "$GITHUB_ENV"
+
+      - name: Upload IntelliJ plugin
+        if: matrix.platform == 'linux-x86_64' && env.PLUGIN_ZIP != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: intellij-plugin
+          path: ide/intellij-rockit/${{ env.PLUGIN_ZIP }}
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
 
       - name: Set version
         run: |
@@ -36,137 +230,72 @@ jobs:
             echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
           fi
 
-      - name: Checkout
+      - name: List artifacts
+        run: find artifacts/ -type f | sort
+
+      - name: Detect platform (Gitea vs GitHub)
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
-          chmod 600 ~/.netrc
-          if [ -n "${GITHUB_REF_NAME}" ] && echo "${GITHUB_REF_NAME}" | grep -q "^v"; then
-            # Tag push — check out the tag
-            git clone --depth 1 --recurse-submodules --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+          if echo "${GITHUB_SERVER_URL}" | grep -q "github.com"; then
+            echo "IS_GITHUB=true" >> "$GITHUB_ENV"
           else
-            # Branch push (master merge) — check out master
-            git clone --depth 1 --recurse-submodules --branch master "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+            echo "IS_GITHUB=false" >> "$GITHUB_ENV"
           fi
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Build Stage 0 compiler
-        working-directory: RockitCompiler
-        run: swift build -c release
-
-      - name: Build Stage 1 compiler
-        working-directory: RockitCompiler
+      - name: Check if release already exists (Gitea)
+        if: env.IS_GITHUB != 'true'
         run: |
-          .build/release/rockit build-native self-hosted-rockit/command.rok
-          echo "Stage 1 compiler built"
-          self-hosted-rockit/command version
-
-      - name: Determine version
-        run: |
-          VERSION=$(RockitCompiler/self-hosted-rockit/command version 2>&1 | grep -oP '[0-9]+\.[0-9]+\.[0-9]+')
-          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
-          echo "TAG=v${VERSION}" >> "$GITHUB_ENV"
-          echo "Detected version: ${VERSION}"
-
-      - name: Check if release already exists
-        run: |
-          GITEA_URL="${GITHUB_SERVER_URL}"
-          API="${GITEA_URL}/api/v1"
-
-          # Check if a release with this tag already exists
+          API="${GITHUB_SERVER_URL}/api/v1"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: token ${FUEL_TOKEN}" \
             "${API}/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
-
           if [ "$STATUS" = "200" ]; then
             echo "Release ${TAG} already exists — skipping."
             echo "SKIP_RELEASE=true" >> "$GITHUB_ENV"
           else
-            echo "No existing release for ${TAG} — proceeding."
             echo "SKIP_RELEASE=false" >> "$GITHUB_ENV"
           fi
         env:
           FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
 
-      - name: Build Rockit runtime
-        if: env.SKIP_RELEASE != 'true'
-        working-directory: RockitCompiler
+      - name: Create tag (Gitea)
+        if: env.IS_GITHUB != 'true' && env.SKIP_RELEASE != 'true'
         run: |
-          cd runtime/rockit
-          bash build.sh
-
-      - name: Clone and build Fuel
-        if: env.SKIP_RELEASE != 'true'
-        run: |
-          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
-          chmod 600 ~/.netrc
-          git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
-          RockitCompiler/self-hosted-rockit/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path RockitCompiler/runtime/rockit_runtime.o
-        env:
-          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
-
-      - name: Build IntelliJ plugin
-        if: env.SKIP_RELEASE != 'true'
-        working-directory: ide/intellij-rockit
-        run: |
-          chmod +x gradlew
-          ./gradlew buildPlugin
-          PLUGIN_ZIP=$(find build/distributions -name '*.zip' -print -quit)
-          echo "PLUGIN_ZIP=${PLUGIN_ZIP}" >> "$GITHUB_ENV"
-          echo "Built plugin: ${PLUGIN_ZIP}"
-
-      - name: Package Linux x86_64
-        if: env.SKIP_RELEASE != 'true'
-        run: |
-          ARCHIVE="rockit-${VERSION}-linux-x86_64.tar.gz"
-          mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/bin
-          mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit
-          cp RockitCompiler/self-hosted-rockit/command dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
-          chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
-          cp /tmp/fuel/fuel dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
-          chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
-          cp RockitCompiler/runtime/rockit_runtime.o dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
-          # Standard library — recursive copy picks up all modules automatically
-          cp -r RockitCompiler/self-hosted-rockit/stdlib dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
-          cd dist && tar -czf "${ARCHIVE}" "rockit-${VERSION}-linux-x86_64"
-          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
-          ls -la "${ARCHIVE}"
-
-      - name: Create tag (if triggered by master merge)
-        if: env.SKIP_RELEASE != 'true'
-        run: |
-          # Create the tag via Gitea API (works even in containers without git push access)
-          GITEA_URL="${GITHUB_SERVER_URL}"
-          API="${GITEA_URL}/api/v1"
-          SHA=$(git rev-parse HEAD)
-
-          # Check if tag exists
+          API="${GITHUB_SERVER_URL}/api/v1"
           TAG_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: token ${FUEL_TOKEN}" \
             "${API}/repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}")
-
           if [ "$TAG_STATUS" != "200" ]; then
-            echo "Creating tag ${TAG} at ${SHA}..."
-            curl -s -X POST \
-              -H "Authorization: token ${FUEL_TOKEN}" \
-              -H "Content-Type: application/json" \
-              "${API}/repos/${GITHUB_REPOSITORY}/tags" \
-              -d "{\"tag_name\": \"${TAG}\", \"target\": \"${SHA}\"}"
-            echo "Tag ${TAG} created."
-          else
-            echo "Tag ${TAG} already exists."
+            SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+            if [ -n "$SHA" ]; then
+              curl -s -X POST \
+                -H "Authorization: token ${FUEL_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "${API}/repos/${GITHUB_REPOSITORY}/tags" \
+                -d "{\"tag_name\": \"${TAG}\", \"target\": \"${SHA}\"}"
+              echo "Tag ${TAG} created."
+            fi
           fi
         env:
           FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
 
-      - name: Create Gitea release and upload
-        if: env.SKIP_RELEASE != 'true'
+      - name: Create release and upload (Gitea)
+        if: env.IS_GITHUB != 'true' && env.SKIP_RELEASE != 'true'
         run: |
-          GITEA_URL="${GITHUB_SERVER_URL}"
-          API="${GITEA_URL}/api/v1"
+          API="${GITHUB_SERVER_URL}/api/v1"
 
-          # Create release
+          RELEASE_BODY="Release ${TAG} of the Rockit compiler and Fuel package manager.\n\n"
+          RELEASE_BODY+="## What's Included\n\n"
+          RELEASE_BODY+="- **rockit** — The Rockit compiler (Stage 1, self-hosted)\n"
+          RELEASE_BODY+="- **fuel** — The Rockit package manager\n"
+          RELEASE_BODY+="- **stdlib** — Standard library (22 modules)\n"
+          RELEASE_BODY+="- **rockit_runtime.o** — Prebuilt runtime\n\n"
+          RELEASE_BODY+="## Platforms\n\n"
+          RELEASE_BODY+="| Platform | Archive |\n|----------|--------|\n"
+          RELEASE_BODY+="| Linux x86_64 | \`rockit-${VERSION}-linux-x86_64.tar.gz\` |\n"
+          RELEASE_BODY+="| macOS arm64 | \`rockit-${VERSION}-macos-arm64.tar.gz\` |\n"
+          RELEASE_BODY+="| macOS x86_64 | \`rockit-${VERSION}-macos-x86_64.tar.gz\` |\n"
+          RELEASE_BODY+="| Windows x86_64 | \`rockit-${VERSION}-windows-x86_64.zip\` |\n"
+
           RELEASE_ID=$(curl -s -X POST \
             -H "Authorization: token ${FUEL_TOKEN}" \
             -H "Content-Type: application/json" \
@@ -174,50 +303,203 @@ jobs:
             -d "{
               \"tag_name\": \"${TAG}\",
               \"name\": \"Rockit ${TAG}\",
-              \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## What's Included\\n\\n- **rockit** — The Rockit compiler (Stage 1, self-hosted)\\n- **fuel** — The Rockit package manager\\n- **stdlib** — Standard library (json, collections, math, strings, result, file)\\n- **rockit_runtime.o** — Prebuilt runtime\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/develop/RockitCompiler/scripts/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
+              \"body\": \"${RELEASE_BODY}\",
               \"draft\": false,
               \"prerelease\": false
             }" | jq -r '.id')
 
           if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
-            echo "ERROR: Failed to get/create release"
+            echo "ERROR: Failed to create release"
             exit 1
           fi
 
-          # Upload tarball
-          UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            -H "Authorization: token ${FUEL_TOKEN}" \
-            -H "Content-Type: application/gzip" \
-            --data-binary "@dist/${ARCHIVE}" \
-            "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${ARCHIVE}")
-          HTTP_CODE=$(echo "$UPLOAD_RESPONSE" | tail -1)
-          BODY=$(echo "$UPLOAD_RESPONSE" | head -n -1)
+          # Upload all platform archives
+          for artifact_dir in artifacts/rockit-*; do
+            for file in "$artifact_dir"/*; do
+              [ -f "$file" ] || continue
+              FILENAME=$(basename "$file")
+              CONTENT_TYPE="application/gzip"
+              echo "$FILENAME" | grep -q '\.zip$' && CONTENT_TYPE="application/zip"
 
-          echo "Upload response (HTTP $HTTP_CODE):"
-          echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+                -H "Authorization: token ${FUEL_TOKEN}" \
+                -H "Content-Type: ${CONTENT_TYPE}" \
+                --data-binary "@${file}" \
+                "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${FILENAME}")
 
-          if [ "$HTTP_CODE" -ge 400 ]; then
-            echo "ERROR: Upload failed with HTTP $HTTP_CODE"
-            exit 1
-          fi
+              if [ "$HTTP_CODE" -ge 400 ]; then
+                echo "WARNING: Failed to upload ${FILENAME} (HTTP ${HTTP_CODE})"
+              else
+                echo "Uploaded: ${FILENAME}"
+              fi
+            done
+          done
 
-          echo "Successfully uploaded: ${ARCHIVE}"
-
-          # Upload IntelliJ plugin zip if it was built
-          if [ -n "${PLUGIN_ZIP:-}" ] && [ -f "ide/intellij-rockit/${PLUGIN_ZIP}" ]; then
-            PLUGIN_NAME=$(basename "${PLUGIN_ZIP}")
-            PLUGIN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+          # Upload IntelliJ plugin if present
+          for file in artifacts/intellij-plugin/*; do
+            [ -f "$file" ] || continue
+            FILENAME=$(basename "$file")
+            curl -s -X POST \
               -H "Authorization: token ${FUEL_TOKEN}" \
               -H "Content-Type: application/zip" \
-              --data-binary "@ide/intellij-rockit/${PLUGIN_ZIP}" \
-              "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${PLUGIN_NAME}")
-            PLUGIN_HTTP=$(echo "$PLUGIN_RESPONSE" | tail -1)
-
-            if [ "$PLUGIN_HTTP" -ge 400 ]; then
-              echo "WARNING: Plugin upload failed (HTTP $PLUGIN_HTTP) — continuing"
-            else
-              echo "Successfully uploaded: ${PLUGIN_NAME}"
-            fi
-          fi
+              --data-binary "@${file}" \
+              "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${FILENAME}" > /dev/null
+            echo "Uploaded plugin: ${FILENAME}"
+          done
         env:
           FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+      - name: Create release (GitHub)
+        if: env.IS_GITHUB == 'true'
+        run: |
+          RELEASE_BODY=$(cat <<'BODY'
+          ## What's Included
+
+          - **rockit** — The Rockit compiler (Stage 1, self-hosted)
+          - **fuel** — The Rockit package manager
+          - **stdlib** — Standard library (22 modules)
+          - **rockit_runtime.o** — Prebuilt runtime
+
+          ## Platforms
+
+          | Platform | Archive |
+          |----------|---------|
+          | Linux x86_64 | `rockit-VERSION-linux-x86_64.tar.gz` |
+          | macOS arm64 | `rockit-VERSION-macos-arm64.tar.gz` |
+          | macOS x86_64 | `rockit-VERSION-macos-x86_64.tar.gz` |
+          | Windows x86_64 | `rockit-VERSION-windows-x86_64.zip` |
+
+          ## Install
+
+          ```bash
+          curl -fsSL https://github.com/dark-matter-tech/rockit/raw/master/RockitCompiler/install.sh | bash
+          ```
+          BODY
+          )
+
+          RELEASE_BODY="${RELEASE_BODY//VERSION/${VERSION}}"
+
+          # Collect all archive files
+          FILES=""
+          for artifact_dir in artifacts/rockit-* artifacts/intellij-plugin; do
+            for file in "$artifact_dir"/*; do
+              [ -f "$file" ] && FILES="$FILES $file"
+            done
+          done
+
+          gh release create "${TAG}" \
+            --title "Rockit ${TAG}" \
+            --notes "${RELEASE_BODY}" \
+            $FILES
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Update GitHub Wiki
+        if: env.IS_GITHUB == 'true'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          WIKI_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          git clone "${WIKI_URL}" /tmp/wiki 2>/dev/null || {
+            mkdir -p /tmp/wiki
+            cd /tmp/wiki
+            git init
+            git remote add origin "${WIKI_URL}"
+          }
+
+          cd /tmp/wiki
+
+          # Home page
+          cat > Home.md << 'WIKI_HOME'
+          # Rockit
+
+          ![CI](https://github.com/dark-matter-tech/rockit/actions/workflows/ci.yml/badge.svg)
+          ![Release](https://github.com/dark-matter-tech/rockit/actions/workflows/release.yml/badge.svg)
+
+          A statically-typed, compiled, memory-safe language designed for modularity.
+
+          ## Install
+
+          **macOS / Linux:**
+          ```bash
+          curl -fsSL https://github.com/dark-matter-tech/rockit/raw/master/RockitCompiler/install.sh | bash
+          ```
+
+          **Windows (PowerShell):**
+          ```powershell
+          iwr -useb https://github.com/dark-matter-tech/rockit/raw/master/RockitCompiler/install.ps1 | iex
+          ```
+
+          ## Links
+
+          - [Platforms](Platforms)
+          - [Standard Library](Standard-Library)
+          - [Changelog](Changelog)
+          WIKI_HOME
+
+          # Platforms page
+          cat > Platforms.md << WIKI_PLATFORMS
+          # Platforms
+
+          ## Downloads — ${TAG}
+
+          | Platform | Status | Download |
+          |----------|--------|----------|
+          | Linux x86_64 | Prebuilt | [\`rockit-${VERSION}-linux-x86_64.tar.gz\`](https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/rockit-${VERSION}-linux-x86_64.tar.gz) |
+          | macOS arm64 | Prebuilt | [\`rockit-${VERSION}-macos-arm64.tar.gz\`](https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/rockit-${VERSION}-macos-arm64.tar.gz) |
+          | macOS x86_64 | Prebuilt | [\`rockit-${VERSION}-macos-x86_64.tar.gz\`](https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/rockit-${VERSION}-macos-x86_64.tar.gz) |
+          | Windows x86_64 | Prebuilt | [\`rockit-${VERSION}-windows-x86_64.zip\`](https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/rockit-${VERSION}-windows-x86_64.zip) |
+          WIKI_PLATFORMS
+
+          # Standard Library page
+          cat > Standard-Library.md << 'WIKI_STDLIB'
+          # Standard Library
+
+          22 modules ship with Rockit. Import with `import rockit.<domain>.<module>`.
+
+          | Module | Import | Standard |
+          |--------|--------|----------|
+          | Collections | `rockit.core.collections` | — |
+          | Math | `rockit.core.math` | — |
+          | Strings | `rockit.core.strings` | — |
+          | Result | `rockit.core.result` | — |
+          | UUID | `rockit.core.uuid` | RFC 9562 |
+          | Base64 | `rockit.encoding.base64` | RFC 4648 |
+          | HPACK | `rockit.encoding.hpack` | RFC 7541 |
+          | JSON | `rockit.encoding.json` | RFC 8259 |
+          | XML | `rockit.encoding.xml` | W3C XML 1.0 |
+          | File I/O | `rockit.filesystem.file` | — |
+          | Path | `rockit.filesystem.path` | — |
+          | HTTP | `rockit.networking.http` | RFC 9110 |
+          | HTTP/2 | `rockit.networking.http2` | RFC 9113 |
+          | URL | `rockit.networking.url` | RFC 3986 |
+          | WebSocket | `rockit.networking.websocket` | RFC 6455 |
+          | TLS | `rockit.security.tls` | RFC 8446 |
+          | Crypto | `rockit.security.crypto` | FIPS 180-4 |
+          | X.509 | `rockit.security.x509` | RFC 5280 |
+          | PEM | `rockit.security.pem` | RFC 7468 |
+          | Probe | `rockit.testing.probe` | — |
+          | DateTime | `rockit.time.datetime` | ISO 8601 |
+
+          Source: [launchpad](https://github.com/dark-matter-tech/launchpad)
+          WIKI_STDLIB
+
+          # Changelog page
+          cat > Changelog.md << WIKI_CHANGELOG
+          # Changelog
+
+          ## ${TAG}
+
+          $(git log --oneline --no-decorate -20 2>/dev/null || echo "See GitHub releases for details.")
+          WIKI_CHANGELOG
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki is up to date"
+          else
+            git commit -m "Update wiki for ${TAG}"
+            git push origin HEAD 2>/dev/null || echo "Wiki push skipped (wiki may not be enabled)"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
