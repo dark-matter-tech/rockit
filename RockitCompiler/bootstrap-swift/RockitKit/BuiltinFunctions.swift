@@ -1543,7 +1543,7 @@ public final class BuiltinRegistry {
             let subj = X509_get_subject_name(cert)
             let buf = X509_NAME_oneline(subj, nil, 0)
             let result = buf != nil ? String(cString: buf!) : ""
-            OPENSSL_free(buf)
+            COpenSSL_free(buf)
             return .string(result)
             #endif
         }
@@ -1575,7 +1575,7 @@ public final class BuiltinRegistry {
             let issuer = X509_get_issuer_name(cert)
             let buf = X509_NAME_oneline(issuer, nil, 0)
             let result = buf != nil ? String(cString: buf!) : ""
-            OPENSSL_free(buf)
+            COpenSSL_free(buf)
             return .string(result)
             #endif
         }
@@ -1656,7 +1656,7 @@ public final class BuiltinRegistry {
             let bn = ASN1_INTEGER_to_BN(serial, nil)
             let hexPtr = BN_bn2hex(bn)
             let hex = hexPtr != nil ? String(cString: hexPtr!) : ""
-            OPENSSL_free(hexPtr)
+            COpenSSL_free(hexPtr)
             BN_free(bn)
             return .string(hex)
             #endif
