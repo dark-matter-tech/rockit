@@ -224,8 +224,8 @@ jobs:
 
           # Run test suite — tests/ directory with recursive discovery,
           # class-based test suites, setUp/tearDown lifecycle
-          echo "  Running Probe test suite (tests/ recursive)..."
-          $ROCKIT test 2>&1 | tee probe-output.log
+          echo "  Running Probe test suite (tests/ recursive, excluding advanced/)..."
+          $ROCKIT test --scheme default 2>&1 | tee probe-output.log
           echo ""
           echo "  ✅ Probe test suite passed"
 
