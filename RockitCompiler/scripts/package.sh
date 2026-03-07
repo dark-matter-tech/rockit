@@ -117,9 +117,33 @@ done
 ok "Manifest generated: MANIFEST.sha256"
 cd "$DIST_DIR"
 
-# --- Step 5: Sign release (if credentials available) ---
+# --- Step 5: Sign release artifacts (if credentials available) ---
 if [ -f "${SCRIPT_DIR}/sign.sh" ]; then
-    bash "${SCRIPT_DIR}/sign.sh" "${STAGING}/MANIFEST.sha256" || true
+    # Sign binaries with platform-specific methods (codesign/authenticode)
+    echo ""
+    info "Signing release artifacts..."
+
+    # Sign the compiler binary
+    bash "${SCRIPT_DIR}/sign.sh" "${STAGING}/bin/rockit" auto || true
+
+    # Sign Fuel if present
+    if [ -f "${STAGING}/bin/fuel" ]; then
+        bash "${SCRIPT_DIR}/sign.sh" "${STAGING}/bin/fuel" auto || true
+    fi
+
+    # Re-generate manifest AFTER binary signing (signatures change the file)
+    info "Re-generating manifest after signing..."
+    rm -f "${STAGING}/MANIFEST.sha256"
+    cd "$STAGING"
+    find . -type f ! -name "MANIFEST.sha256" ! -name "*.sig" | sort | while read -r f; do
+        hash=$(shasum -a 256 "$f" | awk '{print $1}')
+        echo "sha256:${hash}  ${f#./}" >> MANIFEST.sha256
+    done
+    cd "$DIST_DIR"
+
+    # Sign the manifest with GPG (the universal verification method)
+    bash "${SCRIPT_DIR}/sign.sh" "${STAGING}/MANIFEST.sha256" manifest || true
+    echo ""
 fi
 
 # --- Step 6: Create tarball ---

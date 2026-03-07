@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          apt-get update && apt-get install -y git libssl-dev pkg-config curl jq
+          apt-get update && apt-get install -y git libssl-dev pkg-config curl jq gnupg
           if command -v clang > /dev/null 2>&1; then
             echo "clang available"
           else
@@ -74,24 +74,50 @@ jobs:
         env:
           FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
 
-      - name: Package
+      - name: Import GPG signing key
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format long | grep sec | head -1 | awk '{print $2}' | cut -d/ -f2)" >> "$GITHUB_ENV"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Package and sign
         run: |
           ARCHIVE="rockit-${VERSION}-linux-x86_64"
-          mkdir -p "dist/${ARCHIVE}/rockit/bin" "dist/${ARCHIVE}/rockit/share/rockit"
-          cp src/command "dist/${ARCHIVE}/rockit/bin/rockit"
-          cp /tmp/fuel/fuel "dist/${ARCHIVE}/rockit/bin/fuel"
-          chmod +x "dist/${ARCHIVE}/rockit/bin/rockit" "dist/${ARCHIVE}/rockit/bin/fuel"
-          cp runtime/rockit_runtime.o "dist/${ARCHIVE}/rockit/share/rockit/"
-          cp -r stdlib "dist/${ARCHIVE}/rockit/share/rockit/stdlib"
-          # Generate manifest
-          cd "dist/${ARCHIVE}/rockit"
-          find . -type f ! -name "MANIFEST.sha256" | sort | while read -r f; do
+          STAGING="dist/${ARCHIVE}/rockit"
+          mkdir -p "${STAGING}/bin" "${STAGING}/share/rockit"
+          cp src/command "${STAGING}/bin/rockit"
+          cp /tmp/fuel/fuel "${STAGING}/bin/fuel"
+          chmod +x "${STAGING}/bin/rockit" "${STAGING}/bin/fuel"
+          cp runtime/rockit_runtime.o "${STAGING}/share/rockit/"
+          cp -r stdlib "${STAGING}/share/rockit/stdlib"
+
+          # Sign binaries with GPG if key is available
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            bash scripts/sign.sh "${STAGING}/bin/rockit" gpg || true
+            bash scripts/sign.sh "${STAGING}/bin/fuel" gpg || true
+          fi
+
+          # Generate manifest (after signing, so hashes reflect signed state)
+          cd "${STAGING}"
+          find . -type f ! -name "MANIFEST.sha256" ! -name "*.sig" | sort | while read -r f; do
             hash=$(shasum -a 256 "$f" | awk '{print $1}')
             echo "sha256:${hash}  ${f#./}" >> MANIFEST.sha256
           done
           cd ../../..
+
+          # Sign the manifest
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            export GPG_KEY_ID
+            export GPG_PASSPHRASE="${GPG_PASSPHRASE:-}"
+            bash scripts/sign.sh "${STAGING}/MANIFEST.sha256" manifest || true
+          fi
+
           cd dist && tar -czf "${ARCHIVE}.tar.gz" "${ARCHIVE}"
           echo "ARCHIVE=${ARCHIVE}.tar.gz" >> "$GITHUB_ENV"
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Upload release
         run: |
@@ -142,18 +168,53 @@ jobs:
       - name: Build runtime
         run: bash runtime/rockit/build.sh
 
-      - name: Package
+      - name: Import GPG signing key
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format long | grep sec | head -1 | awk '{print $2}' | cut -d/ -f2)" >> "$GITHUB_ENV"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Package, sign, and notarize
         run: |
           ARCHIVE="rockit-${VERSION}-macos-arm64"
-          mkdir -p "dist/${ARCHIVE}/rockit/bin" "dist/${ARCHIVE}/rockit/share/rockit"
-          cp src/command "dist/${ARCHIVE}/rockit/bin/rockit"
-          chmod +x "dist/${ARCHIVE}/rockit/bin/rockit"
-          cp runtime/rockit_runtime.o "dist/${ARCHIVE}/rockit/share/rockit/"
-          cp -r stdlib "dist/${ARCHIVE}/rockit/share/rockit/stdlib"
-          cd "dist/${ARCHIVE}/rockit"
-          find . -type f ! -name "MANIFEST.sha256" | sort | while read -r f; do
+          STAGING="dist/${ARCHIVE}/rockit"
+          mkdir -p "${STAGING}/bin" "${STAGING}/share/rockit"
+          cp src/command "${STAGING}/bin/rockit"
+          chmod +x "${STAGING}/bin/rockit"
+          cp runtime/rockit_runtime.o "${STAGING}/share/rockit/"
+          cp -r stdlib "${STAGING}/share/rockit/stdlib"
+
+          # macOS code signing + notarization
+          if [ -n "${APPLE_IDENTITY:-}" ]; then
+            bash scripts/sign.sh "${STAGING}/bin/rockit" auto || true
+          fi
+
+          # GPG signing (universal)
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            bash scripts/sign.sh "${STAGING}/bin/rockit" gpg || true
+          fi
+
+          # Generate manifest after signing
+          cd "${STAGING}"
+          find . -type f ! -name "MANIFEST.sha256" ! -name "*.sig" | sort | while read -r f; do
             hash=$(shasum -a 256 "$f" | awk '{print $1}')
             echo "sha256:${hash}  ${f#./}" >> MANIFEST.sha256
           done
           cd ../../..
+
+          # Sign the manifest
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            export GPG_KEY_ID
+            export GPG_PASSPHRASE="${GPG_PASSPHRASE:-}"
+            bash scripts/sign.sh "${STAGING}/MANIFEST.sha256" manifest || true
+          fi
+
           cd dist && tar -czf "${ARCHIVE}.tar.gz" "${ARCHIVE}"
+        env:
+          APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

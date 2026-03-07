@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          apt-get update && apt-get install -y git clang-15 curl jq openjdk-17-jdk libssl-dev pkg-config
+          apt-get update && apt-get install -y git clang-15 curl jq openjdk-17-jdk libssl-dev pkg-config gnupg
           ln -sf /usr/bin/clang-15 /usr/bin/clang
 
       - name: Set version
@@ -116,22 +116,54 @@ jobs:
           echo "PLUGIN_ZIP=${PLUGIN_ZIP}" >> "$GITHUB_ENV"
           echo "Built plugin: ${PLUGIN_ZIP}"
 
+      - name: Import GPG signing key
+        if: env.SKIP_RELEASE != 'true' && env.GPG_PRIVATE_KEY != ''
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format long | grep sec | head -1 | awk '{print $2}' | cut -d/ -f2)" >> "$GITHUB_ENV"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
       - name: Package Linux x86_64
         if: env.SKIP_RELEASE != 'true'
         run: |
           ARCHIVE="rockit-${VERSION}-linux-x86_64.tar.gz"
-          mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/bin
-          mkdir -p dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit
-          cp RockitCompiler/self-hosted-rockit/command dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
-          chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/rockit
-          cp /tmp/fuel/fuel dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
-          chmod +x dist/rockit-${VERSION}-linux-x86_64/rockit/bin/fuel
-          cp RockitCompiler/runtime/rockit_runtime.o dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
-          # Standard library — recursive copy picks up all modules automatically
-          cp -r RockitCompiler/self-hosted-rockit/stdlib dist/rockit-${VERSION}-linux-x86_64/rockit/share/rockit/
+          STAGING="dist/rockit-${VERSION}-linux-x86_64/rockit"
+          mkdir -p "${STAGING}/bin"
+          mkdir -p "${STAGING}/share/rockit"
+          cp RockitCompiler/self-hosted-rockit/command "${STAGING}/bin/rockit"
+          chmod +x "${STAGING}/bin/rockit"
+          cp /tmp/fuel/fuel "${STAGING}/bin/fuel"
+          chmod +x "${STAGING}/bin/fuel"
+          cp RockitCompiler/runtime/rockit_runtime.o "${STAGING}/share/rockit/"
+          cp -r RockitCompiler/self-hosted-rockit/stdlib "${STAGING}/share/rockit/"
+
+          # Sign binaries with GPG if key is available
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            bash RockitCompiler/scripts/sign.sh "${STAGING}/bin/rockit" gpg || true
+            bash RockitCompiler/scripts/sign.sh "${STAGING}/bin/fuel" gpg || true
+          fi
+
+          # Generate release manifest
+          cd "${STAGING}"
+          find . -type f ! -name "MANIFEST.sha256" ! -name "*.sig" | sort | while read -r f; do
+            hash=$(shasum -a 256 "$f" | awk '{print $1}')
+            echo "sha256:${hash}  ${f#./}" >> MANIFEST.sha256
+          done
+          cd ../../..
+
+          # Sign the manifest
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            export GPG_KEY_ID
+            export GPG_PASSPHRASE="${GPG_PASSPHRASE:-}"
+            bash RockitCompiler/scripts/sign.sh "${STAGING}/MANIFEST.sha256" manifest || true
+          fi
+
           cd dist && tar -czf "${ARCHIVE}" "rockit-${VERSION}-linux-x86_64"
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
           ls -la "${ARCHIVE}"
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Create tag (if triggered by master merge)
         if: env.SKIP_RELEASE != 'true'

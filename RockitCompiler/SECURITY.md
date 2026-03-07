@@ -77,24 +77,32 @@ The manifest itself is signed (Layer 3). Verification:
 
 ### Layer 3 — Code Signing
 
-**Status:** Scaffolding implemented (sign.sh, keys/ directory)
+**Status:** Implemented
 **Priority:** High
 
-Platform-native code signing for the compiler binary:
+Platform-native code signing for the compiler binary, plus GPG as the universal
+baseline that works on all platforms:
 
-| Platform | Method | Tool |
-|----------|--------|------|
-| macOS | Codesign + Notarization | `codesign`, `notarytool` (Apple Developer ID) |
-| Windows | Authenticode | `signtool.exe` (code signing certificate) |
-| Linux | GPG detached signature | `gpg --detach-sign` (Dark Matter GPG key) |
+| Platform | Method | Tool | Env Vars |
+|----------|--------|------|----------|
+| All | GPG detached signature | `gpg --detach-sign` | `GPG_KEY_ID`, `GPG_PASSPHRASE` |
+| macOS | Codesign + Notarization | `codesign`, `notarytool` | `APPLE_IDENTITY`, `APPLE_TEAM_ID`, `APPLE_ID`, `APPLE_APP_PASSWORD` |
+| Windows | Authenticode | `signtool.exe` | `WIN_CERT_PATH`, `WIN_CERT_PASSWORD` |
 
-All platforms also get the release manifest signature (Layer 2) as a
-platform-independent verification path.
+GPG signing runs on every platform as the universal verification path.
+Platform-specific signing (codesign, Authenticode) runs in addition to GPG
+on macOS and Windows respectively.
+
+**Verification flow (install.sh / install.ps1):**
+1. Import Dark Matter public key from `keys/darkmatter-release.asc`
+2. Verify GPG signature on `MANIFEST.sha256` → confirms manifest integrity
+3. Verify SHA-256 hash of every file against the manifest → confirms file integrity
 
 **Key management:**
 - Signing keys stored in hardware security module (HSM) or secure vault
-- CI/CD has access to signing credentials only during release builds
-- Public keys published at a well-known URL and in the repo
+- CI/CD imports `GPG_PRIVATE_KEY` secret for automated signing
+- Public keys published in the repo (`keys/`) and at well-known URL
+- `sign.sh` gracefully skips signing when credentials are not configured (dev builds)
 
 ### Layer 4 — Bootstrap Chain Verification
 
