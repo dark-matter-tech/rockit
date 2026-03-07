@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-22.04
+    container: swift:5.10.1-jammy
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update && apt-get install -y git libssl-dev pkg-config curl jq
+          if ! command -v clang > /dev/null 2>&1; then
+            apt-get install -y clang-15
+            ln -sf /usr/bin/clang-15 /usr/bin/clang
+          fi
+
+      - name: Set version
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          git clone --depth 1 --recurse-submodules --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+        env:
+          GITHUB_TOKEN: ${{ gitea.token }}
+
+      - name: Clone and build Stage 0
+        run: |
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          git clone --depth 1 --recurse-submodules "${GITHUB_SERVER_URL}/Dark-Matter/moon.git" /tmp/moon
+          cd /tmp/moon/RockitCompiler && swift build -c release
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+      - name: Build Stage 1
+        run: |
+          bash src/build.sh
+          /tmp/moon/RockitCompiler/.build/release/rockit build-native src/command.rok
+
+      - name: Build runtime
+        run: bash runtime/rockit/build.sh
+
+      - name: Build Fuel
+        run: |
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
+          src/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path runtime/rockit_runtime.o
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+      - name: Package
+        run: |
+          ARCHIVE="rockit-${VERSION}-linux-x86_64"
+          mkdir -p "dist/${ARCHIVE}/rockit/bin" "dist/${ARCHIVE}/rockit/share/rockit"
+          cp src/command "dist/${ARCHIVE}/rockit/bin/rockit"
+          cp /tmp/fuel/fuel "dist/${ARCHIVE}/rockit/bin/fuel"
+          chmod +x "dist/${ARCHIVE}/rockit/bin/rockit" "dist/${ARCHIVE}/rockit/bin/fuel"
+          cp runtime/rockit_runtime.o "dist/${ARCHIVE}/rockit/share/rockit/"
+          cp -r stdlib "dist/${ARCHIVE}/rockit/share/rockit/stdlib"
+          cd "dist/${ARCHIVE}/rockit"
+          find . -type f ! -name "MANIFEST.sha256" | sort | while read -r f; do
+            hash=$(shasum -a 256 "$f" | awk '{print $1}')
+            echo "sha256:${hash}  ${f#./}" >> MANIFEST.sha256
+          done
+          cd ../../..
+          cd dist && tar -czf "${ARCHIVE}.tar.gz" "${ARCHIVE}"
+          echo "ARCHIVE=${ARCHIVE}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Create release
+        run: |
+          API="${GITHUB_SERVER_URL}/api/v1"
+          RELEASE_ID=$(curl -s -X POST \
+            -H "Authorization: token ${FUEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${API}/repos/${GITHUB_REPOSITORY}/releases" \
+            -d "{\"tag_name\": \"${TAG}\", \"name\": \"Rockit ${TAG}\", \"body\": \"Release ${TAG}\"}" | jq -r '.id')
+          curl -s -X POST \
+            -H "Authorization: token ${FUEL_TOKEN}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary "@dist/${ARCHIVE}" \
+            "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${ARCHIVE}"
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}

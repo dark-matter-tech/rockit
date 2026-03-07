@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [master, develop, staging, 'feature/**']
+  pull_request:
+    branches: [master, develop, staging]
+
+jobs:
+  linux:
+    name: Linux x86_64
+    runs-on: ubuntu-22.04
+    container: swift:5.10.1-jammy
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends git libssl-dev pkg-config
+          if command -v clang > /dev/null 2>&1; then
+            echo "clang already available"
+          else
+            apt-get install -y --no-install-recommends clang-15
+            ln -sf /usr/bin/clang-15 /usr/bin/clang
+          fi
+          apt-get clean && rm -rf /var/lib/apt/lists/*
+
+      - name: Checkout
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          git clone --depth 1 --recurse-submodules --branch "${BRANCH}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+        env:
+          GITHUB_TOKEN: ${{ gitea.token }}
+
+      - name: Clone Stage 0
+        run: |
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          git clone --depth 1 --recurse-submodules "${GITHUB_SERVER_URL}/Dark-Matter/moon.git" /tmp/moon
+        env:
+          GITHUB_TOKEN: ${{ gitea.token }}
+
+      - name: Build Stage 0
+        run: cd /tmp/moon/RockitCompiler && swift build -c release
+
+      - name: Build Stage 1
+        run: |
+          bash src/build.sh
+          /tmp/moon/RockitCompiler/.build/release/rockit build-native src/command.rok
+
+      - name: Build runtime
+        run: bash runtime/rockit/build.sh
+
+      - name: Integration tests
+        run: |
+          STAGE1=src/command
+          TRIPLE="x86_64-unknown-linux-gnu"
+          PASS=0; FAIL=0; TOTAL=0
+          for f in examples/test_*.rok; do
+            [ -f "$f" ] || continue
+            name=$(basename "$f" .rok)
+            TOTAL=$((TOTAL + 1))
+            if $STAGE1 build-native "$f" -o "examples/$name" --runtime-path runtime/rockit_runtime.o --lib-path stdlib --target-triple $TRIPLE > /tmp/build_log 2>&1; then
+              "examples/$name" > /dev/null 2>&1 || true
+              PASS=$((PASS + 1))
+            else
+              echo "FAIL: $name"
+              FAIL=$((FAIL + 1))
+            fi
+          done
+          echo "Tests: $PASS/$TOTAL passed"
+          [ "$FAIL" -eq 0 ] || exit 1
+
+      - name: Bootstrap verification
+        run: |
+          TRIPLE="x86_64-unknown-linux-gnu"
+          src/command build-native src/command.rok -o /tmp/stage2 --runtime-path runtime/rockit_runtime.o --target-triple $TRIPLE
+          src/command compile src/command.rok -o /tmp/stage2.rokb
+          /tmp/stage2 compile src/command.rok -o /tmp/stage3.rokb
+          diff /tmp/stage2.rokb /tmp/stage3.rokb && echo "Bootstrap verified" || (echo "Bootstrap FAILED" && exit 1)

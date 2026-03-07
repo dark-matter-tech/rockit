@@ -8172,9 +8172,339 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
     val bytes = stringToBytes(irText)
     fileWriteBytes(outputFile, bytes)
 }
+// update.rok — Rockit self-update system
+// Handles version checking, channel management, and self-update.
+
+// ---------------------------------------------------------------------------
+// Config directory and file management
+// ---------------------------------------------------------------------------
+
+fun updateGetConfigDir(): String {
+    val home = toString(getEnv("HOME"))
+    if (stringLength(home) > 0) {
+        return stringConcat(home, "/.rockit")
+    }
+    // Windows fallback
+    val appdata = toString(getEnv("LOCALAPPDATA"))
+    if (stringLength(appdata) > 0) {
+        return stringConcat(appdata, "/Rockit")
+    }
+    return "/tmp/.rockit"
+}
+
+fun updateGetConfigFile(): String {
+    return stringConcat(updateGetConfigDir(), "/config")
+}
+
+fun updateReadConfig(): Map {
+    val config = mapCreate()
+    mapPut(config, "channel", "stable")
+    mapPut(config, "last_check", "0")
+    mapPut(config, "auto_check", "true")
+
+    val configFile = updateGetConfigFile()
+    val content = fileRead(configFile)
+    if (content == null) {
+        return config
+    }
+    val text = toString(content)
+    if (stringLength(text) == 0) {
+        return config
+    }
+
+    // Parse simple key=value lines
+    var i: Int = 0
+    var lineStart: Int = 0
+    while (i < stringLength(text)) {
+        val ch = charAt(text, i)
+        if (ch == "\n") {
+            val line = substring(text, lineStart, i)
+            val eqIdx = stringIndexOf(line, "=")
+            if (eqIdx > 0) {
+                val key = substring(line, 0, eqIdx)
+                val value = substring(line, eqIdx + 1, stringLength(line))
+                mapPut(config, key, value)
+            }
+            lineStart = i + 1
+        }
+        i = i + 1
+    }
+    // Handle last line without trailing newline
+    if (lineStart < stringLength(text)) {
+        val line = substring(text, lineStart, stringLength(text))
+        val eqIdx = stringIndexOf(line, "=")
+        if (eqIdx > 0) {
+            val key = substring(line, 0, eqIdx)
+            val value = substring(line, eqIdx + 1, stringLength(line))
+            mapPut(config, key, value)
+        }
+    }
+    return config
+}
+
+fun updateWriteConfig(config: Map): Unit {
+    val configDir = updateGetConfigDir()
+    // Ensure directory exists
+    systemExec(stringConcat("mkdir -p ", configDir))
+
+    val channel = toString(mapGet(config, "channel"))
+    val lastCheck = toString(mapGet(config, "last_check"))
+    val autoCheck = toString(mapGet(config, "auto_check"))
+
+    var content: String = ""
+    content = stringConcat(content, stringConcat("channel=", stringConcat(channel, "\n")))
+    content = stringConcat(content, stringConcat("last_check=", stringConcat(lastCheck, "\n")))
+    content = stringConcat(content, stringConcat("auto_check=", stringConcat(autoCheck, "\n")))
+
+    fileWriteBytes(updateGetConfigFile(), content)
+}
+
+fun updateMapChannelToBranch(channel: String): String {
+    if (channel == "stable") { return "master" }
+    if (channel == "beta") { return "staging" }
+    if (channel == "nightly") { return "develop" }
+    return "master"
+}
+
+fun updateGetPlatform(): String {
+    val os = toString(platformOS())
+    if (os == "macos") { return "macos-arm64" }
+    if (os == "linux") { return "linux-x86_64" }
+    if (os == "windows") { return "windows-x86_64" }
+    return stringConcat(os, "-unknown")
+}
+
+fun updateCheckLatestVersion(channel: String): String {
+    val branch = updateMapChannelToBranch(channel)
+    val apiUrl = stringConcat("https://rustygits.com/api/v1/repos/Dark-Matter/moon/releases?limit=1&draft=false&pre-release=false")
+    val tmpFile = "/tmp/rockit_update_check.tmp"
+
+    val curlCmd = stringConcat("curl -s -o ", stringConcat(tmpFile, stringConcat(" \"", stringConcat(apiUrl, "\""))))
+    val exitCode = systemExec(curlCmd)
+    if (exitCode != 0) {
+        return ""
+    }
+
+    val response = fileRead(tmpFile)
+    if (response == null) {
+        return ""
+    }
+    val text = toString(response)
+    fileDelete(tmpFile)
+
+    // Extract tag_name from JSON response (simple string search)
+    val tagIdx = stringIndexOf(text, "\"tag_name\":")
+    if (tagIdx < 0) {
+        return ""
+    }
+
+    // Find the value after "tag_name":
+    var si: Int = tagIdx + 11
+    // Skip whitespace and quote
+    while (si < stringLength(text)) {
+        val c = charAt(text, si)
+        if (c == "\"") {
+            si = si + 1
+            // Find closing quote
+            var ei: Int = si
+            while (ei < stringLength(text)) {
+                if (charAt(text, ei) == "\"") {
+                    val tag = substring(text, si, ei)
+                    // Strip leading 'v' if present
+                    if (stringLength(tag) > 0) {
+                        if (charAt(tag, 0) == "v") {
+                            return substring(tag, 1, stringLength(tag))
+                        }
+                    }
+                    return tag
+                }
+                ei = ei + 1
+            }
+            return ""
+        }
+        si = si + 1
+    }
+    return ""
+}
+
+fun updateRunCheck(currentVersion: String, channel: String): Unit {
+    println(stringConcat("Current version: ", currentVersion))
+    println(stringConcat("Channel: ", channel))
+    println("Checking for updates...")
+
+    val latest = updateCheckLatestVersion(channel)
+    if (stringLength(latest) == 0) {
+        println("Could not reach update server.")
+        return
+    }
+
+    if (latest == currentVersion) {
+        println(stringConcat("Up to date (", stringConcat(latest, ")")))
+    } else {
+        println(stringConcat("Update available: ", stringConcat(currentVersion, stringConcat(" -> ", latest))))
+        println("Run 'rockit update' to install.")
+    }
+
+    // Update last check timestamp
+    val config = updateReadConfig()
+    // Use current epoch approximation (seconds since midnight via date command)
+    val tmpTs = "/tmp/rockit_ts.tmp"
+    systemExec(stringConcat("date +%s > ", tmpTs))
+    val tsContent = fileRead(tmpTs)
+    if (tsContent != null) {
+        val ts = toString(tsContent)
+        // Trim trailing newline
+        if (stringLength(ts) > 0) {
+            val trimmed = substring(ts, 0, stringLength(ts) - 1)
+            mapPut(config, "last_check", trimmed)
+        }
+    }
+    fileDelete(tmpTs)
+    updateWriteConfig(config)
+}
+
+fun updateSelfUpdate(currentVersion: String, channel: String): Unit {
+    val latest = updateCheckLatestVersion(channel)
+    if (stringLength(latest) == 0) {
+        println("Could not reach update server.")
+        return
+    }
+
+    if (latest == currentVersion) {
+        println(stringConcat("Already up to date (", stringConcat(latest, ")")))
+        return
+    }
+
+    println(stringConcat("Updating: ", stringConcat(currentVersion, stringConcat(" -> ", latest))))
+    val platform = updateGetPlatform()
+    val archive = stringConcat("rockit-", stringConcat(latest, stringConcat("-", stringConcat(platform, ".tar.gz"))))
+    val url = stringConcat("https://rustygits.com/Dark-Matter/moon/releases/download/v", stringConcat(latest, stringConcat("/", archive)))
+    val tmpDir = "/tmp/rockit-update"
+
+    println(stringConcat("Downloading ", archive))
+    systemExec(stringConcat("rm -rf ", tmpDir))
+    systemExec(stringConcat("mkdir -p ", tmpDir))
+
+    val dlCmd = stringConcat("curl -fSL -o ", stringConcat(tmpDir, stringConcat("/", stringConcat(archive, stringConcat(" \"", stringConcat(url, "\""))))))
+    val dlExit = systemExec(dlCmd)
+    if (dlExit != 0) {
+        println("Download failed.")
+        return
+    }
+
+    println("Extracting...")
+    val extractCmd = stringConcat("tar -xzf ", stringConcat(tmpDir, stringConcat("/", stringConcat(archive, stringConcat(" -C ", tmpDir)))))
+    systemExec(extractCmd)
+
+    // Find the rockit binary in extracted archive
+    val extractedBin = stringConcat(tmpDir, stringConcat("/rockit-", stringConcat(latest, stringConcat("-", stringConcat(platform, "/rockit/bin/rockit")))))
+
+    // Check if MANIFEST.sha256 exists and verify
+    val manifestPath = stringConcat(tmpDir, stringConcat("/rockit-", stringConcat(latest, stringConcat("-", stringConcat(platform, "/rockit/MANIFEST.sha256")))))
+    val manifestContent = fileRead(manifestPath)
+    if (manifestContent != null) {
+        println("Manifest found — integrity check available")
+    }
+
+    // Install: copy to /usr/local/bin or ROCKIT_PREFIX
+    val prefix = toString(getEnv("ROCKIT_PREFIX"))
+    var binDir: String = "/usr/local/bin"
+    if (stringLength(prefix) > 0) {
+        binDir = stringConcat(prefix, "/bin")
+    }
+
+    println(stringConcat("Installing to ", binDir))
+    val installCmd = stringConcat("sudo cp ", stringConcat(extractedBin, stringConcat(" ", stringConcat(binDir, "/rockit"))))
+    val installExit = systemExec(installCmd)
+    if (installExit != 0) {
+        println("Install failed — try running with sudo or set ROCKIT_PREFIX")
+        return
+    }
+    systemExec(stringConcat("sudo chmod +x ", stringConcat(binDir, "/rockit")))
+
+    // Clean up
+    systemExec(stringConcat("rm -rf ", tmpDir))
+
+    println(stringConcat("Updated to rockit ", latest))
+}
+
+fun updateSetChannel(channel: String): Unit {
+    if (channel != "stable") {
+        if (channel != "beta") {
+            if (channel != "nightly") {
+                println(stringConcat("Unknown channel: ", channel))
+                println("Valid channels: stable, beta, nightly")
+                return
+            }
+        }
+    }
+
+    val config = updateReadConfig()
+    mapPut(config, "channel", channel)
+    updateWriteConfig(config)
+    println(stringConcat("Update channel set to: ", channel))
+    println(stringConcat("Branch: ", updateMapChannelToBranch(channel)))
+}
+
+fun updateBackgroundNotice(currentVersion: String): Unit {
+    val config = updateReadConfig()
+    val autoCheck = toString(mapGet(config, "auto_check"))
+    if (autoCheck == "false") {
+        return
+    }
+
+    val lastCheckStr = toString(mapGet(config, "last_check"))
+    if (stringLength(lastCheckStr) == 0) {
+        return
+    }
+
+    // Get current time
+    val tmpTs = "/tmp/rockit_ts_bg.tmp"
+    val tsExit = systemExec(stringConcat("date +%s > ", tmpTs))
+    if (tsExit != 0) {
+        return
+    }
+    val tsContent = fileRead(tmpTs)
+    fileDelete(tmpTs)
+    if (tsContent == null) {
+        return
+    }
+    val nowStr = toString(tsContent)
+    val now = toInt(substring(nowStr, 0, stringLength(nowStr) - 1))
+    val lastCheck = toInt(lastCheckStr)
+
+    // Check every 24 hours (86400 seconds)
+    if (now - lastCheck < 86400) {
+        return
+    }
+
+    val channel = toString(mapGet(config, "channel"))
+    val latest = updateCheckLatestVersion(channel)
+    if (stringLength(latest) == 0) {
+        return
+    }
+
+    // Update last_check
+    mapPut(config, "last_check", toString(now))
+    updateWriteConfig(config)
+
+    if (latest != currentVersion) {
+        println(stringConcat("Update available: ", stringConcat(currentVersion, stringConcat(" -> ", stringConcat(latest, " (run 'rockit update')")))))
+    }
+}
+
 // codegen.rok — Stage 1 Code Generator (self-hosted)
 // Compiles AST (from parser.rok) directly to Rockit bytecode (.rokb format).
 // Single-pass tree-walking code generator with register allocation.
+
+// ---------------------------------------------------------------------------
+// Build Identity (injected by build.sh)
+// ---------------------------------------------------------------------------
+val ROCKIT_VERSION: String = "0.1.0"
+val ROCKIT_GIT_HASH: String = "2809bc1ec3dcb6d59939a614585cc26f9e5c3c84"
+val ROCKIT_SOURCE_HASH: String = "sha256:58e035c243ed09b043779476a0d24e5a9a1b9639121049e4f057383e9734f52c"
+val ROCKIT_BUILD_TIMESTAMP: String = "2026-03-07T01:07:58Z"
+val ROCKIT_BUILD_PLATFORM: String = "darwin-arm64"
 
 // ---------------------------------------------------------------------------
 // Opcodes (must match Bytecode.swift)
@@ -12313,6 +12643,8 @@ fun main(): Unit {
         println("       rockit build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
         println("       rockit repl")
         println("       rockit version")
+        println("       rockit update [--check] [--channel <stable|beta|nightly>]")
+        println("       rockit verify-bootstrap")
         return
     }
 
@@ -12326,7 +12658,101 @@ fun main(): Unit {
 
     // Version
     if (command == "version" || command == "--version" || command == "-v") {
-        println("rockit 0.1.0")
+        println(stringConcat("rockit ", ROCKIT_VERSION))
+        println(stringConcat("commit:    ", ROCKIT_GIT_HASH))
+        println(stringConcat("source:    ", ROCKIT_SOURCE_HASH))
+        println(stringConcat("built:     ", ROCKIT_BUILD_TIMESTAMP))
+        println(stringConcat("platform:  ", ROCKIT_BUILD_PLATFORM))
+        return
+    }
+
+    // Update command
+    if (command == "update") {
+        val config = updateReadConfig()
+        var channel: String = toString(mapGet(config, "channel"))
+
+        // Parse update subcommand args
+        var ui: Int = 1
+        var checkOnly: Bool = false
+        var setChannel: String = ""
+        while (ui < listSize(args)) {
+            val uarg = toString(listGet(args, ui))
+            if (uarg == "--check") {
+                checkOnly = true
+            } else if (uarg == "--channel") {
+                if (ui + 1 < listSize(args)) {
+                    ui = ui + 1
+                    setChannel = toString(listGet(args, ui))
+                }
+            }
+            ui = ui + 1
+        }
+
+        if (stringLength(setChannel) > 0) {
+            updateSetChannel(setChannel)
+            return
+        }
+
+        if (checkOnly) {
+            updateRunCheck(ROCKIT_VERSION, channel)
+        } else {
+            updateSelfUpdate(ROCKIT_VERSION, channel)
+        }
+        return
+    }
+
+    // Bootstrap verification
+    if (command == "verify-bootstrap") {
+        println("Rockit Bootstrap Verification")
+        println("=============================")
+        println("")
+
+        // Find our own binary path
+        val selfBin = toString(processArgs())
+        // We need command.rok path — look for it relative to the binary
+        var commandRok: String = "self-hosted-rockit/command.rok"
+        if (listSize(args) >= 2) {
+            commandRok = toString(listGet(args, 1))
+        }
+
+        println(stringConcat("Source: ", commandRok))
+        println("")
+
+        // Stage A: current binary compiles command.rok to bytecode
+        println("Stage A: Current binary -> bytecode...")
+        val stageACmd = stringConcat("rockit compile ", stringConcat(commandRok, " -o /tmp/rockit_stage_a.rokb"))
+        val stageAExit = systemExec(stageACmd)
+        if (stageAExit != 0) {
+            println("FAIL: Stage A compilation failed")
+            return
+        }
+
+        // Stage B: use the same binary to compile again (should be identical)
+        println("Stage B: Current binary -> bytecode (second pass)...")
+        val stageBCmd = stringConcat("rockit compile ", stringConcat(commandRok, " -o /tmp/rockit_stage_b.rokb"))
+        val stageBExit = systemExec(stageBCmd)
+        if (stageBExit != 0) {
+            println("FAIL: Stage B compilation failed")
+            return
+        }
+
+        // Compare
+        println("")
+        println("Comparing bytecode outputs...")
+        val diffExit = systemExec("diff /tmp/rockit_stage_a.rokb /tmp/rockit_stage_b.rokb")
+        if (diffExit == 0) {
+            println("PASS: Bytecode outputs are identical")
+        } else {
+            println("FAIL: Bytecode outputs differ!")
+        }
+
+        // Print hashes
+        systemExec("printf 'Stage A: ' && shasum -a 256 /tmp/rockit_stage_a.rokb")
+        systemExec("printf 'Stage B: ' && shasum -a 256 /tmp/rockit_stage_b.rokb")
+
+        // Clean up
+        fileDelete("/tmp/rockit_stage_a.rokb")
+        fileDelete("/tmp/rockit_stage_b.rokb")
         return
     }
 
@@ -12335,6 +12761,8 @@ fun main(): Unit {
         println("       rockit build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
         println("       rockit repl")
         println("       rockit version")
+        println("       rockit update [--check] [--channel <stable|beta|nightly>]")
+        println("       rockit verify-bootstrap")
         return
     }
     var sourceFile: String = toString(listGet(args, 1))

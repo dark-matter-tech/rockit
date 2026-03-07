@@ -3,10 +3,19 @@
 // Copyright © 2026 Dark Matter Tech. All rights reserved.
 
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
+#if canImport(Security)
 import Security
+#endif
 #if canImport(CommonCrypto)
 import CommonCrypto
+#endif
+#if canImport(COpenSSL)
+import COpenSSL
 #endif
 
 // MARK: - Builtin Function Type
@@ -1336,7 +1345,11 @@ public final class BuiltinRegistry {
             }
             if count <= 0 { return .string("") }
             var bytes = [UInt8](repeating: 0, count: Int(count))
+            #if canImport(Security)
             _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+            #else
+            for i in 0..<bytes.count { bytes[i] = UInt8.random(in: 0...255) }
+            #endif
             return .string(String(bytes: bytes, encoding: .isoLatin1) ?? "")
         }
 
@@ -1363,7 +1376,8 @@ public final class BuiltinRegistry {
                 result.append(contentsOf: sealed.tag)
                 return .string(String(bytes: result, encoding: .isoLatin1) ?? "")
             } else {
-                // AES-CBC via CommonCrypto
+                // AES-CBC
+                #if canImport(CommonCrypto)
                 let bufferSize = ptBytes.count + kCCBlockSizeAES128
                 var buffer = [UInt8](repeating: 0, count: bufferSize)
                 var numBytesEncrypted = 0
@@ -1375,6 +1389,22 @@ public final class BuiltinRegistry {
                                      &buffer, bufferSize, &numBytesEncrypted)
                 guard status == kCCSuccess else { return .string("") }
                 return .string(String(bytes: Array(buffer[0..<numBytesEncrypted]), encoding: .isoLatin1) ?? "")
+                #elseif canImport(COpenSSL)
+                let ctx = EVP_CIPHER_CTX_new()
+                defer { EVP_CIPHER_CTX_free(ctx) }
+                EVP_CipherInit_ex(ctx, EVP_aes_256_cbc(), nil, keyBytes, ivBytes, 1)
+                var outLen: Int32 = 0
+                var buffer = [UInt8](repeating: 0, count: ptBytes.count + 16)
+                EVP_CipherUpdate(ctx, &buffer, &outLen, ptBytes, Int32(ptBytes.count))
+                var totalLen = outLen
+                var finalBuf = [UInt8](repeating: 0, count: 16)
+                EVP_CipherFinal_ex(ctx, &finalBuf, &outLen)
+                for i in 0..<Int(outLen) { buffer[Int(totalLen) + i] = finalBuf[i] }
+                totalLen += outLen
+                return .string(String(bytes: Array(buffer[0..<Int(totalLen)]), encoding: .isoLatin1) ?? "")
+                #else
+                return .string("")
+                #endif
             }
         }
 
@@ -1403,7 +1433,8 @@ public final class BuiltinRegistry {
                 let decrypted = try AES.GCM.open(sealedBox, using: symmetricKey)
                 return .string(String(bytes: Array(decrypted), encoding: .isoLatin1) ?? "")
             } else {
-                // AES-CBC via CommonCrypto
+                // AES-CBC
+                #if canImport(CommonCrypto)
                 let bufferSize = ctBytes.count + kCCBlockSizeAES128
                 var buffer = [UInt8](repeating: 0, count: bufferSize)
                 var numBytesDecrypted = 0
@@ -1415,14 +1446,34 @@ public final class BuiltinRegistry {
                                      &buffer, bufferSize, &numBytesDecrypted)
                 guard status == kCCSuccess else { return .string("") }
                 return .string(String(bytes: Array(buffer[0..<numBytesDecrypted]), encoding: .isoLatin1) ?? "")
+                #elseif canImport(COpenSSL)
+                let ctx = EVP_CIPHER_CTX_new()
+                defer { EVP_CIPHER_CTX_free(ctx) }
+                EVP_CipherInit_ex(ctx, EVP_aes_256_cbc(), nil, keyBytes, ivBytes, 0)
+                var outLen: Int32 = 0
+                var buffer = [UInt8](repeating: 0, count: ctBytes.count + 16)
+                EVP_CipherUpdate(ctx, &buffer, &outLen, ctBytes, Int32(ctBytes.count))
+                var totalLen = outLen
+                var finalBuf = [UInt8](repeating: 0, count: 16)
+                EVP_CipherFinal_ex(ctx, &finalBuf, &outLen)
+                for i in 0..<Int(outLen) { buffer[Int(totalLen) + i] = finalBuf[i] }
+                totalLen += outLen
+                return .string(String(bytes: Array(buffer[0..<Int(totalLen)]), encoding: .isoLatin1) ?? "")
+                #else
+                return .string("")
+                #endif
             }
         }
     }
 
-    // MARK: - X.509 Certificate Builtins (Security framework)
+    // MARK: - X.509 Certificate Builtins
 
     /// Handle table for parsed certificates
+    #if canImport(Security)
     private static var x509Handles: [Int: SecCertificate] = [:]
+    #else
+    private static var x509Handles: [Int: OpaquePointer] = [:]
+    #endif
     private static var x509NextHandle: Int = 0
     /// Store raw PEM data for fields Security framework can't extract directly
     private static var x509PemData: [Int: Data] = [:]
@@ -1446,9 +1497,18 @@ public final class BuiltinRegistry {
             guard let derData = Data(base64Encoded: base64) else {
                 return .int(-1)
             }
+            #if canImport(Security)
             guard let cert = SecCertificateCreateWithData(nil, derData as CFData) else {
                 return .int(-1)
             }
+            #else
+            let cert: OpaquePointer? = derData.withUnsafeBytes { rawBuf -> OpaquePointer? in
+                guard let basePtr = rawBuf.baseAddress else { return nil }
+                var p: UnsafePointer<UInt8>? = basePtr.assumingMemoryBound(to: UInt8.self)
+                return d2i_X509(nil, &p, derData.count)
+            }
+            guard let cert else { return .int(-1) }
+            #endif
             let handle = BuiltinRegistry.x509NextHandle
             BuiltinRegistry.x509NextHandle += 1
             BuiltinRegistry.x509Handles[handle] = cert
@@ -1462,12 +1522,11 @@ public final class BuiltinRegistry {
                 throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509Subject")
             }
             guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .string("") }
+            #if canImport(Security)
             #if os(macOS)
-            // Use SecCertificateCopyValues on macOS for subject
             if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1SubjectName] as CFArray, nil) as? [String: Any],
                let subjectEntry = values[kSecOIDX509V1SubjectName as String] as? [String: Any],
                let subjectValue = subjectEntry[kSecPropertyKeyValue as String] {
-                // subjectValue is an array of label/value pairs
                 if let pairs = subjectValue as? [[String: Any]] {
                     let parts = pairs.compactMap { pair -> String? in
                         guard let label = pair[kSecPropertyKeyLabel as String] as? String,
@@ -1477,12 +1536,15 @@ public final class BuiltinRegistry {
                     return .string(parts.joined(separator: ", "))
                 }
             }
-            // Fallback to summary
+            #endif
             let summary = SecCertificateCopySubjectSummary(cert) as String? ?? ""
             return .string("CN=\(summary)")
             #else
-            let summary = SecCertificateCopySubjectSummary(cert) as String? ?? ""
-            return .string("CN=\(summary)")
+            let subj = X509_get_subject_name(cert)
+            let buf = X509_NAME_oneline(subj, nil, 0)
+            let result = buf != nil ? String(cString: buf!) : ""
+            OPENSSL_free(buf)
+            return .string(result)
             #endif
         }
 
@@ -1492,6 +1554,7 @@ public final class BuiltinRegistry {
                 throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509Issuer")
             }
             guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .string("") }
+            #if canImport(Security)
             #if os(macOS)
             if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1IssuerName] as CFArray, nil) as? [String: Any],
                let issuerEntry = values[kSecOIDX509V1IssuerName as String] as? [String: Any],
@@ -1505,12 +1568,15 @@ public final class BuiltinRegistry {
                     return .string(parts.joined(separator: ", "))
                 }
             }
-            // Self-signed fallback: issuer = subject
+            #endif
             let summary = SecCertificateCopySubjectSummary(cert) as String? ?? ""
             return .string("CN=\(summary)")
             #else
-            let summary = SecCertificateCopySubjectSummary(cert) as String? ?? ""
-            return .string("CN=\(summary)")
+            let issuer = X509_get_issuer_name(cert)
+            let buf = X509_NAME_oneline(issuer, nil, 0)
+            let result = buf != nil ? String(cString: buf!) : ""
+            OPENSSL_free(buf)
+            return .string(result)
             #endif
         }
 
@@ -1520,18 +1586,24 @@ public final class BuiltinRegistry {
                 throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509NotBefore")
             }
             guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .int(0) }
+            #if canImport(Security)
             #if os(macOS)
             if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1ValidityNotBefore] as CFArray, nil) as? [String: Any],
                let entry = values[kSecOIDX509V1ValidityNotBefore as String] as? [String: Any],
                let number = entry[kSecPropertyKeyValue as String] as? NSNumber {
-                // Value is CFAbsoluteTime (seconds since 2001-01-01)
                 let cfAbsTime = number.doubleValue
-                // Convert to Unix epoch: add seconds between 1970-01-01 and 2001-01-01
                 let epoch = Int64(cfAbsTime + 978307200)
                 return .int(epoch)
             }
             #endif
             return .int(0)
+            #else
+            let asn1 = X509_get0_notBefore(cert)
+            var tmVal = tm()
+            ASN1_TIME_to_tm(asn1, &tmVal)
+            let epoch = Int64(timegm(&tmVal))
+            return .int(epoch)
+            #endif
         }
 
         // x509NotAfter(handle: Int) -> Int (epoch seconds)
@@ -1540,6 +1612,7 @@ public final class BuiltinRegistry {
                 throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509NotAfter")
             }
             guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .int(0) }
+            #if canImport(Security)
             #if os(macOS)
             if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1ValidityNotAfter] as CFArray, nil) as? [String: Any],
                let entry = values[kSecOIDX509V1ValidityNotAfter as String] as? [String: Any],
@@ -1550,6 +1623,13 @@ public final class BuiltinRegistry {
             }
             #endif
             return .int(0)
+            #else
+            let asn1 = X509_get0_notAfter(cert)
+            var tmVal = tm()
+            ASN1_TIME_to_tm(asn1, &tmVal)
+            let epoch = Int64(timegm(&tmVal))
+            return .int(epoch)
+            #endif
         }
 
         // x509SerialNumber(handle: Int) -> String (hex)
@@ -1558,6 +1638,7 @@ public final class BuiltinRegistry {
                 throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509SerialNumber")
             }
             guard let cert = BuiltinRegistry.x509Handles[Int(h)] else { return .string("") }
+            #if canImport(Security)
             #if os(macOS)
             if let values = SecCertificateCopyValues(cert, [kSecOIDX509V1SerialNumber] as CFArray, nil) as? [String: Any],
                let entry = values[kSecOIDX509V1SerialNumber as String] as? [String: Any],
@@ -1565,12 +1646,20 @@ public final class BuiltinRegistry {
                 return .string(serialStr)
             }
             #endif
-            // Fallback: use SecCertificateCopySerialNumberData
             if let serialData = SecCertificateCopySerialNumberData(cert, nil) as Data? {
                 let hex = serialData.map { String(format: "%02X", $0) }.joined()
                 return .string(hex)
             }
             return .string("")
+            #else
+            let serial = X509_get_serialNumber(cert)
+            let bn = ASN1_INTEGER_to_BN(serial, nil)
+            let hexPtr = BN_bn2hex(bn)
+            let hex = hexPtr != nil ? String(cString: hexPtr!) : ""
+            OPENSSL_free(hexPtr)
+            BN_free(bn)
+            return .string(hex)
+            #endif
         }
 
         // x509Free(handle: Int) -> Unit
@@ -1578,6 +1667,11 @@ public final class BuiltinRegistry {
             guard case .int(let h) = args.first else {
                 throw VMError.typeMismatch(expected: "Int", actual: args.first?.typeName ?? "nothing", operation: "x509Free")
             }
+            #if !canImport(Security)
+            if let cert = BuiltinRegistry.x509Handles[Int(h)] {
+                X509_free(cert)
+            }
+            #endif
             BuiltinRegistry.x509Handles.removeValue(forKey: Int(h))
             BuiltinRegistry.x509PemData.removeValue(forKey: Int(h))
             return .null

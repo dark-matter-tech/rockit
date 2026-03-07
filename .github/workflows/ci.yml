@@ -94,7 +94,7 @@ jobs:
           echo ""
 
           echo "🔧 Installing build dependencies..."
-          apt-get update && apt-get install -y --no-install-recommends git
+          apt-get update && apt-get install -y --no-install-recommends git libssl-dev pkg-config
           # Use existing clang from Swift container if available, else install clang-15
           if command -v clang > /dev/null 2>&1; then
             echo "  ✅ clang already available: $(clang --version | head -1)"

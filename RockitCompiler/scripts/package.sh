@@ -107,7 +107,22 @@ if [[ -z "$FUEL_PATH" && -d "$FUEL_SRC" ]]; then
     rm -rf "$FUEL_SRC"
 fi
 
-# --- Step 4: Create tarball ---
+# --- Step 4: Generate release manifest ---
+info "Generating release manifest..."
+cd "$STAGING"
+find . -type f ! -name "MANIFEST.sha256" | sort | while read -r f; do
+    hash=$(shasum -a 256 "$f" | awk '{print $1}')
+    echo "sha256:${hash}  ${f#./}" >> MANIFEST.sha256
+done
+ok "Manifest generated: MANIFEST.sha256"
+cd "$DIST_DIR"
+
+# --- Step 5: Sign release (if credentials available) ---
+if [ -f "${SCRIPT_DIR}/sign.sh" ]; then
+    bash "${SCRIPT_DIR}/sign.sh" "${STAGING}/MANIFEST.sha256" || true
+fi
+
+# --- Step 6: Create tarball ---
 mkdir -p "$DIST_DIR"
 cd "$DIST_DIR"
 tar -czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
@@ -120,6 +135,7 @@ echo "    rockit/bin/rockit              — Rockit compiler"
 echo "    rockit/bin/fuel                — Fuel package manager"
 echo "    rockit/share/rockit/rockit_runtime.c — C runtime"
 echo "    rockit/share/rockit/stdlib/    — Standard library"
+echo "    rockit/MANIFEST.sha256         — File integrity manifest"
 echo ""
 echo "  Upload to Gitea releases:"
 echo "    https://rustygits.com/Dark-Matter/moon/releases/new"

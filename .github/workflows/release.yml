@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          apt-get update && apt-get install -y git clang-15 curl jq openjdk-17-jdk
+          apt-get update && apt-get install -y git clang-15 curl jq openjdk-17-jdk libssl-dev pkg-config
           ln -sf /usr/bin/clang-15 /usr/bin/clang
 
       - name: Set version
