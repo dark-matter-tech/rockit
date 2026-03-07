@@ -528,14 +528,18 @@ jobs:
           # ============================================================
 
           # Verify command.rok matches concatenated Stage 1 modules
+          # (filter out build identity lines which change every build)
           echo "  Verifying Stage 1 command.rok consistency..."
           cp self-hosted-rockit/command.rok /tmp/command_before.rok
           bash self-hosted-rockit/build.sh > /dev/null 2>&1
-          if diff /tmp/command_before.rok self-hosted-rockit/command.rok > /dev/null 2>&1; then
+          grep -v 'val ROCKIT_' /tmp/command_before.rok > /tmp/cmd_a.rok || true
+          grep -v 'val ROCKIT_' self-hosted-rockit/command.rok > /tmp/cmd_b.rok || true
+          if diff /tmp/cmd_a.rok /tmp/cmd_b.rok > /dev/null 2>&1; then
             echo "  ✅ command.rok matches source modules"
           else
             echo "  ❌ command.rok is out of sync with Stage 1 modules!"
             echo "     Run: bash self-hosted-rockit/build.sh"
+            diff /tmp/cmd_a.rok /tmp/cmd_b.rok | head -20
             exit 1
           fi
           echo ""
