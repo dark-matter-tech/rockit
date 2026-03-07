@@ -120,12 +120,12 @@ The Rockit language compiler. Self-hosting — Rockit compiles itself.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://rustygits.com/Dark-Matter/rockit-compiler/raw/branch/master/scripts/install.sh | bash
+curl -fsSL https://rustygits.com/Dark-Matter/rockit-compiler/raw/branch/staging/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-iwr -useb https://rustygits.com/Dark-Matter/rockit-compiler/raw/branch/master/scripts/install.ps1 | iex
+iwr -useb https://rustygits.com/Dark-Matter/rockit-compiler/raw/branch/staging/scripts/install.ps1 | iex
 ```
 
 ## Build from Source
@@ -199,17 +199,17 @@ if [ -f "$OUTPUT/scripts/install.sh" ]; then
     if [[ "$(uname)" == "Darwin" ]]; then
         sed -i '' 's|REPO_COMPILER="Dark-Matter/moon"|REPO_COMPILER="Dark-Matter/rockit-compiler"|g' "$OUTPUT/scripts/install.sh"
         sed -i '' 's|/RockitCompiler/scripts/install.sh|/scripts/install.sh|g' "$OUTPUT/scripts/install.sh"
-        sed -i '' 's|Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/|Dark-Matter/rockit-compiler/raw/branch/master/scripts/|g' "$OUTPUT/scripts/install.sh"
+        sed -i '' 's|Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/|Dark-Matter/rockit-compiler/raw/branch/staging/scripts/|g' "$OUTPUT/scripts/install.sh"
         sed -i '' 's|/moon/RockitCompiler|/rockit-compiler|g' "$OUTPUT/scripts/install.sh"
         sed -i '' 's|self-hosted-rockit/|src/|g' "$OUTPUT/scripts/install.sh"
-        sed -i '' 's|Dark-Matter/moon/raw/branch/develop/scripts/|Dark-Matter/rockit-compiler/raw/branch/master/scripts/|g' "$OUTPUT/scripts/install.sh"
+        sed -i '' 's|Dark-Matter/moon/raw/branch/develop/scripts/|Dark-Matter/rockit-compiler/raw/branch/staging/scripts/|g' "$OUTPUT/scripts/install.sh"
     else
         sed -i 's|REPO_COMPILER="Dark-Matter/moon"|REPO_COMPILER="Dark-Matter/rockit-compiler"|g' "$OUTPUT/scripts/install.sh"
         sed -i 's|/RockitCompiler/scripts/install.sh|/scripts/install.sh|g' "$OUTPUT/scripts/install.sh"
-        sed -i 's|Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/|Dark-Matter/rockit-compiler/raw/branch/master/scripts/|g' "$OUTPUT/scripts/install.sh"
+        sed -i 's|Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/|Dark-Matter/rockit-compiler/raw/branch/staging/scripts/|g' "$OUTPUT/scripts/install.sh"
         sed -i 's|/moon/RockitCompiler|/rockit-compiler|g' "$OUTPUT/scripts/install.sh"
         sed -i 's|self-hosted-rockit/|src/|g' "$OUTPUT/scripts/install.sh"
-        sed -i 's|Dark-Matter/moon/raw/branch/develop/scripts/|Dark-Matter/rockit-compiler/raw/branch/master/scripts/|g' "$OUTPUT/scripts/install.sh"
+        sed -i 's|Dark-Matter/moon/raw/branch/develop/scripts/|Dark-Matter/rockit-compiler/raw/branch/staging/scripts/|g' "$OUTPUT/scripts/install.sh"
     fi
 fi
 
@@ -218,19 +218,19 @@ if [ -f "$OUTPUT/scripts/install.ps1" ]; then
     if [[ "$(uname)" == "Darwin" ]]; then
         sed -i '' 's|\$REPO = "Dark-Matter/moon"|\$REPO = "Dark-Matter/rockit-compiler"|g' "$OUTPUT/scripts/install.ps1"
         sed -i '' 's|/RockitCompiler/scripts/install.ps1|/scripts/install.ps1|g' "$OUTPUT/scripts/install.ps1"
-        sed -i '' 's|Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/|Dark-Matter/rockit-compiler/raw/branch/master/scripts/|g' "$OUTPUT/scripts/install.ps1"
+        sed -i '' 's|Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/|Dark-Matter/rockit-compiler/raw/branch/staging/scripts/|g' "$OUTPUT/scripts/install.ps1"
         sed -i '' 's|/moon/RockitCompiler|/rockit-compiler|g' "$OUTPUT/scripts/install.ps1"
         sed -i '' 's|self-hosted-rockit/|src/|g' "$OUTPUT/scripts/install.ps1"
         sed -i '' 's|self-hosted-rockit\\|src\\|g' "$OUTPUT/scripts/install.ps1"
-        sed -i '' 's|Dark-Matter/moon/raw/branch/develop/scripts/|Dark-Matter/rockit-compiler/raw/branch/master/scripts/|g' "$OUTPUT/scripts/install.ps1"
+        sed -i '' 's|Dark-Matter/moon/raw/branch/develop/scripts/|Dark-Matter/rockit-compiler/raw/branch/staging/scripts/|g' "$OUTPUT/scripts/install.ps1"
     else
         sed -i 's|\$REPO = "Dark-Matter/moon"|\$REPO = "Dark-Matter/rockit-compiler"|g' "$OUTPUT/scripts/install.ps1"
         sed -i 's|/RockitCompiler/scripts/install.ps1|/scripts/install.ps1|g' "$OUTPUT/scripts/install.ps1"
-        sed -i 's|Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/|Dark-Matter/rockit-compiler/raw/branch/master/scripts/|g' "$OUTPUT/scripts/install.ps1"
+        sed -i 's|Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/|Dark-Matter/rockit-compiler/raw/branch/staging/scripts/|g' "$OUTPUT/scripts/install.ps1"
         sed -i 's|/moon/RockitCompiler|/rockit-compiler|g' "$OUTPUT/scripts/install.ps1"
         sed -i 's|self-hosted-rockit/|src/|g' "$OUTPUT/scripts/install.ps1"
         sed -i 's|self-hosted-rockit\\|src\\|g' "$OUTPUT/scripts/install.ps1"
-        sed -i 's|Dark-Matter/moon/raw/branch/develop/scripts/|Dark-Matter/rockit-compiler/raw/branch/master/scripts/|g' "$OUTPUT/scripts/install.ps1"
+        sed -i 's|Dark-Matter/moon/raw/branch/develop/scripts/|Dark-Matter/rockit-compiler/raw/branch/staging/scripts/|g' "$OUTPUT/scripts/install.ps1"
     fi
 fi
 
@@ -252,6 +252,20 @@ if [ -f "$OUTPUT/runtime/rockit/build.sh" ]; then
     else
         sed -i 's|../../self-hosted-rockit/command|../../src/command|g' "$OUTPUT/runtime/rockit/build.sh"
     fi
+fi
+
+# Fix signing key URLs (RockitCompiler/keys/ -> keys/ in new repo)
+if [[ "$(uname)" == "Darwin" ]]; then
+    find "$OUTPUT/scripts" -type f \( -name "*.sh" -o -name "*.ps1" \) -exec \
+        sed -i '' 's|RockitCompiler/keys/|keys/|g' {} +
+    # Fix benchmarks comment
+    find "$OUTPUT/benchmarks" -type f -name "*.sh" -exec \
+        sed -i '' 's|# Run from: RockitCompiler/|# Run from: repo root|g' {} + 2>/dev/null || true
+else
+    find "$OUTPUT/scripts" -type f \( -name "*.sh" -o -name "*.ps1" \) -exec \
+        sed -i 's|RockitCompiler/keys/|keys/|g' {} +
+    find "$OUTPUT/benchmarks" -type f -name "*.sh" -exec \
+        sed -i 's|# Run from: RockitCompiler/|# Run from: repo root|g' {} + 2>/dev/null || true
 fi
 
 # --- Summary ---

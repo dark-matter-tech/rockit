@@ -3,7 +3,7 @@
 # Dark Matter Tech
 #
 # Usage:
-#   curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.sh | bash
+#   curl -fsSL https://rustygits.com/Dark-Matter/moon/raw/branch/staging/RockitCompiler/scripts/install.sh | bash
 #
 # Or clone and run locally:
 #   ./install.sh
@@ -19,7 +19,7 @@ BIN_DIR="${PREFIX}/bin"
 SHARE_DIR="${PREFIX}/share/rockit"
 
 # Signing key URL — the GPG public key used to sign release manifests
-SIGNING_KEY_URL="${GITEA}/${REPO_COMPILER}/raw/branch/master/RockitCompiler/keys/darkmatter-release.asc"
+SIGNING_KEY_URL="${GITEA}/${REPO_COMPILER}/raw/branch/staging/RockitCompiler/keys/darkmatter-release.asc"
 SIGNING_KEY_ID="Dark Matter Tech <security@darkmatter.tech>"
 
 RED='\033[0;31m'

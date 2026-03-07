@@ -5,7 +5,7 @@ on:
     tags:
       - 'v*'
     branches:
-      - master
+      - staging
   workflow_dispatch:
     inputs:
       version:
@@ -45,8 +45,8 @@ jobs:
             # Tag push — check out the tag
             git clone --depth 1 --recurse-submodules --branch "${GITHUB_REF_NAME}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
           else
-            # Branch push (master merge) — check out master
-            git clone --depth 1 --recurse-submodules --branch master "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+            # Branch push (staging merge) — check out staging
+            git clone --depth 1 --recurse-submodules --branch staging "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
           fi
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -181,7 +181,7 @@ jobs:
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-      - name: Create tag (if triggered by master merge)
+      - name: Create tag (if triggered by staging merge)
         if: env.SKIP_RELEASE != 'true'
         run: |
           # Create the tag via Gitea API (works even in containers without git push access)
@@ -222,7 +222,7 @@ jobs:
             -d "{
               \"tag_name\": \"${TAG}\",
               \"name\": \"Rockit ${TAG}\",
-              \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## What's Included\\n\\n- **rockit** — The Rockit compiler (Stage 1, self-hosted)\\n- **fuel** — The Rockit package manager\\n- **stdlib** — Standard library (json, collections, math, strings, result, file)\\n- **rockit_runtime.o** — Prebuilt runtime\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/develop/RockitCompiler/scripts/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
+              \"body\": \"Release ${TAG} of the Rockit compiler and Fuel package manager.\\n\\n## What's Included\\n\\n- **rockit** — The Rockit compiler (Stage 1, self-hosted)\\n- **fuel** — The Rockit package manager\\n- **stdlib** — Standard library (json, collections, math, strings, result, file)\\n- **rockit_runtime.o** — Prebuilt runtime\\n\\n## Install\\n\\n\\\`\\\`\\\`bash\\ncurl -fsSL ${GITEA_URL}/${GITHUB_REPOSITORY}/raw/branch/staging/RockitCompiler/scripts/install.sh | bash\\n\\\`\\\`\\\`\\n\\n## Platforms\\n\\n- Linux x86_64 (prebuilt)\\n- macOS arm64 (build from source)\\n- macOS x86_64 (build from source)\",
               \"draft\": false,
               \"prerelease\": false
             }" | jq -r '.id')
