@@ -89,12 +89,28 @@ jobs:
         env:
           FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
 
-      - name: Build Rockit runtime
+      - name: Bootstrap verification (Thompson attack defense)
         if: env.SKIP_RELEASE != 'true'
         working-directory: RockitCompiler
         run: |
-          cd runtime/rockit
-          bash build.sh
+          TRIPLE="x86_64-unknown-linux-gnu"
+          echo "==> Building Rockit runtime..."
+          cd runtime/rockit && bash build.sh && cd ../..
+
+          echo "==> Stage 1 → Stage 2 (native)..."
+          self-hosted-rockit/command build-native self-hosted-rockit/command.rok \
+            -o /tmp/stage2 --runtime-path runtime/rockit_runtime.o --target-triple $TRIPLE
+
+          echo "==> Stage 2 → Stage 3 (bytecode comparison)..."
+          self-hosted-rockit/command compile self-hosted-rockit/command.rok -o /tmp/stage2.rokb
+          /tmp/stage2 compile self-hosted-rockit/command.rok -o /tmp/stage3.rokb
+
+          if diff /tmp/stage2.rokb /tmp/stage3.rokb > /dev/null 2>&1; then
+            echo "==> Fixed point verified: Stage 2 == Stage 3"
+          else
+            echo "==> FAILED: Stage 2 != Stage 3 — compiler may be compromised"
+            exit 1
+          fi
 
       - name: Clone and build Fuel
         if: env.SKIP_RELEASE != 'true'
