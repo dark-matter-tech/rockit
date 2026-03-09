@@ -1,5 +1,8 @@
 # Rockit
 
+![CI](https://github.com/dark-matter-tech/rockit/actions/workflows/ci.yml/badge.svg)
+![Release](https://github.com/dark-matter-tech/rockit/actions/workflows/release.yml/badge.svg)
+
 A statically-typed, compiled, memory-safe language designed for modularity. A lean core with platform modules for web, server, embedded, and beyond. Write once, target anything.
 
 Built by [Dark Matter Tech](https://rustygits.com/Dark-Matter).
@@ -141,7 +144,7 @@ navigation AppRouter {
 | Language | **Rockit** | Shipped |
 | Compiler | **Command** | Shipped |
 | Package Manager | **Fuel** | Shipped |
-| Standard Library | **stdlib** ([launchpad](https://github.com/dark-matter-tech/launchpad)) | Shipped (15 modules) |
+| Standard Library | **stdlib** ([launchpad](https://github.com/dark-matter-tech/launchpad)) | Shipped (22 modules) |
 | Test Framework | **Probe** | Shipped |
 | REPL | **Launch** | Shipped |
 | Registry | **Silo** | Planned |
@@ -151,7 +154,7 @@ navigation AppRouter {
 
 ## Standard Library
 
-15 modules ship with Rockit in the [launchpad](https://github.com/dark-matter-tech/launchpad) repo. Import with `import rockit.<domain>.<module>`.
+22 modules ship with Rockit in the [launchpad](https://github.com/dark-matter-tech/launchpad) repo. Import with `import rockit.<domain>.<module>`.
 
 | Module | Import | Description |
 |--------|--------|-------------|
@@ -160,16 +163,22 @@ navigation AppRouter {
 | Strings | `import rockit.core.strings` | Pad, repeat, join, split, replace, truncate |
 | Result | `import rockit.core.result` | Result type (Success/Failure) for error handling |
 | UUID | `import rockit.core.uuid` | UUID v4 random generation (RFC 9562) |
+| Base64 | `import rockit.encoding.base64` | Base64 encode/decode (RFC 4648) |
+| HPACK | `import rockit.encoding.hpack` | HPACK header compression (RFC 7541) |
+| JSON | `import rockit.encoding.json` | JSON parse, stringify, pretty-print (RFC 8259) |
+| XML | `import rockit.encoding.xml` | XML parsing and generation (W3C XML 1.0) |
 | File I/O | `import rockit.filesystem.file` | Read, write, exists, delete files |
 | Path | `import rockit.filesystem.path` | Join, dir, base, ext, normalize paths |
-| HTTP | `import rockit.networking.http` | HTTP/1.1 client (RFC 9110, HTTPS via curl) |
-| WebSocket | `import rockit.networking.websocket` | WebSocket client (RFC 6455) |
+| HTTP | `import rockit.networking.http` | HTTP/1.1 client with native TLS (RFC 9110) |
+| HTTP/2 | `import rockit.networking.http2` | HTTP/2 multiplexed client (RFC 9113) |
 | URL | `import rockit.networking.url` | URL parsing, encoding, query parameters (RFC 3986) |
-| Base64 | `import rockit.encoding.base64` | Base64 encode/decode (RFC 4648) |
-| XML | `import rockit.encoding.xml` | XML parsing and generation (W3C XML 1.0) |
-| DateTime | `import rockit.time.datetime` | Date/time, formatting, epoch conversion (ISO 8601) |
-| JSON | `import rockit.encoding.json` | JSON parse, stringify, pretty-print (RFC 8259) |
+| WebSocket | `import rockit.networking.websocket` | WebSocket client, ws:// and wss:// (RFC 6455) |
+| TLS | `import rockit.security.tls` | TLS 1.2/1.3 via OpenSSL (RFC 8446) |
+| Crypto | `import rockit.security.crypto` | SHA-256, HMAC, AES encryption (FIPS 180-4) |
+| X.509 | `import rockit.security.x509` | X.509 certificate parsing (RFC 5280) |
+| PEM | `import rockit.security.pem` | PEM encoding/decoding (RFC 7468) |
 | Probe | `import rockit.testing.probe` | Test assertions for `@Test` annotated functions |
+| DateTime | `import rockit.time.datetime` | Date/time, formatting, epoch conversion (ISO 8601) |
 
 ```kotlin
 import rockit.encoding.json
@@ -411,6 +420,17 @@ Bench options:
 | **Linux** (x86_64, arm64) | Yes | Yes | Yes |
 | **Windows** (x86_64) | Yes | Yes | Yes |
 | **Docker** | Yes | Yes | Yes |
+
+### Prebuilt Downloads
+
+| Platform | Status | Download |
+|----------|--------|----------|
+| Linux x86_64 | Prebuilt | `rockit-VERSION-linux-x86_64.tar.gz` |
+| macOS arm64 | Prebuilt | `rockit-VERSION-macos-arm64.tar.gz` |
+| macOS x86_64 | Prebuilt | `rockit-VERSION-macos-x86_64.tar.gz` |
+| Windows x86_64 | Prebuilt | `rockit-VERSION-windows-x86_64.zip` |
+
+Download the latest release from [GitHub Releases](https://github.com/dark-matter-tech/rockit/releases).
 
 ---
 
