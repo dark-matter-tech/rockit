@@ -8501,9 +8501,9 @@ fun updateBackgroundNotice(currentVersion: String): Unit {
 // Build Identity (injected by build.sh)
 // ---------------------------------------------------------------------------
 val ROCKIT_VERSION: String = "0.1.0"
-val ROCKIT_GIT_HASH: String = "7e5713760bede2d14bf6d9de711ac66266263d16"
-val ROCKIT_SOURCE_HASH: String = "sha256:5a1d3dda739bc138e0073632a666a443cf9f278215f3de01546bb33382e134f2"
-val ROCKIT_BUILD_TIMESTAMP: String = "2026-03-07T02:37:00Z"
+val ROCKIT_GIT_HASH: String = "1b993ed76a24c0163451208f8e8b7e797123fd6a"
+val ROCKIT_SOURCE_HASH: String = "sha256:b70da0d8e2976fd38baa649be8e6b99fdfffb0d20fc09d3d2b8a1c81826516fd"
+val ROCKIT_BUILD_TIMESTAMP: String = "2026-03-09T21:13:29Z"
 val ROCKIT_BUILD_PLATFORM: String = "darwin-arm64"
 
 // ---------------------------------------------------------------------------
@@ -12916,12 +12916,14 @@ fun main(): Unit {
             }
         }
 
+        // -Xclang -opaque-pointers: needed for clang < 16 (harmless on 16+, -w suppresses warnings on 17+)
+        val clangBase: String = "clang -Xclang -opaque-pointers -O2 -w "
         var clangCmd: String = ""
         if (noRuntime) {
             // Freestanding: compile LLVM IR without runtime
-            clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -o ", outputFile)))
+            clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" -o ", outputFile)))
             if (toString(platformOS()) == "linux") {
-                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
+                clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
             }
         } else {
             // Find runtime path
@@ -12937,15 +12939,15 @@ fun main(): Unit {
             if (endsWith(runtimePath, ".c")) {
                 // Backward compat: C runtime needs -I for the header directory
                 val runtimeDir = dirName(runtimePath)
-                clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
+                clangCmd = stringConcat(clangBase, stringConcat("-I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile))))))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+                    clangCmd = stringConcat(clangBase, stringConcat("-I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile))))))))
                 }
             } else {
                 // Pre-built .o runtime — link directly, no -I needed
-                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
+                clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
+                    clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
                 }
             }
         }
