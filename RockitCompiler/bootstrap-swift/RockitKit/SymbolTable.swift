@@ -421,6 +421,54 @@ public final class SymbolTable {
             globalScope.define(Symbol(name: name, type: type, kind: .function))
         }
 
+        // Security builtins (TLS, Crypto, X.509)
+        let securityBuiltins: [(String, Type)] = [
+            // TLS context
+            ("tlsCreateContext",       .function(parameterTypes: [], returnType: .int)),
+            ("tlsCreateServerContext", .function(parameterTypes: [], returnType: .int)),
+            ("tlsSetCertificate",      .function(parameterTypes: [.int, .string], returnType: .int)),
+            ("tlsSetPrivateKey",       .function(parameterTypes: [.int, .string], returnType: .int)),
+            ("tlsSetVerifyPeer",       .function(parameterTypes: [.int, .int], returnType: .unit)),
+            ("tlsSetAlpn",             .function(parameterTypes: [.int, .string], returnType: .int)),
+            // TLS connection
+            ("tlsConnect",     .function(parameterTypes: [.int, .string, .int], returnType: .int)),
+            ("tlsSend",        .function(parameterTypes: [.int, .string], returnType: .int)),
+            ("tlsRecv",        .function(parameterTypes: [.int, .int], returnType: .string)),
+            ("tlsClose",       .function(parameterTypes: [.int], returnType: .unit)),
+            ("tlsGetAlpn",     .function(parameterTypes: [.int], returnType: .string)),
+            ("tlsGetPeerCert", .function(parameterTypes: [.int], returnType: .int)),
+            // TLS server
+            ("tlsListen",  .function(parameterTypes: [.int, .int], returnType: .int)),
+            ("tlsAccept",  .function(parameterTypes: [.int, .int], returnType: .int)),
+            // Crypto hashing
+            ("cryptoSha256", .function(parameterTypes: [.string], returnType: .string)),
+            ("cryptoSha1",   .function(parameterTypes: [.string], returnType: .string)),
+            ("cryptoSha512", .function(parameterTypes: [.string], returnType: .string)),
+            ("cryptoMd5",    .function(parameterTypes: [.string], returnType: .string)),
+            // Crypto HMAC
+            ("cryptoHmacSha256", .function(parameterTypes: [.string, .string], returnType: .string)),
+            ("cryptoHmacSha1",   .function(parameterTypes: [.string, .string], returnType: .string)),
+            // Crypto random
+            ("cryptoRandomBytes", .function(parameterTypes: [.int], returnType: .string)),
+            // Crypto AES
+            ("cryptoAesEncrypt", .function(parameterTypes: [.string, .string, .string, .int], returnType: .string)),
+            ("cryptoAesDecrypt", .function(parameterTypes: [.string, .string, .string, .int], returnType: .string)),
+            // X.509
+            ("x509ParsePem",      .function(parameterTypes: [.string], returnType: .int)),
+            ("x509Subject",       .function(parameterTypes: [.int], returnType: .string)),
+            ("x509Issuer",        .function(parameterTypes: [.int], returnType: .string)),
+            ("x509NotBefore",     .function(parameterTypes: [.int], returnType: .int)),
+            ("x509NotAfter",      .function(parameterTypes: [.int], returnType: .int)),
+            ("x509SerialNumber",  .function(parameterTypes: [.int], returnType: .string)),
+            ("x509Free",          .function(parameterTypes: [.int], returnType: .unit)),
+            // Error
+            ("tlsLastError", .function(parameterTypes: [], returnType: .string)),
+        ]
+
+        for (name, type) in securityBuiltins {
+            globalScope.define(Symbol(name: name, type: type, kind: .function))
+        }
+
         // Type check builtins
         let typeCheckBuiltins: [(String, Type)] = [
             ("isMap",   .function(parameterTypes: [.typeParameter(name: "T", bound: nil)], returnType: .bool)),

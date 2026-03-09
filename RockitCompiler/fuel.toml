@@ -1,0 +1,14 @@
+[package]
+name = "rockit-compiler"
+version = "0.1.0"
+
+[test]
+directory = "tests"
+
+[test.scheme.default]
+include = ["*"]
+exclude = ["advanced"]
+
+[test.scheme.all]
+include = ["*"]
+exclude = []

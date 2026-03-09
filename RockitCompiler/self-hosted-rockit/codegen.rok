@@ -3,6 +3,15 @@
 // Single-pass tree-walking code generator with register allocation.
 
 // ---------------------------------------------------------------------------
+// Build Identity (injected by build.sh)
+// ---------------------------------------------------------------------------
+val ROCKIT_VERSION: String = "__ROCKIT_VERSION__"
+val ROCKIT_GIT_HASH: String = "__ROCKIT_GIT_HASH__"
+val ROCKIT_SOURCE_HASH: String = "__ROCKIT_SOURCE_HASH__"
+val ROCKIT_BUILD_TIMESTAMP: String = "__ROCKIT_BUILD_TIMESTAMP__"
+val ROCKIT_BUILD_PLATFORM: String = "__ROCKIT_BUILD_PLATFORM__"
+
+// ---------------------------------------------------------------------------
 // Opcodes (must match Bytecode.swift)
 // ---------------------------------------------------------------------------
 
@@ -4139,6 +4148,8 @@ fun main(): Unit {
         println("       rockit build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
         println("       rockit repl")
         println("       rockit version")
+        println("       rockit update [--check] [--channel <stable|beta|nightly>]")
+        println("       rockit verify-bootstrap")
         return
     }
 
@@ -4152,7 +4163,101 @@ fun main(): Unit {
 
     // Version
     if (command == "version" || command == "--version" || command == "-v") {
-        println("rockit 0.1.0")
+        println(stringConcat("rockit ", ROCKIT_VERSION))
+        println(stringConcat("commit:    ", ROCKIT_GIT_HASH))
+        println(stringConcat("source:    ", ROCKIT_SOURCE_HASH))
+        println(stringConcat("built:     ", ROCKIT_BUILD_TIMESTAMP))
+        println(stringConcat("platform:  ", ROCKIT_BUILD_PLATFORM))
+        return
+    }
+
+    // Update command
+    if (command == "update") {
+        val config = updateReadConfig()
+        var channel: String = toString(mapGet(config, "channel"))
+
+        // Parse update subcommand args
+        var ui: Int = 1
+        var checkOnly: Bool = false
+        var setChannel: String = ""
+        while (ui < listSize(args)) {
+            val uarg = toString(listGet(args, ui))
+            if (uarg == "--check") {
+                checkOnly = true
+            } else if (uarg == "--channel") {
+                if (ui + 1 < listSize(args)) {
+                    ui = ui + 1
+                    setChannel = toString(listGet(args, ui))
+                }
+            }
+            ui = ui + 1
+        }
+
+        if (stringLength(setChannel) > 0) {
+            updateSetChannel(setChannel)
+            return
+        }
+
+        if (checkOnly) {
+            updateRunCheck(ROCKIT_VERSION, channel)
+        } else {
+            updateSelfUpdate(ROCKIT_VERSION, channel)
+        }
+        return
+    }
+
+    // Bootstrap verification
+    if (command == "verify-bootstrap") {
+        println("Rockit Bootstrap Verification")
+        println("=============================")
+        println("")
+
+        // Find our own binary path
+        val selfBin = toString(processArgs())
+        // We need command.rok path — look for it relative to the binary
+        var commandRok: String = "self-hosted-rockit/command.rok"
+        if (listSize(args) >= 2) {
+            commandRok = toString(listGet(args, 1))
+        }
+
+        println(stringConcat("Source: ", commandRok))
+        println("")
+
+        // Stage A: current binary compiles command.rok to bytecode
+        println("Stage A: Current binary -> bytecode...")
+        val stageACmd = stringConcat("rockit compile ", stringConcat(commandRok, " -o /tmp/rockit_stage_a.rokb"))
+        val stageAExit = systemExec(stageACmd)
+        if (stageAExit != 0) {
+            println("FAIL: Stage A compilation failed")
+            return
+        }
+
+        // Stage B: use the same binary to compile again (should be identical)
+        println("Stage B: Current binary -> bytecode (second pass)...")
+        val stageBCmd = stringConcat("rockit compile ", stringConcat(commandRok, " -o /tmp/rockit_stage_b.rokb"))
+        val stageBExit = systemExec(stageBCmd)
+        if (stageBExit != 0) {
+            println("FAIL: Stage B compilation failed")
+            return
+        }
+
+        // Compare
+        println("")
+        println("Comparing bytecode outputs...")
+        val diffExit = systemExec("diff /tmp/rockit_stage_a.rokb /tmp/rockit_stage_b.rokb")
+        if (diffExit == 0) {
+            println("PASS: Bytecode outputs are identical")
+        } else {
+            println("FAIL: Bytecode outputs differ!")
+        }
+
+        // Print hashes
+        systemExec("printf 'Stage A: ' && shasum -a 256 /tmp/rockit_stage_a.rokb")
+        systemExec("printf 'Stage B: ' && shasum -a 256 /tmp/rockit_stage_b.rokb")
+
+        // Clean up
+        fileDelete("/tmp/rockit_stage_a.rokb")
+        fileDelete("/tmp/rockit_stage_b.rokb")
         return
     }
 
@@ -4161,6 +4266,8 @@ fun main(): Unit {
         println("       rockit build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
         println("       rockit repl")
         println("       rockit version")
+        println("       rockit update [--check] [--channel <stable|beta|nightly>]")
+        println("       rockit verify-bootstrap")
         return
     }
     var sourceFile: String = toString(listGet(args, 1))
@@ -4314,12 +4421,14 @@ fun main(): Unit {
             }
         }
 
+        // -Xclang -opaque-pointers: needed for clang < 16 (harmless on 16+, -w suppresses warnings on 17+)
+        val clangBase: String = "clang -Xclang -opaque-pointers -O2 -w "
         var clangCmd: String = ""
         if (noRuntime) {
             // Freestanding: compile LLVM IR without runtime
-            clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -o ", outputFile)))
+            clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" -o ", outputFile)))
             if (toString(platformOS()) == "linux") {
-                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
+                clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
             }
         } else {
             // Find runtime path
@@ -4335,15 +4444,15 @@ fun main(): Unit {
             if (endsWith(runtimePath, ".c")) {
                 // Backward compat: C runtime needs -I for the header directory
                 val runtimeDir = dirName(runtimePath)
-                clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))))
+                clangCmd = stringConcat(clangBase, stringConcat("-I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile))))))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))))
+                    clangCmd = stringConcat(clangBase, stringConcat("-I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile))))))))
                 }
             } else {
                 // Pre-built .o runtime — link directly, no -I needed
-                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
+                clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
+                    clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
                 }
             }
         }

@@ -1,0 +1,220 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux x86_64
+    runs-on: ubuntu-22.04
+    container: swift:5.10.1-jammy
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update && apt-get install -y git libssl-dev pkg-config curl jq gnupg
+          if command -v clang > /dev/null 2>&1; then
+            echo "clang available"
+          else
+            apt-get install -y clang-15
+            ln -sf /usr/bin/clang-15 /usr/bin/clang
+          fi
+
+      - name: Set version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
+            echo "TAG=v${{ inputs.version }}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          git clone --depth 1 --recurse-submodules --branch "${TAG}" "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" . || \
+          git clone --depth 1 --recurse-submodules --branch master "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" .
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Clone and build Stage 0
+        run: |
+          git clone --depth 1 --recurse-submodules "${GITHUB_SERVER_URL}/Dark-Matter/moon.git" /tmp/moon
+          cd /tmp/moon/RockitCompiler && swift build -c release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Build Stage 1
+        run: |
+          bash src/build.sh
+          /tmp/moon/RockitCompiler/.build/release/rockit build-native src/command.rok
+
+      - name: Build runtime
+        run: bash runtime/rockit/build.sh
+
+      - name: Clone and build Fuel
+        run: |
+          echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
+          chmod 600 ~/.netrc
+          git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
+          src/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel --runtime-path runtime/rockit_runtime.o
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+      - name: Import GPG signing key
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format long | grep sec | head -1 | awk '{print $2}' | cut -d/ -f2)" >> "$GITHUB_ENV"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Package and sign
+        run: |
+          ARCHIVE="rockit-${VERSION}-linux-x86_64"
+          STAGING="dist/${ARCHIVE}/rockit"
+          mkdir -p "${STAGING}/bin" "${STAGING}/share/rockit"
+          cp src/command "${STAGING}/bin/rockit"
+          cp /tmp/fuel/fuel "${STAGING}/bin/fuel"
+          chmod +x "${STAGING}/bin/rockit" "${STAGING}/bin/fuel"
+          cp runtime/rockit_runtime.o "${STAGING}/share/rockit/"
+          cp -r stdlib "${STAGING}/share/rockit/stdlib"
+
+          # Sign binaries with GPG if key is available
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            bash scripts/sign.sh "${STAGING}/bin/rockit" gpg || true
+            bash scripts/sign.sh "${STAGING}/bin/fuel" gpg || true
+          fi
+
+          # Generate manifest (after signing, so hashes reflect signed state)
+          cd "${STAGING}"
+          find . -type f ! -name "MANIFEST.sha256" ! -name "*.sig" | sort | while read -r f; do
+            hash=$(shasum -a 256 "$f" | awk '{print $1}')
+            echo "sha256:${hash}  ${f#./}" >> MANIFEST.sha256
+          done
+          cd ../../..
+
+          # Sign the manifest
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            export GPG_KEY_ID
+            export GPG_PASSPHRASE="${GPG_PASSPHRASE:-}"
+            bash scripts/sign.sh "${STAGING}/MANIFEST.sha256" manifest || true
+          fi
+
+          cd dist && tar -czf "${ARCHIVE}.tar.gz" "${ARCHIVE}"
+          echo "ARCHIVE=${ARCHIVE}.tar.gz" >> "$GITHUB_ENV"
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Upload release
+        run: |
+          GITEA_URL="${GITHUB_SERVER_URL}"
+          API="${GITEA_URL}/api/v1"
+          # Create release
+          RELEASE_ID=$(curl -s -X POST \
+            -H "Authorization: token ${FUEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${API}/repos/${GITHUB_REPOSITORY}/releases" \
+            -d "{\"tag_name\": \"${TAG}\", \"name\": \"Rockit ${TAG}\", \"body\": \"Release ${TAG}\"}" | jq -r '.id')
+          # Upload tarball
+          curl -s -X POST \
+            -H "Authorization: token ${FUEL_TOKEN}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary "@dist/${ARCHIVE}" \
+            "${API}/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${ARCHIVE}"
+        env:
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
+
+  build-macos:
+    name: Build macOS arm64
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Clone and build Stage 0
+        run: |
+          git clone --depth 1 --recurse-submodules https://github.com/Dark-Matter/moon.git /tmp/moon
+          cd /tmp/moon/RockitCompiler && swift build -c release
+
+      - name: Build Stage 1
+        run: |
+          bash src/build.sh
+          /tmp/moon/RockitCompiler/.build/release/rockit build-native src/command.rok
+
+      - name: Build runtime
+        run: bash runtime/rockit/build.sh
+
+      - name: Import GPG signing key
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format long | grep sec | head -1 | awk '{print $2}' | cut -d/ -f2)" >> "$GITHUB_ENV"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Package, sign, and notarize
+        run: |
+          ARCHIVE="rockit-${VERSION}-macos-arm64"
+          STAGING="dist/${ARCHIVE}/rockit"
+          mkdir -p "${STAGING}/bin" "${STAGING}/share/rockit"
+          cp src/command "${STAGING}/bin/rockit"
+          chmod +x "${STAGING}/bin/rockit"
+          cp runtime/rockit_runtime.o "${STAGING}/share/rockit/"
+          cp -r stdlib "${STAGING}/share/rockit/stdlib"
+
+          # macOS code signing + notarization
+          if [ -n "${APPLE_IDENTITY:-}" ]; then
+            bash scripts/sign.sh "${STAGING}/bin/rockit" auto || true
+          fi
+
+          # GPG signing (universal)
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            bash scripts/sign.sh "${STAGING}/bin/rockit" gpg || true
+          fi
+
+          # Generate manifest after signing
+          cd "${STAGING}"
+          find . -type f ! -name "MANIFEST.sha256" ! -name "*.sig" | sort | while read -r f; do
+            hash=$(shasum -a 256 "$f" | awk '{print $1}')
+            echo "sha256:${hash}  ${f#./}" >> MANIFEST.sha256
+          done
+          cd ../../..
+
+          # Sign the manifest
+          if [ -n "${GPG_KEY_ID:-}" ]; then
+            export GPG_KEY_ID
+            export GPG_PASSPHRASE="${GPG_PASSPHRASE:-}"
+            bash scripts/sign.sh "${STAGING}/MANIFEST.sha256" manifest || true
+          fi
+
+          cd dist && tar -czf "${ARCHIVE}.tar.gz" "${ARCHIVE}"
+        env:
+          APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

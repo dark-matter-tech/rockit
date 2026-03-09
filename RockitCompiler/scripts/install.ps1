@@ -2,7 +2,7 @@
 # Dark Matter Tech
 #
 # Usage (PowerShell):
-#   irm https://rustygits.com/Dark-Matter/moon/raw/branch/develop/RockitCompiler/scripts/install.ps1 | iex
+#   irm https://rustygits.com/Dark-Matter/moon/raw/branch/staging/RockitCompiler/scripts/install.ps1 | iex
 #
 # Or run locally:
 #   .\install.ps1
@@ -15,6 +15,9 @@ $REPO = "Dark-Matter/moon"
 $REPO_FUEL = "Dark-Matter/fuel"
 $INSTALL_DIR = "$env:LOCALAPPDATA\Rockit\bin"
 $SHARE_DIR = "$env:LOCALAPPDATA\Rockit\share\rockit"
+
+# Signing key URL
+$SIGNING_KEY_URL = "$GITEA/$REPO/raw/branch/staging/RockitCompiler/keys/darkmatter-release.asc"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -304,6 +307,105 @@ function Resolve-Winget {
     Write-Fail "winget (Windows Package Manager) is required but not found.`nIt ships with Windows 10 1809+ and Windows 11.`nInstall from: https://aka.ms/getwinget"
 }
 
+# ---------------------------------------------------------------------------
+# Release Verification: GPG signature + manifest hash checks
+# ---------------------------------------------------------------------------
+
+function Import-SigningKey {
+    # Check if gpg is available (installed via Gpg4win or Git for Windows)
+    if (-not (Get-Command gpg -ErrorAction SilentlyContinue)) {
+        Write-Warn "gpg not found - cannot verify signatures"
+        Write-Warn "Install Gpg4win (winget install GnuPG.Gpg4win) to enable signature verification"
+        return $false
+    }
+
+    # Try to fetch and import the public key
+    $tmpKey = Join-Path $env:TEMP "rockit-key-$(Get-Random).asc"
+    try {
+        Invoke-WebRequest -Uri $SIGNING_KEY_URL -OutFile $tmpKey -ErrorAction Stop
+        gpg --import $tmpKey 2>$null
+        Remove-Item $tmpKey -ErrorAction SilentlyContinue
+        Write-Ok "Signing key imported"
+        return $true
+    } catch {
+        Remove-Item $tmpKey -ErrorAction SilentlyContinue
+        Write-Warn "Could not import signing key - signature verification unavailable"
+        return $false
+    }
+}
+
+function Test-ManifestSignature($manifestPath) {
+    $sigPath = "$manifestPath.sig"
+
+    if (-not (Test-Path $sigPath)) {
+        Write-Warn "No signature file found - skipping signature verification"
+        return $true
+    }
+
+    if (-not (Get-Command gpg -ErrorAction SilentlyContinue)) {
+        Write-Warn "gpg not found - skipping signature verification"
+        return $true
+    }
+
+    Write-Info "Verifying manifest signature..."
+    $result = gpg --verify $sigPath $manifestPath 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok "Manifest signature: VALID"
+        return $true
+    } else {
+        Write-Fail "Manifest signature verification FAILED - the release may have been tampered with!"
+        return $false
+    }
+}
+
+function Test-ManifestHashes($manifestPath, $baseDir) {
+    if (-not (Test-Path $manifestPath)) {
+        Write-Warn "No MANIFEST.sha256 found - skipping integrity check"
+        return $true
+    }
+
+    Write-Info "Verifying file integrity..."
+    $failures = 0
+    $checked = 0
+
+    foreach ($line in (Get-Content $manifestPath)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+
+        # Format: sha256:<hash>  <filepath>
+        $parts = $line -split '\s+', 2
+        if ($parts.Count -lt 2) { continue }
+
+        $expectedHash = $parts[0] -replace '^sha256:', ''
+        $filePath = $parts[1]
+
+        $fullPath = Join-Path $baseDir $filePath
+        if (-not (Test-Path $fullPath)) {
+            Write-Host "    MISSING: $filePath"
+            $failures++
+            continue
+        }
+
+        $actualHash = (Get-FileHash $fullPath -Algorithm SHA256).Hash.ToLower()
+
+        if ($actualHash -eq $expectedHash) {
+            $checked++
+        } else {
+            Write-Host "    MISMATCH: $filePath"
+            Write-Host "      expected: $expectedHash"
+            Write-Host "      actual:   $actualHash"
+            $failures++
+        }
+    }
+
+    if ($failures -gt 0) {
+        Write-Fail "Integrity check FAILED - $failures file(s) corrupted or tampered with!"
+        return $false
+    }
+
+    Write-Ok "Integrity check passed ($checked files verified)"
+    return $true
+}
+
 # ===========================================================================
 # Main
 # ===========================================================================
@@ -344,6 +446,29 @@ if ($downloaded) {
 
     $extracted = "$tmp\rockit-$VERSION-$platform\rockit"
 
+    # --- Verify release integrity ---
+    $keyImported = Import-SigningKey
+
+    $manifestPath = "$extracted\MANIFEST.sha256"
+    if (Test-Path $manifestPath) {
+        # Try to download the detached signature if not in the archive
+        $sigPath = "$manifestPath.sig"
+        if (-not (Test-Path $sigPath)) {
+            $sigUrl = "$GITEA/$REPO/releases/download/v$VERSION/MANIFEST.sha256.sig"
+            try {
+                Invoke-WebRequest -Uri $sigUrl -OutFile $sigPath -ErrorAction Stop
+            } catch {
+                # Signature file not available — that's OK
+            }
+        }
+
+        Test-ManifestSignature $manifestPath
+        Test-ManifestHashes $manifestPath $extracted
+    } else {
+        Write-Warn "No MANIFEST.sha256 in release - skipping integrity verification"
+    }
+
+    # --- Install verified files ---
     New-Item -ItemType Directory -Force -Path $INSTALL_DIR | Out-Null
     New-Item -ItemType Directory -Force -Path $SHARE_DIR | Out-Null
 
