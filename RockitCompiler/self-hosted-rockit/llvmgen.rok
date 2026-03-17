@@ -694,6 +694,63 @@ fun llvmEscapeAnalysis(bc: List, compiler: Map): Map {
 }
 
 // ---------------------------------------------------------------------------
+// DO-178C: Source line lookup from lineTable for debug metadata
+// ---------------------------------------------------------------------------
+
+// Look up source line for a bytecode offset using the lineTable.
+// Returns the line number, or 0 if no mapping exists.
+fun llvmLookupLine(lineTable: List, offset: Int): Int {
+    if (lineTable == null) { return 0 }
+    var result: Int = 0
+    var i: Int = 0
+    while (i < listSize(lineTable)) {
+        val entry = listGet(lineTable, i)
+        val entryOffset = toInt(mapGet(entry, "offset"))
+        if (entryOffset <= offset) {
+            result = toInt(mapGet(entry, "line"))
+        } else {
+            return result
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Get or create a DILocation metadata ID for a given line+scope.
+// Returns the metadata ID, or 0 if no debug info.
+fun llvmGetDbgLocation(compiler: Map, state: Map, line: Int): Int {
+    if (line <= 0) { return 0 }
+    val scopeId = toInt(mapGet(state, "dbgSubprogramId"))
+    if (scopeId <= 0) { return 0 }
+    val dbgLocations = mapGet(compiler, "dbgLocations")
+    if (dbgLocations == null) { return 0 }
+    val dbgLocCache = mapGet(compiler, "dbgLocCache")
+    if (dbgLocCache == null) { return 0 }
+    val key = stringConcat(toString(line), stringConcat(":", toString(scopeId)))
+    val existing = mapGet(dbgLocCache, key)
+    if (existing != null) {
+        return toInt(existing)
+    }
+    val locId = toInt(mapGet(compiler, "dbgNextId"))
+    mapPut(compiler, "dbgNextId", locId + 1)
+    mapPut(dbgLocCache, key, locId)
+    // Store the actual metadata line for later emission (keyed by numeric ID)
+    mapPut(dbgLocations, toString(locId), stringConcat("!DILocation(line: ", stringConcat(toString(line), stringConcat(", column: 1, scope: !", stringConcat(toString(scopeId), ")")))))
+    return locId
+}
+
+// Build a !dbg suffix string for an instruction, or "" if no debug info.
+fun llvmDbgSuffix(compiler: Map, state: Map, ip: Int): String {
+    val lineTable = mapGet(state, "lineTable")
+    if (lineTable == null) { return "" }
+    val line = llvmLookupLine(lineTable, ip)
+    if (line <= 0) { return "" }
+    val locId = llvmGetDbgLocation(compiler, state, line)
+    if (locId <= 0) { return "" }
+    return stringConcat(", !dbg !", toString(locId))
+}
+
+// ---------------------------------------------------------------------------
 // Emit LLVM IR for one function
 // ---------------------------------------------------------------------------
 
@@ -726,10 +783,35 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
     val stackPromoted = llvmEscapeAnalysis(bc, compiler)
     mapPut(state, "stackPromoted", stackPromoted)
 
+    // DO-178C: Allocate DISubprogram for this function
+    val lineTable = mapGet(funcRec, "lineTable")
+    var dbgSubprogramId: Int = 0
+    var firstSourceLine: Int = 1
+    if (lineTable != null) {
+        if (listSize(lineTable) > 0) {
+            firstSourceLine = toInt(mapGet(listGet(lineTable, 0), "line"))
+        }
+    }
+    val dbgFuncIds = mapGet(compiler, "dbgFuncIds")
+    if (dbgFuncIds != null) {
+        dbgSubprogramId = toInt(mapGet(compiler, "dbgNextId"))
+        mapPut(compiler, "dbgNextId", dbgSubprogramId + 1)
+        val dbgInfo = mapCreate()
+        mapPut(dbgInfo, "id", dbgSubprogramId)
+        mapPut(dbgInfo, "line", firstSourceLine)
+        mapPut(dbgFuncIds, funcName, dbgInfo)
+    }
+    mapPut(state, "dbgSubprogramId", dbgSubprogramId)
+    mapPut(state, "lineTable", lineTable)
+
     // Function signature
     val noRuntime = mapGet(compiler, "noRuntime") == true
+    var dbgSuffix: String = ""
+    if (dbgSubprogramId > 0) {
+        dbgSuffix = stringConcat(" !dbg !", toString(dbgSubprogramId))
+    }
     if (isMain) {
-        llvmLine(buf, "define i32 @main(i32 %argc, ptr %argv) nounwind {")
+        llvmLine(buf, stringConcat("define i32 @main(i32 %argc, ptr %argv) nounwind", stringConcat(dbgSuffix, " {")))
     } else {
         var linkage: String = ""
         if (noRuntime == false) { linkage = "internal " }
@@ -740,7 +822,7 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             sig = stringConcat(sig, stringConcat("i64 %p", toString(pi)))
             pi = pi + 1
         }
-        sig = stringConcat(sig, ") nounwind {")
+        sig = stringConcat(sig, stringConcat(") nounwind", stringConcat(dbgSuffix, " {")))
         llvmLine(buf, sig)
     }
 
@@ -1336,21 +1418,23 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
         } else if (op == 224) {
             // OP_RET: src(u16)
             val src = llvmReadU16(bc, ip + 1)
+            val retDbg = llvmDbgSuffix(compiler, state, ip)
             if (isMain) {
-                llvmLine(buf, "  ret i32 0")
+                llvmLine(buf, stringConcat("  ret i32 0", retDbg))
             } else {
                 val ts = llvmNextSSA(state)
                 llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
-                llvmLine(buf, stringConcat("  ret i64 ", ts))
+                llvmLine(buf, stringConcat("  ret i64 ", stringConcat(ts, retDbg)))
             }
             lastWasTerminator = true
             ip = ip + 3
         } else if (op == 225) {
             // OP_RET_VOID
+            val retVoidDbg = llvmDbgSuffix(compiler, state, ip)
             if (isMain) {
-                llvmLine(buf, "  ret i32 0")
+                llvmLine(buf, stringConcat("  ret i32 0", retVoidDbg))
             } else {
-                llvmLine(buf, "  ret i64 3405691582")
+                llvmLine(buf, stringConcat("  ret i64 3405691582", retVoidDbg))
             }
             lastWasTerminator = true
             ip = ip + 1
@@ -1615,10 +1699,37 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
     val isMain = funcName == "main"
     val resumeName = stringConcat(funcName, "_resume")
 
+    // DO-178C: Allocate DISubprogram for this suspend function
+    val lineTable = mapGet(funcRec, "lineTable")
+    var dbgSubprogramId: Int = 0
+    var firstSourceLine: Int = 1
+    if (lineTable != null) {
+        if (listSize(lineTable) > 0) {
+            firstSourceLine = toInt(mapGet(listGet(lineTable, 0), "line"))
+        }
+    }
+    val dbgFuncIds = mapGet(compiler, "dbgFuncIds")
+    if (dbgFuncIds != null) {
+        dbgSubprogramId = toInt(mapGet(compiler, "dbgNextId"))
+        mapPut(compiler, "dbgNextId", dbgSubprogramId + 1)
+        val dbgInfo = mapCreate()
+        mapPut(dbgInfo, "id", dbgSubprogramId)
+        mapPut(dbgInfo, "line", firstSourceLine)
+        mapPut(dbgFuncIds, funcName, dbgInfo)
+    }
+    // State for resume function debug info
+    val suspState = mapCreate()
+    mapPut(suspState, "dbgSubprogramId", dbgSubprogramId)
+    mapPut(suspState, "lineTable", lineTable)
+
     // === Wrapper function ===
     val noRuntime = mapGet(compiler, "noRuntime") == true
+    var suspDbgSuffix: String = ""
+    if (dbgSubprogramId > 0) {
+        suspDbgSuffix = stringConcat(" !dbg !", toString(dbgSubprogramId))
+    }
     if (isMain) {
-        llvmLine(buf, "define i32 @main(i32 %argc, ptr %argv) nounwind {")
+        llvmLine(buf, stringConcat("define i32 @main(i32 %argc, ptr %argv) nounwind", stringConcat(suspDbgSuffix, " {")))
     } else {
         var linkage: String = ""
         if (noRuntime == false) { linkage = "internal " }
@@ -1629,7 +1740,7 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             sig = stringConcat(sig, stringConcat("i64 %p", toString(pi)))
             pi = pi + 1
         }
-        sig = stringConcat(sig, ") nounwind {")
+        sig = stringConcat(sig, stringConcat(") nounwind", stringConcat(suspDbgSuffix, " {")))
         llvmLine(buf, sig)
     }
     llvmLine(buf, "entry:")
@@ -1691,9 +1802,25 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
         ssi = ssi + 1
     }
 
+    // DO-178C: Allocate DISubprogram for _resume function
+    var resumeDbgId: Int = 0
+    if (dbgFuncIds != null) {
+        resumeDbgId = toInt(mapGet(compiler, "dbgNextId"))
+        mapPut(compiler, "dbgNextId", resumeDbgId + 1)
+        val resumeDbgInfo = mapCreate()
+        mapPut(resumeDbgInfo, "id", resumeDbgId)
+        mapPut(resumeDbgInfo, "line", firstSourceLine)
+        mapPut(dbgFuncIds, resumeName, resumeDbgInfo)
+    }
+    mapPut(suspState, "dbgSubprogramId", resumeDbgId)
+    var resumeDbgSuffix: String = ""
+    if (resumeDbgId > 0) {
+        resumeDbgSuffix = stringConcat(" !dbg !", toString(resumeDbgId))
+    }
+
     var resumeLinkage: String = ""
     if (noRuntime == false) { resumeLinkage = "internal " }
-    llvmLine(buf, stringConcat("define ", stringConcat(resumeLinkage, stringConcat("i64 @", stringConcat(resumeName, "(ptr %frame, i64 %result) {")))))
+    llvmLine(buf, stringConcat("define ", stringConcat(resumeLinkage, stringConcat("i64 @", stringConcat(resumeName, stringConcat("(ptr %frame, i64 %result)", stringConcat(resumeDbgSuffix, " {")))))))
     llvmLine(buf, "entry:")
 
     // Allocas for all registers
@@ -2378,13 +2505,15 @@ fun emitLLVMSuspendFunction(compiler: Map, funcRec: Map, sigTable: Map, definedF
             // OP_RET: src(u16) — always i64 in _resume
             val src = llvmReadU16(bc, ip + 1)
             val ts = llvmNextSSA(rState)
+            val retDbgS = llvmDbgSuffix(compiler, suspState, ip)
             llvmLine(buf, stringConcat("  ", stringConcat(ts, stringConcat(" = load i64, ptr %t", toString(src)))))
-            llvmLine(buf, stringConcat("  ret i64 ", ts))
+            llvmLine(buf, stringConcat("  ret i64 ", stringConcat(ts, retDbgS)))
             lastWasTerminator = true
             ip = ip + 3
         } else if (op == 225) {
             // OP_RET_VOID — return null sentinel in _resume
-            llvmLine(buf, "  ret i64 0")
+            val retVoidDbgS = llvmDbgSuffix(compiler, suspState, ip)
+            llvmLine(buf, stringConcat("  ret i64 0", retVoidDbgS))
             lastWasTerminator = true
             ip = ip + 1
         } else if (op == 226) {
@@ -3250,7 +3379,7 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
     val mainBuf = llvmBuf()
 
     // Header
-    llvmLine(mainBuf, "; Rockit LLVM IR — generated by command (Stage 1)")
+    llvmLine(mainBuf, "; Rockit LLVM IR -- generated by command 0.1.0-alpha (Stage 1)")
     // Default target triple for current platform
     var triple: String = "arm64-apple-macosx15.0.0"
     val os = toString(platformOS())
@@ -3412,6 +3541,62 @@ fun emitLLVM(compiler: Map, outputFile: String, targetTriple: String): Unit {
     llvmLine(mainBuf, "!3 = !{!\"list_element\", !1}")
     llvmLine(mainBuf, "!4 = !{!2, !2, i64 0}")
     llvmLine(mainBuf, "!5 = !{!3, !3, i64 0}")
+
+    // DO-178C 6.3.4g: Debug metadata for source-to-object traceability
+    val sourceFile = toString(mapGet(compiler, "sourceFile"))
+    var baseFile: String = sourceFile
+    var dirName: String = ""
+    var lastSlash: Int = 0 - 1
+    var sci: Int = 0
+    while (sci < stringLength(sourceFile)) {
+        if (charAt(sourceFile, sci) == "/") {
+            lastSlash = sci
+        }
+        sci = sci + 1
+    }
+    if (lastSlash >= 0) {
+        baseFile = substring(sourceFile, lastSlash + 1, stringLength(sourceFile))
+        dirName = substring(sourceFile, 0, lastSlash)
+    }
+
+    llvmLine(mainBuf, "")
+    llvmLine(mainBuf, "; DO-178C Debug metadata — source-to-object traceability")
+    llvmLine(mainBuf, "!llvm.dbg.cu = !{!100}")
+    llvmLine(mainBuf, "!llvm.module.flags = !{!103}")
+    llvmLine(mainBuf, "!100 = distinct !DICompileUnit(language: DW_LANG_C99, file: !101, producer: \"rockit\", isOptimized: false, emissionKind: LineTablesOnly)")
+    llvmLine(mainBuf, stringConcat("!101 = !DIFile(filename: \"", stringConcat(baseFile, stringConcat("\", directory: \"", stringConcat(dirName, "\")")))))
+    llvmLine(mainBuf, "!103 = !{i32 2, !\"Debug Info Version\", i32 3}")
+
+    // DISubroutineType (shared)
+    llvmLine(mainBuf, "!104 = !DISubroutineType(types: !{})")
+
+    // DISubprogram per function
+    val dbgFuncIds = mapGet(compiler, "dbgFuncIds")
+    if (dbgFuncIds != null) {
+        val dbgKeys = mapKeys(dbgFuncIds)
+        var dki: Int = 0
+        while (dki < listSize(dbgKeys)) {
+            val dbgFuncName = toString(listGet(dbgKeys, dki))
+            val dbgInfo = mapGet(dbgFuncIds, dbgFuncName)
+            val dbgId = toInt(mapGet(dbgInfo, "id"))
+            val dbgLine = toInt(mapGet(dbgInfo, "line"))
+            llvmLine(mainBuf, stringConcat("!", stringConcat(toString(dbgId), stringConcat(" = distinct !DISubprogram(name: \"", stringConcat(dbgFuncName, stringConcat("\", scope: !101, file: !101, line: ", stringConcat(toString(dbgLine), stringConcat(", type: !104, isLocal: true, isDefinition: true, scopeLine: ", stringConcat(toString(dbgLine), ", unit: !100)")))))))))
+            dki = dki + 1
+        }
+    }
+
+    // DILocation entries
+    val dbgLocations = mapGet(compiler, "dbgLocations")
+    if (dbgLocations != null) {
+        val locKeys = mapKeys(dbgLocations)
+        var lki: Int = 0
+        while (lki < listSize(locKeys)) {
+            val locKey = toString(listGet(locKeys, lki))
+            val locLine = toString(mapGet(dbgLocations, locKey))
+            llvmLine(mainBuf, stringConcat("!", stringConcat(locKey, stringConcat(" = ", locLine))))
+            lki = lki + 1
+        }
+    }
 
     // Join and write
     val irText = llvmJoin(mainBuf)

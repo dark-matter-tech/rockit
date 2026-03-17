@@ -15,6 +15,15 @@ public final class MIRBuilder {
     private var blocks: [MIRBasicBlock] = []
     private var currentBlockIndex: Int = -1
 
+    // MARK: - Source Traceability (DO-178C 6.3.4g)
+
+    /// Accumulated source map for the current function being built.
+    public var sourceMap: MIRSourceMap = MIRSourceMap()
+
+    /// The current source span to attach to emitted instructions.
+    /// Set this before emitting instructions to establish source traceability.
+    public var currentSpan: SourceSpan?
+
     // MARK: - Temp Names
 
     /// Generate a unique temporary name: `%t0`, `%t1`, ...
@@ -62,9 +71,15 @@ public final class MIRBuilder {
     // MARK: - Emit Instructions
 
     /// Append an instruction to the current block.
+    /// Automatically records source traceability if `currentSpan` is set.
     public func emit(_ instruction: MIRInstruction) {
         guard currentBlockIndex >= 0, currentBlockIndex < blocks.count else { return }
         blocks[currentBlockIndex].instructions.append(instruction)
+        // DO-178C 6.3.4g: Record source-to-MIR traceability
+        if let span = currentSpan {
+            let index = blocks[currentBlockIndex].instructions.count - 1
+            sourceMap.record(block: blocks[currentBlockIndex].label, index: index, span: span)
+        }
     }
 
     /// Set the terminator for the current block.
@@ -160,6 +175,8 @@ public final class MIRBuilder {
         currentBlockIndex = -1
         blockCounter = [:]
         resetTemps()
+        currentSpan = nil
+        sourceMap = MIRSourceMap()
         return result
     }
 }

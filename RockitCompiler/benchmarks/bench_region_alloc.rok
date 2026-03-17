@@ -1,0 +1,115 @@
+// bench_region_alloc.rok — Region allocation benchmark (freestanding)
+// Measures: individual alloc + recursive free vs single region alloc + single free
+// Binary tree depth 18 (~262K nodes): per-node malloc vs region bump allocator
+// Freestanding mode: --no-runtime, uses extern C malloc/free/printf/clock
+
+extern fun printf(fmt: Ptr<Int>, ...): Int
+extern fun malloc(size: Int): Ptr<Int>
+extern fun free(ptr: Ptr<Int>): Unit
+extern fun clock(): Int
+
+// Individual allocation approach
+fun buildTreeIndiv(depth: Int): Ptr<Int> {
+    unsafe {
+        val node: Ptr<Int> = malloc(16)
+        if (depth == 0) {
+            node.store(0)
+            node.offset(1).store(0)
+        } else {
+            val left: Ptr<Int> = buildTreeIndiv(depth - 1)
+            val right: Ptr<Int> = buildTreeIndiv(depth - 1)
+            node.store(bitcast(left))
+            node.offset(1).store(bitcast(right))
+        }
+        return node
+    }
+}
+
+fun checkTreeIndiv(node: Ptr<Int>): Int {
+    unsafe {
+        val leftVal: Int = node.load()
+        if (leftVal == 0) { return 1 }
+        val left: Ptr<Int> = bitcast(leftVal)
+        val right: Ptr<Int> = bitcast(node.offset(1).load())
+        return 1 + checkTreeIndiv(left) + checkTreeIndiv(right)
+    }
+}
+
+fun freeTreeIndiv(node: Ptr<Int>): Unit {
+    unsafe {
+        val leftVal: Int = node.load()
+        if (leftVal != 0) {
+            val left: Ptr<Int> = bitcast(leftVal)
+            val right: Ptr<Int> = bitcast(node.offset(1).load())
+            freeTreeIndiv(left)
+            freeTreeIndiv(right)
+        }
+        free(node)
+    }
+}
+
+// Region allocation approach
+var regionBase2: Ptr<Int> = bitcast(0)
+var regionNext2: Int = 0
+
+fun buildTreeRegion(depth: Int): Int {
+    unsafe {
+        val id: Int = regionNext2
+        regionNext2 = regionNext2 + 1
+        if (depth == 0) {
+            regionBase2.offset(id * 2).store(-1)
+            regionBase2.offset(id * 2 + 1).store(-1)
+        } else {
+            val left: Int = buildTreeRegion(depth - 1)
+            val right: Int = buildTreeRegion(depth - 1)
+            regionBase2.offset(id * 2).store(left)
+            regionBase2.offset(id * 2 + 1).store(right)
+        }
+        return id
+    }
+}
+
+fun checkTreeRegion(node: Int): Int {
+    unsafe {
+        val left: Int = regionBase2.offset(node * 2).load()
+        if (left == -1) { return 1 }
+        val right: Int = regionBase2.offset(node * 2 + 1).load()
+        return 1 + checkTreeRegion(left) + checkTreeRegion(right)
+    }
+}
+
+fun main(): Unit {
+    unsafe {
+        val depth: Int = 18
+        val maxNodes: Int = 524288
+
+        // --- Individual alloc ---
+        val t0: Int = clock()
+        val tree1: Ptr<Int> = buildTreeIndiv(depth)
+        val check1: Int = checkTreeIndiv(tree1)
+        freeTreeIndiv(tree1)
+        val t1: Int = clock()
+
+        // --- Region alloc ---
+        regionBase2 = malloc(maxNodes * 2 * 8)
+        regionNext2 = 0
+        val t2: Int = clock()
+        val tree2: Int = buildTreeRegion(depth)
+        val check2: Int = checkTreeRegion(tree2)
+        free(regionBase2)
+        val t3: Int = clock()
+
+        val indivTime: Int = t1 - t0
+        val regionTime: Int = t3 - t2
+
+        printf(cstr("individual=%d region=%d"), indivTime, regionTime)
+        if (regionTime > 0) {
+            val ratio: Int = (indivTime * 100) / regionTime
+            printf(cstr(" speedup=%d.%02dx\n"), ratio / 100, ratio % 100)
+        } else {
+            printf(cstr(" speedup=inf\n"))
+        }
+
+        printf(cstr("check1=%d check2=%d\n"), check1, check2)
+    }
+}

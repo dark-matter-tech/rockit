@@ -398,6 +398,21 @@ void rockit_list_append(RockitList* list, int64_t value) {
     list->data[list->size++] = value;
 }
 
+// Turbo: append known integer — skip rockit_retain_value (no heap pointer check).
+void rockit_list_append_int(RockitList* list, int64_t value) {
+    if (list->size >= list->capacity) {
+        list->capacity *= 2;
+        list->data = (int64_t*)realloc(list->data, list->capacity * sizeof(int64_t));
+    }
+    list->data[list->size++] = value;
+}
+
+// Turbo: grow list capacity only (for inline append fast-path overflow).
+void rockit_list_grow(RockitList* list) {
+    list->capacity *= 2;
+    list->data = (int64_t*)realloc(list->data, list->capacity * sizeof(int64_t));
+}
+
 int64_t rockit_list_get(RockitList* list, int64_t index) {
     if (index < 0 || index >= list->size) {
         rockit_panic("list index out of bounds");
@@ -766,10 +781,59 @@ static inline void cstr_done(const char* c, RockitString* s, char* buf) {
 
 // ── Conversion ──────────────────────────────────────────────────────────────
 
+// DAL A compliant int→string: bounded loop (max 19 iterations),
+// no snprintf, no locale dependency, deterministic WCET.
+// Handles full int64 range including INT64_MIN.
 RockitString* rockit_int_to_string(int64_t value) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%lld", (long long)value);
-    return rockit_string_new(buf);
+    char buf[22]; // max: "-9223372036854775808\0" = 21 chars + null
+    int pos = 21;
+    buf[pos] = '\0';
+
+    if (value == 0) {
+        buf[--pos] = '0';
+    } else {
+        int negative = value < 0;
+        // Safe unsigned abs: handles INT64_MIN without overflow
+        uint64_t uval = negative ? (uint64_t)(-(value + 1)) + 1 : (uint64_t)value;
+        while (uval > 0) {
+            buf[--pos] = '0' + (char)(uval % 10);
+            uval /= 10;
+        }
+        if (negative) {
+            buf[--pos] = '-';
+        }
+    }
+
+    return rockit_string_new(buf + pos);
+}
+
+// DAL A compliant string→int: bounded loop (max 19 digit iterations),
+// no strtoll, no locale dependency, no pointer heuristic, deterministic WCET.
+// Takes RockitString* directly — no is_likely_string_ptr check.
+int64_t rockit_string_to_int(RockitString* s) {
+    if (!s || s->length == 0) return 0;
+
+    const char* chars = s->chars;
+    int64_t len = s->length;
+    int64_t i = 0;
+    int negative = 0;
+
+    // Handle sign
+    if (chars[i] == '-') { negative = 1; i++; }
+    else if (chars[i] == '+') { i++; }
+
+    // Parse digits — bounded to 19 iterations (max digits in int64)
+    int64_t result = 0;
+    int64_t digits = 0;
+    while (i < len && digits < 19) {
+        char c = chars[i];
+        if (c < '0' || c > '9') break;
+        result = result * 10 + (c - '0');
+        i++;
+        digits++;
+    }
+
+    return negative ? -result : result;
 }
 
 RockitString* rockit_float_to_string(double value) {
@@ -939,6 +1003,33 @@ RockitString* substring(RockitString* s, int64_t start, int64_t end) {
     result->base = s->base ? s->base : s;
     rockit_string_retain(result->base);
     return result;
+}
+
+// Turbo: split string by single character delimiter.
+// Returns RockitList of zero-copy string slices. Bounded: max fields = length + 1.
+RockitList* rockit_string_split_char(RockitString* s, int64_t delim) {
+    RockitList* list = rockit_list_create();
+    if (!s || s->length == 0) {
+        rockit_list_append(list, (int64_t)(intptr_t)rockit_string_new(""));
+        return list;
+    }
+    const char d = (char)delim;
+    int64_t start = 0;
+    RockitString* base = s->base ? s->base : s;
+    for (int64_t i = 0; i <= s->length; i++) {
+        if (i == s->length || s->chars[i] == d) {
+            // Create zero-copy slice [start, i)
+            RockitString* slice = slice_alloc();
+            slice->refCount = 1;
+            slice->length = i - start;
+            slice->chars = s->chars + start;
+            slice->base = base;
+            rockit_string_retain(base);
+            rockit_list_append(list, (int64_t)(intptr_t)slice);
+            start = i + 1;
+        }
+    }
+    return list;
 }
 
 int64_t toInt(int64_t value) {

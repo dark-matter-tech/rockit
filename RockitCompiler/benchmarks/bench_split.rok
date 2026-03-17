@@ -1,0 +1,26 @@
+fun main(): Unit {
+    // Build a 100-column CSV line
+    var line: String = "f0"
+    var i: Int = 1
+    while (i < 100) {
+        line = line + ",f" + toString(i)
+        i = i + 1
+    }
+
+    var count: Int = 0
+    i = 0
+    while (i < 500000) {
+        // Count commas + 1 = field count
+        var fields: Int = 1
+        var j: Int = 0
+        while (j < stringLength(line)) {
+            if (charCodeAt(line, j) == 44) {  // ','
+                fields = fields + 1
+            }
+            j = j + 1
+        }
+        count = fields
+        i = i + 1
+    }
+    println(toString(count))
+}

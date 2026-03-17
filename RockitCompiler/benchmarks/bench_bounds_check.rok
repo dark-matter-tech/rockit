@@ -1,0 +1,63 @@
+// bench_bounds_check.rok — Bounds-check overhead benchmark (freestanding)
+// Measures: cost of array bounds checking vs unchecked pointer access
+// 10M array accesses: unchecked ptr.offset(i).load() vs guarded with bounds check
+// Freestanding mode: --no-runtime, uses extern C malloc/free/printf/clock
+
+extern fun printf(fmt: Ptr<Int>, ...): Int
+extern fun malloc(size: Int): Ptr<Int>
+extern fun free(ptr: Ptr<Int>): Unit
+extern fun clock(): Int
+
+fun main(): Unit {
+    unsafe {
+        val size: Int = 10000
+        val arr: Ptr<Int> = malloc(size * 8)
+        var i: Int = 0
+        while (i < size) {
+            arr.offset(i).store(i)
+            i = i + 1
+        }
+
+        val iterations: Int = 10000000
+
+        // Unchecked access
+        val t0: Int = clock()
+        var sum1: Int = 0
+        i = 0
+        while (i < iterations) {
+            sum1 = sum1 + arr.offset(i % size).load()
+            i = i + 1
+        }
+        val t1: Int = clock()
+
+        // Checked access (bounds check)
+        var sum2: Int = 0
+        i = 0
+        while (i < iterations) {
+            val idx: Int = i % size
+            if (idx >= 0 && idx < size) {
+                sum2 = sum2 + arr.offset(idx).load()
+            }
+            i = i + 1
+        }
+        val t2: Int = clock()
+
+        val unchecked: Int = t1 - t0
+        val checked: Int = t2 - t1
+
+        printf(cstr("unchecked=%d checked=%d"), unchecked, checked)
+        if (unchecked > 0) {
+            val ratio: Int = (checked * 100) / unchecked
+            printf(cstr(" overhead=%d.%02dx\n"), ratio / 100, ratio % 100)
+        } else {
+            printf(cstr(" overhead=0.00x\n"))
+        }
+
+        // Verify sums match
+        if (sum1 != sum2) {
+            printf(cstr("ERROR: sums differ %d vs %d\n"), sum1, sum2)
+        }
+
+        free(arr)
+    }
+}

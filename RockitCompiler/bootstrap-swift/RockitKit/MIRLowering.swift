@@ -43,9 +43,13 @@ public final class MIRLowering {
     /// Member properties with default values, indexed by type name
     private var memberPropertyDefaults: [String: [(String, Expression)]] = [:]
 
+    /// Source file name for DO-178C traceability metadata.
+    private var sourceFileName: String?
+
     public init(typeCheckResult: TypeCheckResult) {
         self.result = typeCheckResult
         self.diagnostics = typeCheckResult.diagnostics
+        self.sourceFileName = typeCheckResult.ast.span.start.file
     }
 
     /// Lower the entire AST to a MIR module.
@@ -112,7 +116,8 @@ public final class MIRLowering {
         for decl in result.ast.declarations {
             lowerDeclaration(decl)
         }
-        return MIRModule(globals: globals, functions: functions, types: typeDecls)
+        return MIRModule(globals: globals, functions: functions, types: typeDecls,
+                         sourceFileName: sourceFileName)
     }
 
     // MARK: - Declaration Lowering
@@ -234,8 +239,10 @@ public final class MIRLowering {
             builder.terminate(.ret(nil))
         }
 
+        let capturedSourceMap = builder.sourceMap
         let blocks = builder.finishBlocks()
-        let mirFunc = MIRFunction(name: funcName, parameters: params, returnType: retType, blocks: blocks)
+        let mirFunc = MIRFunction(name: funcName, parameters: params, returnType: retType,
+                                  blocks: blocks, sourceMap: capturedSourceMap)
         functions.append(mirFunc)
 
         locals = savedLocals
@@ -267,8 +274,10 @@ public final class MIRLowering {
             let val = lowerExpression(p.initializer!)
             builder.terminate(.ret(val))
 
+            let capturedSourceMap = builder.sourceMap
             let blocks = builder.finishBlocks()
-            let mirFunc = MIRFunction(name: initName, parameters: [], returnType: type, blocks: blocks)
+            let mirFunc = MIRFunction(name: initName, parameters: [], returnType: type,
+                                      blocks: blocks, sourceMap: capturedSourceMap)
             functions.append(mirFunc)
             locals = savedLocals
         }
@@ -469,8 +478,10 @@ public final class MIRLowering {
             builder.emit(.newObject(dest: dest, typeName: e.name, args: [variantStr]))
             builder.terminate(.ret(dest))
 
+            let capturedSourceMap = builder.sourceMap
             let blocks = builder.finishBlocks()
-            let mirFunc = MIRFunction(name: initName, parameters: [], returnType: .reference(e.name), blocks: blocks)
+            let mirFunc = MIRFunction(name: initName, parameters: [], returnType: .reference(e.name),
+                                      blocks: blocks, sourceMap: capturedSourceMap)
             functions.append(mirFunc)
             locals = savedLocals
 
@@ -603,6 +614,8 @@ public final class MIRLowering {
     }
 
     private func lowerStatement(_ stmt: Statement) {
+        // DO-178C 6.3.4g: Set source span for traceability
+        builder.currentSpan = spanOfStmt(stmt)
         switch stmt {
         case .expression(let expr):
             let _ = lowerExpression(expr)
@@ -1118,6 +1131,8 @@ public final class MIRLowering {
     /// Lower an expression, returning the temp holding the result.
     @discardableResult
     private func lowerExpression(_ expr: Expression) -> String {
+        // DO-178C 6.3.4g: Set source span for traceability
+        builder.currentSpan = spanOf(expr)
         switch expr {
         // Literals
         case .intLiteral(let value, _):
@@ -1878,8 +1893,10 @@ public final class MIRLowering {
             builder.terminate(.ret(nil))
         }
 
+        let capturedSourceMap = builder.sourceMap
         let blocks = builder.finishBlocks()
-        let mirFunc = MIRFunction(name: lambdaName, parameters: allParams, returnType: .unit, blocks: blocks)
+        let mirFunc = MIRFunction(name: lambdaName, parameters: allParams, returnType: .unit,
+                                  blocks: blocks, sourceMap: capturedSourceMap)
         functions.append(mirFunc)
 
         builder = savedBuilder
@@ -2169,6 +2186,51 @@ public final class MIRLowering {
             return typeNodeSimpleName(typeNode)
         case .expression, .inRange:
             return "Any"
+        }
+    }
+
+    // MARK: - Source Span Extraction (DO-178C 6.3.4g)
+
+    /// Extract the source span from an expression for traceability.
+    private func spanOf(_ expr: Expression) -> SourceSpan? {
+        switch expr {
+        case .intLiteral(_, let span), .floatLiteral(_, let span),
+             .stringLiteral(_, let span), .boolLiteral(_, let span),
+             .nullLiteral(let span), .identifier(_, let span),
+             .this(let span), .super(let span), .error(let span),
+             .parenthesized(_, let span):
+            return span
+        case .binary(_, _, _, let span), .unaryPrefix(_, _, let span),
+             .unaryPostfix(_, _, let span), .memberAccess(_, _, let span),
+             .nullSafeMemberAccess(_, _, let span), .subscriptAccess(_, _, let span),
+             .call(_, _, _, let span), .typeCheck(_, _, let span),
+             .typeCast(_, _, let span), .safeCast(_, _, let span),
+             .nonNullAssert(_, let span), .awaitExpr(_, let span),
+             .concurrentBlock(_, let span), .elvis(_, _, let span),
+             .range(_, _, _, let span), .interpolatedString(_, let span):
+            return span
+        case .ifExpr(let ie): return ie.span
+        case .whenExpr(let we): return we.span
+        case .lambda(let le): return le.span
+        }
+    }
+
+    /// Extract the source span from a statement for traceability.
+    private func spanOfStmt(_ stmt: Statement) -> SourceSpan? {
+        switch stmt {
+        case .returnStmt(_, let span), .breakStmt(let span),
+             .continueStmt(let span), .throwStmt(_, let span):
+            return span
+        case .expression(let expr):
+            return spanOf(expr)
+        case .propertyDecl(let p): return p.span
+        case .assignment(let a): return a.span
+        case .forLoop(let f): return f.span
+        case .whileLoop(let w): return w.span
+        case .doWhileLoop(let d): return d.span
+        case .tryCatch(let tc): return tc.span
+        case .destructuringDecl(let d): return d.span
+        case .declaration: return nil
         }
     }
 }

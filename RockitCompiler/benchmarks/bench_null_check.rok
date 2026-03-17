@@ -1,0 +1,56 @@
+// bench_null_check.rok — Null-check overhead benchmark (freestanding)
+// Measures: cost of null-pointer guards vs direct pointer dereference
+// 1M pointer derefs: direct load vs guarded with null check
+// Freestanding mode: --no-runtime, uses extern C malloc/free/printf/clock
+
+extern fun printf(fmt: Ptr<Int>, ...): Int
+extern fun malloc(size: Int): Ptr<Int>
+extern fun free(ptr: Ptr<Int>): Unit
+extern fun clock(): Int
+
+fun main(): Unit {
+    unsafe {
+        val iterations: Int = 1000000
+        val arr: Ptr<Int> = malloc(iterations * 8)
+        var i: Int = 0
+        while (i < iterations) {
+            arr.offset(i).store(i + 1)
+            i = i + 1
+        }
+
+        // Direct load (no null check)
+        val t0: Int = clock()
+        var sum1: Int = 0
+        i = 0
+        while (i < iterations) {
+            sum1 = sum1 + arr.offset(i).load()
+            i = i + 1
+        }
+        val t1: Int = clock()
+
+        // Guarded load (null check)
+        var sum2: Int = 0
+        i = 0
+        while (i < iterations) {
+            val p: Ptr<Int> = arr.offset(i)
+            if (bitcast(p) != 0) {
+                sum2 = sum2 + p.load()
+            }
+            i = i + 1
+        }
+        val t2: Int = clock()
+
+        val direct: Int = t1 - t0
+        val guarded: Int = t2 - t1
+
+        printf(cstr("direct=%d guarded=%d"), direct, guarded)
+        if (direct > 0) {
+            val ratio: Int = (guarded * 100) / direct
+            printf(cstr(" overhead=%d.%02dx\n"), ratio / 100, ratio % 100)
+        } else {
+            printf(cstr(" overhead=0.00x\n"))
+        }
+
+        free(arr)
+    }
+}

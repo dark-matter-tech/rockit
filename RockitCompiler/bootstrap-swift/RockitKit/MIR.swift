@@ -309,6 +309,31 @@ public struct MIRBasicBlock {
     }
 }
 
+// MARK: - Source Traceability
+
+/// Maps MIR instructions to their source locations.
+/// Stored per-function for DO-178C source-to-object traceability.
+///
+/// DO-178C 6.3.4g: "Traceability shall be established between
+/// source code and object code."
+public struct MIRSourceMap {
+    /// Maps instruction index (within a function) to its source span.
+    /// Key: "\(blockLabel):\(instructionIndex)" → SourceSpan
+    public var entries: [String: SourceSpan] = [:]
+
+    public init() {}
+
+    /// Record a source mapping for an instruction.
+    public mutating func record(block: String, index: Int, span: SourceSpan) {
+        entries["\(block):\(index)"] = span
+    }
+
+    /// Look up the source span for an instruction.
+    public func lookup(block: String, index: Int) -> SourceSpan? {
+        entries["\(block):\(index)"]
+    }
+}
+
 extension MIRBasicBlock: CustomStringConvertible {
     public var description: String {
         var lines: [String] = []
@@ -331,12 +356,16 @@ public struct MIRFunction {
     public let parameters: [(String, MIRType)]
     public let returnType: MIRType
     public var blocks: [MIRBasicBlock]
+    /// DO-178C traceability: maps instructions back to source locations.
+    public var sourceMap: MIRSourceMap
 
-    public init(name: String, parameters: [(String, MIRType)], returnType: MIRType, blocks: [MIRBasicBlock] = []) {
+    public init(name: String, parameters: [(String, MIRType)], returnType: MIRType,
+                blocks: [MIRBasicBlock] = [], sourceMap: MIRSourceMap = MIRSourceMap()) {
         self.name = name
         self.parameters = parameters
         self.returnType = returnType
         self.blocks = blocks
+        self.sourceMap = sourceMap
     }
 
     /// Total instruction count across all blocks (excluding terminators)
@@ -433,11 +462,15 @@ public struct MIRModule {
     public var globals: [MIRGlobal]
     public var functions: [MIRFunction]
     public var types: [MIRTypeDecl]
+    /// DO-178C: Source file name for traceability metadata.
+    public var sourceFileName: String?
 
-    public init(globals: [MIRGlobal] = [], functions: [MIRFunction] = [], types: [MIRTypeDecl] = []) {
+    public init(globals: [MIRGlobal] = [], functions: [MIRFunction] = [], types: [MIRTypeDecl] = [],
+                sourceFileName: String? = nil) {
         self.globals = globals
         self.functions = functions
         self.types = types
+        self.sourceFileName = sourceFileName
     }
 
     /// Total instruction count across all functions
