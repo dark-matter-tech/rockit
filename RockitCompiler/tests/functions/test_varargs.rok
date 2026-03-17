@@ -1,4 +1,3 @@
-import rockit.testing.probe
 
 fun sum(vararg numbers: Int): Int {
     var total = 0

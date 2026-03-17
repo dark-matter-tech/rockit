@@ -1,4 +1,3 @@
-import rockit.testing.probe
 
 class Box<T>(val value: T) {
     fun get(): T {

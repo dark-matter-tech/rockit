@@ -271,6 +271,14 @@ public final class SymbolTable {
             ("assertStringContains", .function(parameterTypes: [.string, .string], returnType: .unit)),
             ("assertStartsWith",    .function(parameterTypes: [.string, .string], returnType: .unit)),
             ("assertEndsWith",      .function(parameterTypes: [.string, .string], returnType: .unit)),
+            ("assertNotEqualsStr",  .function(parameterTypes: [.string, .string], returnType: .unit)),
+            ("assertEqualsBool",    .function(parameterTypes: [.bool, .bool], returnType: .unit)),
+            ("assertGreaterThanOrEqual", .function(parameterTypes: [.int, .int], returnType: .unit)),
+            ("assertLessThanOrEqual", .function(parameterTypes: [.int, .int], returnType: .unit)),
+            ("assertBetween",       .function(parameterTypes: [.int, .int, .int], returnType: .unit)),
+            ("assertStringEmpty",   .function(parameterTypes: [.string], returnType: .unit)),
+            ("assertStringNotEmpty", .function(parameterTypes: [.string], returnType: .unit)),
+            ("assertStringLength",  .function(parameterTypes: [.string, .int], returnType: .unit)),
             ("fail",                .function(parameterTypes: [], returnType: .unit)),
 
             // Collection constructors

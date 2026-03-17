@@ -1,4 +1,3 @@
-import rockit.testing.probe
 
 fun classify(x: Int): String {
     return when (x) {

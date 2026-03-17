@@ -1,4 +1,3 @@
-import rockit.testing.probe
 
 sealed class Shape
 class Circle(val radius: Int) : Shape {

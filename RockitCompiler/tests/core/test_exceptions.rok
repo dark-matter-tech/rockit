@@ -1,4 +1,3 @@
-import rockit.testing.probe
 
 fun riskyDiv(a: Int, b: Int): Int {
     if (b == 0) {

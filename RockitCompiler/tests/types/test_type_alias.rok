@@ -1,4 +1,3 @@
-import rockit.testing.probe
 
 typealias Number = Int
 typealias Text = String

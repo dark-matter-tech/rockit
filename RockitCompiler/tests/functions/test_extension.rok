@@ -1,4 +1,3 @@
-import rockit.testing.probe
 
 fun Int.double(): Int {
     return this * 2

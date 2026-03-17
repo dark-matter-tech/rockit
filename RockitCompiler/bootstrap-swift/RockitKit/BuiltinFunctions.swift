@@ -568,6 +568,194 @@ public final class BuiltinRegistry {
             }
             return .unit
         }
+
+        register(name: "assertEqualsStr") { args in
+            guard args.count >= 2 else {
+                throw VMError.userException(message: "assertEqualsStr: expected 2 arguments")
+            }
+            let expected = args[0].description
+            let actual = args[1].description
+            let message = args.count >= 3 ? args[2].description : ""
+            if expected != actual {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected '\(expected)' but got '\(actual)'" : "ASSERTION FAILED: \(message) — expected '\(expected)' but got '\(actual)'"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertNotEqualsStr") { args in
+            guard args.count >= 2 else {
+                throw VMError.userException(message: "assertNotEqualsStr: expected 2 arguments")
+            }
+            let a = args[0].description
+            let b = args[1].description
+            let message = args.count >= 3 ? args[2].description : ""
+            if a == b {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected values to differ but both are '\(a)'" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertEqualsBool") { args in
+            guard args.count >= 2 else {
+                throw VMError.userException(message: "assertEqualsBool: expected 2 arguments")
+            }
+            let expected = args[0]
+            let actual = args[1]
+            let message = args.count >= 3 ? args[2].description : ""
+            if expected != actual {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected \(expected) but got \(actual)" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertGreaterThan") { args in
+            guard args.count >= 2, case .int(let a) = args[0], case .int(let b) = args[1] else {
+                throw VMError.userException(message: "assertGreaterThan: expected 2 int arguments")
+            }
+            let message = args.count >= 3 ? args[2].description : ""
+            if a <= b {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected \(a) > \(b)" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertLessThan") { args in
+            guard args.count >= 2, case .int(let a) = args[0], case .int(let b) = args[1] else {
+                throw VMError.userException(message: "assertLessThan: expected 2 int arguments")
+            }
+            let message = args.count >= 3 ? args[2].description : ""
+            if a >= b {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected \(a) < \(b)" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertGreaterThanOrEqual") { args in
+            guard args.count >= 2, case .int(let a) = args[0], case .int(let b) = args[1] else {
+                throw VMError.userException(message: "assertGreaterThanOrEqual: expected 2 int arguments")
+            }
+            let message = args.count >= 3 ? args[2].description : ""
+            if a < b {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected \(a) >= \(b)" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertLessThanOrEqual") { args in
+            guard args.count >= 2, case .int(let a) = args[0], case .int(let b) = args[1] else {
+                throw VMError.userException(message: "assertLessThanOrEqual: expected 2 int arguments")
+            }
+            let message = args.count >= 3 ? args[2].description : ""
+            if a > b {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected \(a) <= \(b)" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertBetween") { args in
+            guard args.count >= 3, case .int(let value) = args[0], case .int(let low) = args[1], case .int(let high) = args[2] else {
+                throw VMError.userException(message: "assertBetween: expected 3 int arguments")
+            }
+            let message = args.count >= 4 ? args[3].description : ""
+            if value < low || value > high {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected \(value) between \(low) and \(high)" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertStringContains") { args in
+            guard args.count >= 2 else {
+                throw VMError.userException(message: "assertStringContains: expected 2 arguments")
+            }
+            let haystack = args[0].description
+            let needle = args[1].description
+            let message = args.count >= 3 ? args[2].description : ""
+            if !haystack.contains(needle) {
+                let msg = message.isEmpty ? "ASSERTION FAILED: '\(haystack)' does not contain '\(needle)'" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertStartsWith") { args in
+            guard args.count >= 2 else {
+                throw VMError.userException(message: "assertStartsWith: expected 2 arguments")
+            }
+            let s = args[0].description
+            let prefix = args[1].description
+            let message = args.count >= 3 ? args[2].description : ""
+            if !s.hasPrefix(prefix) {
+                let msg = message.isEmpty ? "ASSERTION FAILED: '\(s)' does not start with '\(prefix)'" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertEndsWith") { args in
+            guard args.count >= 2 else {
+                throw VMError.userException(message: "assertEndsWith: expected 2 arguments")
+            }
+            let s = args[0].description
+            let suffix = args[1].description
+            let message = args.count >= 3 ? args[2].description : ""
+            if !s.hasSuffix(suffix) {
+                let msg = message.isEmpty ? "ASSERTION FAILED: '\(s)' does not end with '\(suffix)'" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertStringEmpty") { args in
+            guard let first = args.first else {
+                throw VMError.userException(message: "assertStringEmpty: expected argument")
+            }
+            let s = first.description
+            let message = args.count >= 2 ? args[1].description : ""
+            if !s.isEmpty {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected empty string but got '\(s)'" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertStringNotEmpty") { args in
+            guard let first = args.first else {
+                throw VMError.userException(message: "assertStringNotEmpty: expected argument")
+            }
+            let s = first.description
+            let message = args.count >= 2 ? args[1].description : ""
+            if s.isEmpty {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected non-empty string" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "assertStringLength") { args in
+            guard args.count >= 2, case .int(let expected) = args[1] else {
+                throw VMError.userException(message: "assertStringLength: expected string and int arguments")
+            }
+            let s = args[0].description
+            let message = args.count >= 3 ? args[2].description : ""
+            if s.count != Int(expected) {
+                let msg = message.isEmpty ? "ASSERTION FAILED: expected string length \(expected) but got \(s.count)" : "ASSERTION FAILED: \(message)"
+                throw VMError.userException(message: msg)
+            }
+            return .unit
+        }
+
+        register(name: "fail") { args in
+            let message = args.first?.description ?? "test failed"
+            throw VMError.userException(message: "ASSERTION FAILED: \(message)")
+        }
     }
 
     // MARK: - Collection Builtins

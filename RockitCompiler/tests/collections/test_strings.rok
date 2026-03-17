@@ -1,4 +1,3 @@
-import rockit.testing.probe
 
 @Test
 fun testStringConcat() {

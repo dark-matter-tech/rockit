@@ -1,4 +1,3 @@
-import rockit.testing.probe
 import rockit.networking.http
 import rockit.networking.url
 import rockit.encoding.base64

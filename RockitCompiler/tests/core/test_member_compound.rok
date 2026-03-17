@@ -1,4 +1,3 @@
-import rockit.testing.probe
 
 class Counter(var count: Int)
 
