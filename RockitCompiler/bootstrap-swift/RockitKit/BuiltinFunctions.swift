@@ -5,7 +5,7 @@
 import Foundation
 #if canImport(CryptoKit)
 import CryptoKit
-#else
+#elseif canImport(Crypto)
 import Crypto
 #endif
 #if canImport(Security)
@@ -1278,7 +1278,8 @@ public final class BuiltinRegistry {
         // X.509 certificate parsing via Security framework
         registerX509Builtins()
 
-        // Crypto hashing — implemented via CryptoKit
+        // Crypto hashing — implemented via CryptoKit (not available on Windows)
+        #if canImport(CryptoKit) || canImport(Crypto)
         register(name: "cryptoSha256") { args in
             guard case .string(let input) = args.first else {
                 throw VMError.typeMismatch(expected: "String", actual: args.first?.typeName ?? "nothing", operation: "cryptoSha256")
@@ -1464,6 +1465,7 @@ public final class BuiltinRegistry {
                 #endif
             }
         }
+        #endif // canImport(CryptoKit) || canImport(Crypto)
     }
 
     // MARK: - X.509 Certificate Builtins
@@ -1471,15 +1473,19 @@ public final class BuiltinRegistry {
     /// Handle table for parsed certificates
     #if canImport(Security)
     private static var x509Handles: [Int: SecCertificate] = [:]
-    #else
+    #elseif canImport(COpenSSL)
     private static var x509Handles: [Int: OpaquePointer] = [:]
+    #else
+    private static var x509Handles: [Int: Int] = [:] // stub for platforms without crypto
     #endif
     private static var x509NextHandle: Int = 0
     /// Store raw PEM data for fields Security framework can't extract directly
     private static var x509PemData: [Int: Data] = [:]
 
     private func registerX509Builtins() {
-
+        #if !canImport(Security) && !canImport(COpenSSL)
+        // No crypto backend available (Windows) — X.509 builtins not registered
+        #else
         // x509ParsePem(pemData: String) -> Int (handle, or -1 on error)
         register(name: "x509ParsePem") { args in
             guard case .string(let pemString) = args.first else {
@@ -1676,5 +1682,6 @@ public final class BuiltinRegistry {
             BuiltinRegistry.x509PemData.removeValue(forKey: Int(h))
             return .null
         }
+        #endif // canImport(Security) || canImport(COpenSSL)
     }
 }
