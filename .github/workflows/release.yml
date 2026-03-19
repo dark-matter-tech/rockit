@@ -37,28 +37,32 @@ jobs:
             archive_ext: tar.gz
             triple: x86_64-apple-macosx
           - platform: windows-x86_64
-            runner: windows-latest
-            container: ""
+            runner: ubuntu-22.04
+            container: swift:5.10.1-jammy
             archive_ext: zip
-            triple: x86_64-unknown-windows-msvc
+            triple: x86_64-w64-windows-gnu
 
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container || null }}
-    continue-on-error: ${{ matrix.platform == 'windows-x86_64' || matrix.platform == 'macos-x86_64' }}
+    continue-on-error: ${{ matrix.platform == 'macos-x86_64' }}
     defaults:
       run:
-        shell: ${{ matrix.platform == 'windows-x86_64' && 'pwsh' || 'bash' }}
+        shell: bash
 
     steps:
-      # ── Linux ──────────────────────────────────────────────────────
+      # ── Linux / Windows cross-compile ──────────────────────────────
       - name: Install dependencies (Linux)
-        if: matrix.platform == 'linux-x86_64'
+        if: matrix.platform == 'linux-x86_64' || matrix.platform == 'windows-x86_64'
         run: |
           apt-get update && apt-get install -y git clang-15 curl jq openjdk-17-jdk libssl-dev pkg-config gnupg
           ln -sf /usr/bin/clang-15 /usr/bin/clang
+          # Windows cross-compilation: install mingw-w64
+          if [ "${{ matrix.platform }}" = "windows-x86_64" ]; then
+            apt-get install -y mingw-w64 zip
+          fi
 
       - name: Checkout (Linux)
-        if: matrix.platform == 'linux-x86_64'
+        if: matrix.platform == 'linux-x86_64' || matrix.platform == 'windows-x86_64'
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc
@@ -80,25 +84,11 @@ jobs:
           echo "LDFLAGS=-L$(brew --prefix openssl@3)/lib" >> "$GITHUB_ENV"
           echo "CPPFLAGS=-I$(brew --prefix openssl@3)/include" >> "$GITHUB_ENV"
 
-      - name: Checkout (macOS/Windows)
-        if: matrix.platform != 'linux-x86_64'
+      - name: Checkout (macOS)
+        if: startsWith(matrix.platform, 'macos')
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      # ── Windows ────────────────────────────────────────────────────
-      - name: Install Swift (Windows)
-        if: matrix.platform == 'windows-x86_64'
-        uses: compnerd/gha-setup-swift@main
-        with:
-          branch: swift-5.10.1-release
-          tag: 5.10.1-RELEASE
-
-      - name: Install dependencies (Windows)
-        if: matrix.platform == 'windows-x86_64'
-        run: |
-          choco install openssl -y
-          choco install jq -y
 
       # ── Common build steps ─────────────────────────────────────────
       - name: Set version
@@ -120,13 +110,31 @@ jobs:
       - name: Build Stage 1 compiler
         working-directory: RockitCompiler
         run: |
-          .build/release/rockit build-native self-hosted-rockit/command.rok
-          echo "Stage 1 compiler built"
+          if [ "${{ matrix.platform }}" = "windows-x86_64" ]; then
+            # Cross-compile for Windows: emit LLVM IR then link with mingw
+            .build/release/rockit emit-llvm self-hosted-rockit/command.rok
+            # Cross-compile runtime for Windows
+            x86_64-w64-mingw32-gcc -c -O2 -D_WIN32 runtime/rockit_runtime.c -o runtime/rockit_runtime_win.o \
+              -I runtime/ 2>&1 || echo "Runtime cross-compile warnings (non-fatal)"
+            # Link Stage 1 compiler as Windows .exe
+            x86_64-w64-mingw32-gcc -O2 self-hosted-rockit/command.ll runtime/rockit_runtime_win.o \
+              -o self-hosted-rockit/command.exe -lws2_32 -lm -static
+            echo "Stage 1 compiler cross-compiled for Windows"
+          else
+            .build/release/rockit build-native self-hosted-rockit/command.rok
+            echo "Stage 1 compiler built"
+          fi
         shell: bash
 
       - name: Determine version
         run: |
-          VERSION=$(RockitCompiler/self-hosted-rockit/command version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          if [ "${{ matrix.platform }}" = "windows-x86_64" ]; then
+            # Can't run .exe on Linux — extract version from source
+            RAW_VERSION=$(grep 'compilerVersion' RockitCompiler/bootstrap-swift/RockitKit/CompilerPipeline.swift | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9._-]*' | head -1)
+            VERSION="${RAW_VERSION:-0.1.0-alpha}"
+          else
+            VERSION=$(RockitCompiler/self-hosted-rockit/command version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          fi
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "TAG=v${VERSION}" >> "$GITHUB_ENV"
           echo "Detected version: ${VERSION}"
@@ -134,12 +142,17 @@ jobs:
 
       - name: Build Rockit runtime
         working-directory: RockitCompiler
-        run: bash runtime/rockit/build.sh
+        run: |
+          if [ "${{ matrix.platform }}" = "windows-x86_64" ]; then
+            echo "Runtime already cross-compiled in Build Stage 1 step"
+          else
+            bash runtime/rockit/build.sh
+          fi
         shell: bash
 
       - name: Clone and build Fuel
         run: |
-          if [ "${{ matrix.platform }}" = "linux-x86_64" ]; then
+          if [ "${{ matrix.platform }}" = "linux-x86_64" ] || [ "${{ matrix.platform }}" = "windows-x86_64" ]; then
             echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
             chmod 600 ~/.netrc
             git clone --depth 1 --branch master "https://x-access-token:${FUEL_TOKEN}@github.com/dark-matter-tech/rockit-fuel.git" /tmp/fuel
@@ -147,9 +160,16 @@ jobs:
             git clone --depth 1 --branch master "https://github.com/dark-matter-tech/rockit-fuel.git" /tmp/fuel || true
           fi
           if [ -d /tmp/fuel ]; then
-            RockitCompiler/self-hosted-rockit/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel \
-              --runtime-path RockitCompiler/runtime/rockit_runtime.o \
-              --target-triple ${{ matrix.triple }}
+            if [ "${{ matrix.platform }}" = "windows-x86_64" ]; then
+              # Cross-compile Fuel for Windows
+              RockitCompiler/.build/release/rockit emit-llvm /tmp/fuel/src/fuel.rok
+              x86_64-w64-mingw32-gcc -O2 /tmp/fuel/src/fuel.ll RockitCompiler/runtime/rockit_runtime_win.o \
+                -o /tmp/fuel/fuel.exe -lws2_32 -lm -static 2>&1 || echo "Fuel cross-compile failed (non-fatal)"
+            else
+              RockitCompiler/self-hosted-rockit/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel \
+                --runtime-path RockitCompiler/runtime/rockit_runtime.o \
+                --target-triple ${{ matrix.triple }}
+            fi
           fi
         shell: bash
         env:
@@ -177,16 +197,21 @@ jobs:
       - name: Package archive (Windows)
         if: matrix.archive_ext == 'zip'
         run: |
-          $archive = "rockit-$env:VERSION-${{ matrix.platform }}.zip"
-          New-Item -ItemType Directory -Force -Path "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/bin"
-          New-Item -ItemType Directory -Force -Path "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/share/rockit"
-          Copy-Item "RockitCompiler/self-hosted-rockit/command.exe" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/bin/rockit.exe" -ErrorAction SilentlyContinue
-          Copy-Item "RockitCompiler/self-hosted-rockit/command" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/bin/rockit.exe" -ErrorAction SilentlyContinue
-          if (Test-Path "/tmp/fuel/fuel.exe") { Copy-Item "/tmp/fuel/fuel.exe" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/bin/fuel.exe" }
-          if (Test-Path "RockitCompiler/runtime/rockit_runtime.o") { Copy-Item "RockitCompiler/runtime/rockit_runtime.o" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/share/rockit/" }
-          Copy-Item -Recurse "RockitCompiler/self-hosted-rockit/stdlib" "dist/rockit-$env:VERSION-${{ matrix.platform }}/rockit/share/rockit/"
-          Compress-Archive -Path "dist/rockit-$env:VERSION-${{ matrix.platform }}/*" -DestinationPath "dist/$archive"
-          echo "ARCHIVE=$archive" >> $env:GITHUB_ENV
+          ARCHIVE="rockit-${VERSION}-${{ matrix.platform }}.zip"
+          mkdir -p dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/bin
+          mkdir -p dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/share/rockit
+          cp RockitCompiler/self-hosted-rockit/command.exe dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/bin/rockit.exe
+          if [ -f /tmp/fuel/fuel.exe ]; then
+            cp /tmp/fuel/fuel.exe dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/bin/fuel.exe
+          fi
+          if [ -f RockitCompiler/runtime/rockit_runtime_win.o ]; then
+            cp RockitCompiler/runtime/rockit_runtime_win.o dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/share/rockit/rockit_runtime.o
+          fi
+          cp -r RockitCompiler/self-hosted-rockit/stdlib dist/rockit-${VERSION}-${{ matrix.platform }}/rockit/share/rockit/
+          cd dist && zip -r "${ARCHIVE}" "rockit-${VERSION}-${{ matrix.platform }}"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+          ls -la "${ARCHIVE}"
+        shell: bash
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
