@@ -111,14 +111,18 @@ jobs:
         working-directory: RockitCompiler
         run: |
           if [ "${{ matrix.platform }}" = "windows-x86_64" ]; then
-            # Cross-compile for Windows: emit LLVM IR then link with mingw
+            # Cross-compile for Windows: emit LLVM IR, compile to object, link with mingw
             .build/release/rockit emit-llvm self-hosted-rockit/command.rok > self-hosted-rockit/command.ll
             echo "LLVM IR emitted ($(wc -l < self-hosted-rockit/command.ll) lines)"
+            # Compile LLVM IR to Windows object file using clang
+            clang-15 -c -O2 -target x86_64-w64-mingw32 self-hosted-rockit/command.ll \
+              -o self-hosted-rockit/command.o
+            echo "LLVM IR compiled to Windows object file"
             # Cross-compile runtime for Windows
             x86_64-w64-mingw32-gcc -c -O2 runtime/rockit_runtime.c -o runtime/rockit_runtime_win.o \
               -I runtime/ 2>&1 || echo "Runtime cross-compile warnings (non-fatal)"
-            # Link Stage 1 compiler as Windows .exe
-            x86_64-w64-mingw32-gcc -O2 self-hosted-rockit/command.ll runtime/rockit_runtime_win.o \
+            # Link everything into Windows .exe
+            x86_64-w64-mingw32-gcc -O2 self-hosted-rockit/command.o runtime/rockit_runtime_win.o \
               -o self-hosted-rockit/command.exe -lws2_32 -lm -static
             echo "Stage 1 compiler cross-compiled for Windows"
           else
@@ -163,8 +167,9 @@ jobs:
           if [ -d /tmp/fuel ]; then
             if [ "${{ matrix.platform }}" = "windows-x86_64" ]; then
               # Cross-compile Fuel for Windows
-              RockitCompiler/.build/release/rockit emit-llvm /tmp/fuel/src/fuel.rok
-              x86_64-w64-mingw32-gcc -O2 /tmp/fuel/src/fuel.ll RockitCompiler/runtime/rockit_runtime_win.o \
+              RockitCompiler/.build/release/rockit emit-llvm /tmp/fuel/src/fuel.rok > /tmp/fuel/src/fuel.ll
+              clang-15 -c -O2 -target x86_64-w64-mingw32 /tmp/fuel/src/fuel.ll -o /tmp/fuel/src/fuel.o
+              x86_64-w64-mingw32-gcc -O2 /tmp/fuel/src/fuel.o RockitCompiler/runtime/rockit_runtime_win.o \
                 -o /tmp/fuel/fuel.exe -lws2_32 -lm -static 2>&1 || echo "Fuel cross-compile failed (non-fatal)"
             else
               RockitCompiler/self-hosted-rockit/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel \
