@@ -1125,7 +1125,7 @@ public final class BuiltinRegistry {
                   case .string(let data) = args[1] else {
                 throw VMError.typeMismatch(expected: "Int, String", actual: "invalid args", operation: "tcpSend")
             }
-            let bytes = Array(data.utf8)
+            let bytes = Array(data.unicodeScalars.map { UInt8($0.value) })
             let sent = bytes.withUnsafeBufferPointer { buf in
                 send(Int32(fd), buf.baseAddress, buf.count, 0)
             }
@@ -1143,7 +1143,7 @@ public final class BuiltinRegistry {
                 recv(Int32(fd), buf.baseAddress, buf.count, 0)
             }
             if n <= 0 { return .string("") }
-            return .string(String(bytes: buffer[0..<n], encoding: .utf8) ?? "")
+            return .string(String(bytes: buffer[0..<n], encoding: .isoLatin1) ?? "")
         }
 
         register(name: "tcpClose") { args in

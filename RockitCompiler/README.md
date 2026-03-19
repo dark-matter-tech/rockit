@@ -1,5 +1,7 @@
 # Rockit Compiler
 
+![CI](https://github.com/dark-matter-tech/rockit/actions/workflows/ci.yml/badge.svg)
+
 The Rockit language compiler. Self-hosting — Rockit compiles itself.
 
 > **Status:** All phases complete. 591 tests passing. Self-hosting bootstrap verified (Stage 2 == Stage 3). Runtime rewritten in Rockit. DO-178C audit readiness (LLVM debug metadata, safety verification, audit trail).
@@ -754,12 +756,13 @@ RockitCompiler/
 │   ├── llvmgen.rok
 │   ├── command.rok            # Concatenated compiler source
 │   ├── command                # Stage 1 native binary
-│   └── stdlib/                # Standard library submodule (launchpad, 15 modules)
+│   └── stdlib/                # Standard library submodule (launchpad, 22 modules)
 │       └── rockit/
 │           ├── core/          # collections, math, strings, result, uuid
-│           ├── encoding/      # base64, json, xml
+│           ├── encoding/      # base64, hpack, json, xml
 │           ├── filesystem/    # file, path
-│           ├── networking/    # http, url, websocket
+│           ├── networking/    # http, http2, url, websocket
+│           ├── security/      # tls, crypto, x509, pem
 │           ├── testing/       # probe
 │           └── time/          # datetime
 ├── tests/                     # Rockit integration tests
