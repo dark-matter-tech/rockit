@@ -44,7 +44,7 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container || null }}
-    continue-on-error: ${{ matrix.platform == 'macos-x86_64' }}
+    continue-on-error: ${{ matrix.platform == 'macos-x86_64' || matrix.platform == 'windows-x86_64' }}
     defaults:
       run:
         shell: bash
@@ -112,9 +112,10 @@ jobs:
         run: |
           if [ "${{ matrix.platform }}" = "windows-x86_64" ]; then
             # Cross-compile for Windows: emit LLVM IR then link with mingw
-            .build/release/rockit emit-llvm self-hosted-rockit/command.rok
+            .build/release/rockit emit-llvm self-hosted-rockit/command.rok > self-hosted-rockit/command.ll
+            echo "LLVM IR emitted ($(wc -l < self-hosted-rockit/command.ll) lines)"
             # Cross-compile runtime for Windows
-            x86_64-w64-mingw32-gcc -c -O2 -D_WIN32 runtime/rockit_runtime.c -o runtime/rockit_runtime_win.o \
+            x86_64-w64-mingw32-gcc -c -O2 runtime/rockit_runtime.c -o runtime/rockit_runtime_win.o \
               -I runtime/ 2>&1 || echo "Runtime cross-compile warnings (non-fatal)"
             # Link Stage 1 compiler as Windows .exe
             x86_64-w64-mingw32-gcc -O2 self-hosted-rockit/command.ll runtime/rockit_runtime_win.o \

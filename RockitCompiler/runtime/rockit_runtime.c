@@ -11,6 +11,8 @@
 #include <malloc/malloc.h>
 #include <mach/mach.h>
 #elif defined(_WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <malloc.h>
 #endif
@@ -1642,8 +1644,6 @@ double rockit_math_atan2(double y, double x) { return atan2(y, x); }
 // ── Networking, Time & Random (Foundation builtins) ────────────────────────
 
 #ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
 #include <time.h>
 #pragma comment(lib, "ws2_32.lib")
 #else
