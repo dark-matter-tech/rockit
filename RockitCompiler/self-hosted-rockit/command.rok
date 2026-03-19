@@ -8719,9 +8719,9 @@ fun updateBackgroundNotice(currentVersion: String): Unit {
 // Build Identity (injected by build.sh)
 // ---------------------------------------------------------------------------
 val ROCKIT_VERSION: String = "0.1.0"
-val ROCKIT_GIT_HASH: String = "65cf992092f222993b8ffa6267b344c6f4acff4c"
-val ROCKIT_SOURCE_HASH: String = "sha256:d63e398e970428b0b2680aa2c572eb7679f062995623a9a0ea40a0410f4f3e1f"
-val ROCKIT_BUILD_TIMESTAMP: String = "2026-03-19T03:13:51Z"
+val ROCKIT_GIT_HASH: String = "d1a939e0f215fc83aec0d5d79cfb24c6865c75d7"
+val ROCKIT_SOURCE_HASH: String = "sha256:36c735bc8ac7392eb20a89d9cee3de0d63fdb07663a6300dae1a2bd23a67866f"
+val ROCKIT_BUILD_TIMESTAMP: String = "2026-03-19T16:40:43Z"
 val ROCKIT_BUILD_PLATFORM: String = "darwin-arm64"
 
 // ---------------------------------------------------------------------------
