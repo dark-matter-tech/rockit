@@ -297,11 +297,11 @@ public final class CompilerPipeline {
         }
 
         let diagCountBefore = diagnostics.diagnostics.count
-        let start = CFAbsoluteTimeGetCurrent()
+        let start = Date().timeIntervalSinceReferenceDate
 
         let output = try phase.execute(input: input, context: context, diagnostics: diagnostics)
 
-        let duration = CFAbsoluteTimeGetCurrent() - start
+        let duration = Date().timeIntervalSinceReferenceDate - start
         let diagCountAfter = diagnostics.diagnostics.count
 
         let artifact = PhaseArtifact(
