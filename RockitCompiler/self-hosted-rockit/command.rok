@@ -8719,9 +8719,9 @@ fun updateBackgroundNotice(currentVersion: String): Unit {
 // Build Identity (injected by build.sh)
 // ---------------------------------------------------------------------------
 val ROCKIT_VERSION: String = "0.1.0"
-val ROCKIT_GIT_HASH: String = "d1a939e0f215fc83aec0d5d79cfb24c6865c75d7"
-val ROCKIT_SOURCE_HASH: String = "sha256:36c735bc8ac7392eb20a89d9cee3de0d63fdb07663a6300dae1a2bd23a67866f"
-val ROCKIT_BUILD_TIMESTAMP: String = "2026-03-19T16:40:43Z"
+val ROCKIT_GIT_HASH: String = "aff25309ea4eba75ee95dbff5b8bcc9d68bdf349"
+val ROCKIT_SOURCE_HASH: String = "sha256:86c2f958f644109b496c9cd30f48775e54e224fe6533e1de0212f3eebd470d9b"
+val ROCKIT_BUILD_TIMESTAMP: String = "2026-03-19T17:40:53Z"
 val ROCKIT_BUILD_PLATFORM: String = "darwin-arm64"
 
 // ---------------------------------------------------------------------------
@@ -13166,12 +13166,14 @@ fun main(): Unit {
             }
         }
 
+        // -Xclang -opaque-pointers: needed for clang < 16 (harmless on 16+, -w suppresses warnings on 17+)
+        val clangBase: String = "clang -Xclang -opaque-pointers -O2 -w "
         var clangCmd: String = ""
         if (noRuntime) {
             // Freestanding: compile LLVM IR without runtime
-            clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -o ", outputFile)))
+            clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" -o ", outputFile)))
             if (toString(platformOS()) == "linux") {
-                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
+                clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" -lm -o ", outputFile)))
             }
         } else {
             // Find runtime path
@@ -13187,15 +13189,15 @@ fun main(): Unit {
             if (endsWith(runtimePath, ".c")) {
                 // Backward compat: C runtime needs -I for the header directory
                 val runtimeDir = dirName(runtimePath)
-                clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -L /opt/homebrew/opt/openssl@3/lib -o ", outputFile)))))))
+                clangCmd = stringConcat(clangBase, stringConcat("-I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -L /opt/homebrew/opt/openssl@3/lib -o ", outputFile))))))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -lm -o ", outputFile)))))))
+                    clangCmd = stringConcat(clangBase, stringConcat("-I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -lm -o ", outputFile))))))))
                 }
             } else {
                 // Pre-built .o runtime — link directly, no -I needed
-                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -L /opt/homebrew/opt/openssl@3/lib -o ", outputFile)))))
+                clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -L /opt/homebrew/opt/openssl@3/lib -o ", outputFile)))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -lm -o ", outputFile)))))
+                    clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -lm -o ", outputFile)))))
                 }
             }
         }
