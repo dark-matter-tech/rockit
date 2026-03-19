@@ -456,7 +456,7 @@ jobs:
           cat > Standard-Library.md << 'WIKI_STDLIB'
           # Standard Library
 
-          22 modules ship with Rockit. Import with `import rockit.<domain>.<module>`.
+          15 modules ship with Rockit. Import with `import rockit.<domain>.<module>`.
 
           | Module | Import | Standard |
           |--------|--------|----------|
@@ -466,19 +466,13 @@ jobs:
           | Result | `rockit.core.result` | — |
           | UUID | `rockit.core.uuid` | RFC 9562 |
           | Base64 | `rockit.encoding.base64` | RFC 4648 |
-          | HPACK | `rockit.encoding.hpack` | RFC 7541 |
           | JSON | `rockit.encoding.json` | RFC 8259 |
           | XML | `rockit.encoding.xml` | W3C XML 1.0 |
           | File I/O | `rockit.filesystem.file` | — |
           | Path | `rockit.filesystem.path` | — |
           | HTTP | `rockit.networking.http` | RFC 9110 |
-          | HTTP/2 | `rockit.networking.http2` | RFC 9113 |
           | URL | `rockit.networking.url` | RFC 3986 |
           | WebSocket | `rockit.networking.websocket` | RFC 6455 |
-          | TLS | `rockit.security.tls` | RFC 8446 |
-          | Crypto | `rockit.security.crypto` | FIPS 180-4 |
-          | X.509 | `rockit.security.x509` | RFC 5280 |
-          | PEM | `rockit.security.pem` | RFC 7468 |
           | Probe | `rockit.testing.probe` | — |
           | DateTime | `rockit.time.datetime` | ISO 8601 |
 
