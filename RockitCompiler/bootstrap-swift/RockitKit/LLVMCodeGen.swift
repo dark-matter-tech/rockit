@@ -3651,6 +3651,21 @@ public final class LLVMCodeGen {
         }
 
         // Special handling for builtins
+        if function == "panic" {
+            // panic(msg) → rockit_panic(msg)
+            var lines: [String] = []
+            if args.count >= 1 {
+                let tmp = nextSSA()
+                lines.append("\(tmp) = load ptr, ptr \(addrOf(args[0]))")
+                lines.append("call void @rockit_panic(ptr \(tmp))")
+            } else {
+                let emptyStr = internString("")
+                lines.append("call void @rockit_panic(ptr \(emptyStr))")
+            }
+            lines.append("unreachable")
+            externalDecls.insert("declare void @rockit_panic(ptr) noreturn")
+            return lines
+        }
         if function == "println" || function == "print" {
             return emitPrintCall(function: function, args: args)
         }
