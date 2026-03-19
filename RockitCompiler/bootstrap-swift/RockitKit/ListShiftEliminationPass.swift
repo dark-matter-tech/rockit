@@ -75,7 +75,7 @@ internal final class ListShiftEliminationPass: MIRPass {
 
         // Apply transformations (reverse order to preserve indices)
         for loop in loopsToTransform.reversed() {
-            let headerLabel = f.blocks[loop.headerIdx].label
+            let _ = f.blocks[loop.headerIdx].label
 
             // Replace the body block with:
             //   __builtin_list_shift_left(list, loopVarStart, bound)
