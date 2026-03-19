@@ -1762,7 +1762,18 @@ int64_t tcpSend(int64_t fd, const char *msg_str) {
     return (int64_t)sent;
 }
 
-static RockitString* rockit_string_from_bytes(const unsigned char *data, int64_t len);
+// Helper: build a RockitString from raw bytes (handles embedded nulls)
+static RockitString* rockit_string_from_bytes(const unsigned char *data, int64_t len) {
+    RockitString *s = string_alloc(len);
+    s->refCount = 1;
+    s->length = len;
+    s->base = NULL;
+    s->capacity = (len <= POOL_MAX_LEN) ? POOL_MAX_LEN : len;
+    memcpy(s->data, data, len);
+    s->data[len] = '\0';
+    s->chars = s->data;
+    return s;
+}
 
 RockitString *tcpRecv(int64_t fd, int64_t maxBytes) {
     char *buf = malloc(maxBytes + 1);
@@ -1810,19 +1821,6 @@ static void rockit_str_extract(const char *str, char **out_chars, int64_t *out_l
     int64_t *hdr = (int64_t *)str;
     *out_len = hdr[1];
     *out_chars = (char *)hdr[2];
-}
-
-// Helper: build a RockitString from raw bytes (handles embedded nulls)
-static RockitString* rockit_string_from_bytes(const unsigned char *data, int64_t len) {
-    RockitString *s = string_alloc(len);
-    s->refCount = 1;
-    s->length = len;
-    s->base = NULL;
-    s->capacity = (len <= POOL_MAX_LEN) ? POOL_MAX_LEN : len;
-    memcpy(s->data, data, len);
-    s->data[len] = '\0';
-    s->chars = s->data;
-    return s;
 }
 
 // ── TLS Context Management ──────────────────────────────────────────────────
