@@ -4,6 +4,29 @@
 
 import PackageDescription
 
+#if os(Windows)
+let cryptoDeps: [Package.Dependency] = []
+let rockitKitDeps: [Target.Dependency] = []
+let extraTargets: [Target] = []
+#else
+let cryptoDeps: [Package.Dependency] = [
+    .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+]
+let rockitKitDeps: [Target.Dependency] = [
+    .product(name: "Crypto", package: "swift-crypto"),
+    .target(name: "COpenSSL", condition: .when(platforms: [.linux])),
+]
+let extraTargets: [Target] = [
+    // OpenSSL C interop for Linux
+    .systemLibrary(
+        name: "COpenSSL",
+        path: "bootstrap-swift/COpenSSL",
+        pkgConfig: "openssl",
+        providers: [.apt(["libssl-dev"])]
+    ),
+]
+#endif
+
 let package = Package(
     name: "RockitCompiler",
     // platforms is only meaningful for Apple targets.
@@ -15,24 +38,12 @@ let package = Package(
         .executable(name: "rockit", targets: ["RockitCLI"]),
         .library(name: "RockitKit", targets: ["RockitKit"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
-    ],
-    targets: [
-        // OpenSSL C interop for Linux
-        .systemLibrary(
-            name: "COpenSSL",
-            path: "bootstrap-swift/COpenSSL",
-            pkgConfig: "openssl",
-            providers: [.apt(["libssl-dev"])]
-        ),
+    dependencies: cryptoDeps,
+    targets: extraTargets + [
         // Core compiler library
         .target(
             name: "RockitKit",
-            dependencies: [
-                .product(name: "Crypto", package: "swift-crypto"),
-                .target(name: "COpenSSL", condition: .when(platforms: [.linux])),
-            ],
+            dependencies: rockitKitDeps,
             path: "bootstrap-swift/RockitKit"
         ),
         // Language Server Protocol
