@@ -56,6 +56,8 @@ extension MIRInstruction {
         case .typeCheck(let d, _, _),
              .typeCast(let d, _, _):
             return d
+        case .numericConvert(let d, _, _, _):
+            return d
         case .stringConcat(let d, _):
             return d
         case .tryBegin(_, let d):
@@ -117,6 +119,8 @@ extension MIRInstruction {
             return [o]
         case .typeCheck(_, let o, _),
              .typeCast(_, let o, _):
+            return [o]
+        case .numericConvert(_, let o, _, _):
             return [o]
         case .stringConcat(_, let parts):
             return parts

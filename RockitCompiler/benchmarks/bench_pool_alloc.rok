@@ -1,0 +1,59 @@
+// bench_pool_alloc.rok — Pool allocation overhead benchmark (freestanding)
+// Measures: malloc/free per-object vs bump-pointer pool allocation
+// 1M x 64-byte objects: individual malloc/free vs pre-allocated pool
+// Freestanding mode: --no-runtime, uses extern C malloc/free/printf/clock
+
+extern fun printf(fmt: Ptr<Int>, ...): Int
+extern fun malloc(size: Int): Ptr<Int>
+extern fun free(ptr: Ptr<Int>): Unit
+extern fun clock(): Int
+
+fun main(): Unit {
+    unsafe {
+        val iterations: Int = 1000000
+        val objSize: Int = 64
+
+        // Individual malloc/free
+        val t0: Int = clock()
+        var sum1: Int = 0
+        var i: Int = 0
+        while (i < iterations) {
+            val obj: Ptr<Int> = malloc(objSize)
+            obj.store(i)
+            sum1 = sum1 + obj.load()
+            free(obj)
+            i = i + 1
+        }
+        val t1: Int = clock()
+
+        // Pool allocation (bump pointer)
+        val poolSize: Int = iterations * 8
+        val pool: Ptr<Int> = malloc(poolSize * 8)
+        var poolNext: Int = 0
+
+        val t2: Int = clock()
+        var sum2: Int = 0
+        i = 0
+        while (i < iterations) {
+            val obj: Ptr<Int> = pool.offset(poolNext)
+            poolNext = poolNext + 8
+            obj.store(i)
+            sum2 = sum2 + obj.load()
+            i = i + 1
+        }
+        val t3: Int = clock()
+
+        val mallocTime: Int = t1 - t0
+        val poolTime: Int = t3 - t2
+
+        printf(cstr("malloc=%d pool=%d"), mallocTime, poolTime)
+        if (poolTime > 0) {
+            val ratio: Int = (mallocTime * 100) / poolTime
+            printf(cstr(" speedup=%d.%02dx\n"), ratio / 100, ratio % 100)
+        } else {
+            printf(cstr(" speedup=inf\n"))
+        }
+
+        free(pool)
+    }
+}

@@ -255,6 +255,7 @@ internal final class InliningPass: MIRPass {
         case .isNull(let d, let o):         return .isNull(dest: r(d), operand: r(o))
         case .typeCheck(let d, let o, let t): return .typeCheck(dest: r(d), operand: r(o), typeName: t)
         case .typeCast(let d, let o, let t): return .typeCast(dest: r(d), operand: r(o), typeName: t)
+        case .numericConvert(let d, let o, let from, let to): return .numericConvert(dest: r(d), operand: r(o), from: from, to: to)
         case .stringConcat(let d, let p):   return .stringConcat(dest: r(d), parts: p.map { r($0) })
         case .tryBegin(let c, let e):       return .tryBegin(catchLabel: c, exceptionDest: r(e))
         case .tryEnd:                       return .tryEnd

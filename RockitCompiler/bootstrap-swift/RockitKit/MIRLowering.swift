@@ -14,6 +14,9 @@ public final class MIRLowering {
     /// Maps local variable names to their alloc temps
     private var locals: [String: String] = [:]
 
+    /// Maps local variable names to their MIR types (avoids ExpressionID collisions)
+    private var localTypes: [String: MIRType] = [:]
+
     /// The current class name (for method name mangling)
     private var currentClassName: String?
 
@@ -43,9 +46,13 @@ public final class MIRLowering {
     /// Member properties with default values, indexed by type name
     private var memberPropertyDefaults: [String: [(String, Expression)]] = [:]
 
+    /// Source file name for DO-178C traceability metadata.
+    private var sourceFileName: String?
+
     public init(typeCheckResult: TypeCheckResult) {
         self.result = typeCheckResult
         self.diagnostics = typeCheckResult.diagnostics
+        self.sourceFileName = typeCheckResult.ast.span.start.file
     }
 
     /// Lower the entire AST to a MIR module.
@@ -112,7 +119,8 @@ public final class MIRLowering {
         for decl in result.ast.declarations {
             lowerDeclaration(decl)
         }
-        return MIRModule(globals: globals, functions: functions, types: typeDecls)
+        return MIRModule(globals: globals, functions: functions, types: typeDecls,
+                         sourceFileName: sourceFileName)
     }
 
     // MARK: - Declaration Lowering
@@ -151,6 +159,7 @@ public final class MIRLowering {
         let savedBuilder = builder
         builder = MIRBuilder()
         locals = [:]
+        localTypes = [:]
 
         var params: [(String, MIRType)] = []
 
@@ -210,6 +219,7 @@ public final class MIRLowering {
         for (name, type) in params {
             let slot = builder.emitAlloc(type: type)
             locals[name] = slot
+            localTypes[name] = type
             // Parameters are available as their name; store the param value
             let paramTemp = builder.newTemp()
             builder.emit(.load(dest: paramTemp, src: "param.\(name)"))
@@ -234,8 +244,10 @@ public final class MIRLowering {
             builder.terminate(.ret(nil))
         }
 
+        let capturedSourceMap = builder.sourceMap
         let blocks = builder.finishBlocks()
-        let mirFunc = MIRFunction(name: funcName, parameters: params, returnType: retType, blocks: blocks)
+        let mirFunc = MIRFunction(name: funcName, parameters: params, returnType: retType,
+                                  blocks: blocks, sourceMap: capturedSourceMap)
         functions.append(mirFunc)
 
         locals = savedLocals
@@ -262,13 +274,16 @@ public final class MIRLowering {
 
             let savedLocals = locals
             locals = [:]
+        localTypes = [:]
             builder.startBlock(label: "entry")
 
             let val = lowerExpression(p.initializer!)
             builder.terminate(.ret(val))
 
+            let capturedSourceMap = builder.sourceMap
             let blocks = builder.finishBlocks()
-            let mirFunc = MIRFunction(name: initName, parameters: [], returnType: type, blocks: blocks)
+            let mirFunc = MIRFunction(name: initName, parameters: [], returnType: type,
+                                      blocks: blocks, sourceMap: capturedSourceMap)
             functions.append(mirFunc)
             locals = savedLocals
         }
@@ -283,17 +298,24 @@ public final class MIRLowering {
         switch node {
         case .simple(let name, _, _):
             switch name {
-            case "Int":     return .int
-            case "Int32":   return .int32
-            case "Int64":   return .int64
-            case "Float":   return .float
-            case "Float64": return .float64
-            case "Double":  return .double
-            case "Bool":    return .bool
-            case "String":  return .string
-            case "Unit":    return .unit
-            case "Nothing": return .nothing
-            default:        return .reference(name)
+            case "Int":            return .int
+            case "Int8":           return .int8
+            case "Int16":          return .int16
+            case "Int32":          return .int32
+            case "Int64":          return .int64
+            case "UInt", "UInt64": return .uint64
+            case "UInt8":          return .uint8
+            case "UInt16":         return .uint16
+            case "UInt32":         return .uint32
+            case "Float":          return .float
+            case "Float32":        return .float32
+            case "Float64":        return .float64
+            case "Double":         return .double
+            case "Bool":           return .bool
+            case "String":         return .string
+            case "Unit":           return .unit
+            case "Nothing":        return .nothing
+            default:               return .reference(name)
             }
         case .nullable(let inner, _):
             return .nullable(mirTypeFromTypeNode(inner))
@@ -306,7 +328,9 @@ public final class MIRLowering {
 
     private func isPrimitiveFieldType(_ type: MIRType) -> Bool {
         switch type {
-        case .int, .int32, .int64, .float, .float64, .double, .bool:
+        case .int, .int8, .int16, .int32, .int64,
+             .uint8, .uint16, .uint32, .uint64,
+             .float, .float32, .float64, .double, .bool:
             return true
         default:
             return false
@@ -395,9 +419,14 @@ public final class MIRLowering {
         let isValueType = isDataClass && parentType == nil && sealedSubs.isEmpty
             && !fields.isEmpty && fields.allSatisfy { isPrimitiveFieldType($0.1) }
 
+        // Typed layout eligibility: known fields, no inheritance hierarchy.
+        // Enables compact LLVM struct layout (refCount + typed fields) instead of generic RockitObject.
+        let useTypedLayout = !fields.isEmpty && parentType == nil && sealedSubs.isEmpty
+
         typeDecls.append(MIRTypeDecl(name: c.name, fields: fields, methods: methodNames,
                                      parentType: parentType, sealedSubclasses: sealedSubs,
-                                     isValueType: isValueType))
+                                     isValueType: isValueType,
+                                     useTypedLayout: useTypedLayout))
 
         // Lower nested classes (e.g., sealed subclasses)
         for member in c.members {
@@ -462,6 +491,7 @@ public final class MIRLowering {
             // Create initializer function: allocates an object with $variant = "entryName"
             let savedLocals = locals
             locals = [:]
+        localTypes = [:]
             builder.startBlock(label: "entry")
 
             let variantStr = builder.emitConstString(entry.name)
@@ -469,8 +499,10 @@ public final class MIRLowering {
             builder.emit(.newObject(dest: dest, typeName: e.name, args: [variantStr]))
             builder.terminate(.ret(dest))
 
+            let capturedSourceMap = builder.sourceMap
             let blocks = builder.finishBlocks()
-            let mirFunc = MIRFunction(name: initName, parameters: [], returnType: .reference(e.name), blocks: blocks)
+            let mirFunc = MIRFunction(name: initName, parameters: [], returnType: .reference(e.name),
+                                      blocks: blocks, sourceMap: capturedSourceMap)
             functions.append(mirFunc)
             locals = savedLocals
 
@@ -603,6 +635,8 @@ public final class MIRLowering {
     }
 
     private func lowerStatement(_ stmt: Statement) {
+        // DO-178C 6.3.4g: Set source span for traceability
+        builder.currentSpan = spanOfStmt(stmt)
         switch stmt {
         case .expression(let expr):
             let _ = lowerExpression(expr)
@@ -659,7 +693,10 @@ public final class MIRLowering {
 
     private func lowerLocalProperty(_ p: PropertyDecl) {
         let type: MIRType
-        if let sym = result.symbolTable.lookup(p.name) {
+        if let typeNode = p.type {
+            // Explicit type annotation — use the declared type
+            type = mirTypeFromTypeNode(typeNode)
+        } else if let sym = result.symbolTable.lookup(p.name) {
             type = MIRType.from(sym.type)
         } else if let init_ = p.initializer {
             // Fallback: infer type from initializer expression via typeMap
@@ -670,6 +707,7 @@ public final class MIRLowering {
 
         let slot = builder.emitAlloc(type: type)
         locals[p.name] = slot
+        localTypes[p.name] = type
 
         if let initializer = p.initializer {
             let val = lowerExpression(initializer)
@@ -1118,6 +1156,8 @@ public final class MIRLowering {
     /// Lower an expression, returning the temp holding the result.
     @discardableResult
     private func lowerExpression(_ expr: Expression) -> String {
+        // DO-178C 6.3.4g: Set source span for traceability
+        builder.currentSpan = spanOf(expr)
         switch expr {
         // Literals
         case .intLiteral(let value, _):
@@ -1277,10 +1317,54 @@ public final class MIRLowering {
             return lowerShortCircuitOr(left: left, right: right)
         }
 
-        let lhs = lowerExpression(left)
-        let rhs = lowerExpression(right)
+        var lhs = lowerExpression(left)
+        var rhs = lowerExpression(right)
         let dest = builder.newTemp()
-        let type = lookupExprType(left)
+
+        // Determine operand types and the promoted result type
+        var leftType = lookupExprType(left)
+        var rightType = lookupExprType(right)
+
+        // Literal type adaptation: when one operand is a literal and the other
+        // has a specific numeric type, adapt the literal to match rather than
+        // promoting the non-literal. Avoids unnecessary widening
+        // (e.g., `i32 + 1` stays i32, not widened to i64).
+        if leftType != rightType {
+            let leftIsLiteral: Bool
+            if case .intLiteral = left { leftIsLiteral = true }
+            else if case .floatLiteral = left { leftIsLiteral = true }
+            else { leftIsLiteral = false }
+            let rightIsLiteral: Bool
+            if case .intLiteral = right { rightIsLiteral = true }
+            else if case .floatLiteral = right { rightIsLiteral = true }
+            else { rightIsLiteral = false }
+
+            if rightIsLiteral && !leftIsLiteral && leftType.bitWidth > 0 {
+                rightType = leftType
+            } else if leftIsLiteral && !rightIsLiteral && rightType.bitWidth > 0 {
+                leftType = rightType
+            }
+        }
+
+        // For arithmetic/comparison, use the promoted (wider) type
+        let type: MIRType
+        if leftType.bitWidth > 0 && rightType.bitWidth > 0 && leftType != rightType {
+            // Mixed numeric types — promote to the wider type
+            type = leftType.bitWidth >= rightType.bitWidth ? leftType : rightType
+            // Insert widening conversions as needed
+            if leftType != type {
+                let conv = builder.newTemp()
+                builder.emit(.numericConvert(dest: conv, operand: lhs, from: leftType, to: type))
+                lhs = conv
+            }
+            if rightType != type {
+                let conv = builder.newTemp()
+                builder.emit(.numericConvert(dest: conv, operand: rhs, from: rightType, to: type))
+                rhs = conv
+            }
+        } else {
+            type = leftType
+        }
 
         switch op {
         case .plus:     builder.emit(.add(dest: dest, lhs: lhs, rhs: rhs, type: type))
@@ -1825,6 +1909,7 @@ public final class MIRLowering {
         let captures = freeVarNames.filter { savedLocals[$0] != nil && !paramNames.contains($0) }.sorted()
 
         locals = [:]
+        localTypes = [:]
         builder = lambdaBuilder
 
         // Build parameter list: captured vars first, then user params
@@ -1878,8 +1963,10 @@ public final class MIRLowering {
             builder.terminate(.ret(nil))
         }
 
+        let capturedSourceMap = builder.sourceMap
         let blocks = builder.finishBlocks()
-        let mirFunc = MIRFunction(name: lambdaName, parameters: allParams, returnType: .unit, blocks: blocks)
+        let mirFunc = MIRFunction(name: lambdaName, parameters: allParams, returnType: .unit,
+                                  blocks: blocks, sourceMap: capturedSourceMap)
         functions.append(mirFunc)
 
         builder = savedBuilder
@@ -2139,6 +2226,12 @@ public final class MIRLowering {
 
     /// Look up the MIR type for an expression using the type map.
     private func lookupExprType(_ expr: Expression) -> MIRType {
+        // For identifiers, use localTypes to avoid ExpressionID collision
+        // (binary expressions like `i < n` share the same start position as `i`,
+        //  so the typeMap entry for `i` can be overwritten by the binary expr's type)
+        if case .identifier(let name, _) = expr {
+            if let t = localTypes[name] { return t }
+        }
         let id = ExpressionID(expr.span)
         if let type = result.typeMap[id] {
             return MIRType.from(type)
@@ -2169,6 +2262,51 @@ public final class MIRLowering {
             return typeNodeSimpleName(typeNode)
         case .expression, .inRange:
             return "Any"
+        }
+    }
+
+    // MARK: - Source Span Extraction (DO-178C 6.3.4g)
+
+    /// Extract the source span from an expression for traceability.
+    private func spanOf(_ expr: Expression) -> SourceSpan? {
+        switch expr {
+        case .intLiteral(_, let span), .floatLiteral(_, let span),
+             .stringLiteral(_, let span), .boolLiteral(_, let span),
+             .nullLiteral(let span), .identifier(_, let span),
+             .this(let span), .super(let span), .error(let span),
+             .parenthesized(_, let span):
+            return span
+        case .binary(_, _, _, let span), .unaryPrefix(_, _, let span),
+             .unaryPostfix(_, _, let span), .memberAccess(_, _, let span),
+             .nullSafeMemberAccess(_, _, let span), .subscriptAccess(_, _, let span),
+             .call(_, _, _, let span), .typeCheck(_, _, let span),
+             .typeCast(_, _, let span), .safeCast(_, _, let span),
+             .nonNullAssert(_, let span), .awaitExpr(_, let span),
+             .concurrentBlock(_, let span), .elvis(_, _, let span),
+             .range(_, _, _, let span), .interpolatedString(_, let span):
+            return span
+        case .ifExpr(let ie): return ie.span
+        case .whenExpr(let we): return we.span
+        case .lambda(let le): return le.span
+        }
+    }
+
+    /// Extract the source span from a statement for traceability.
+    private func spanOfStmt(_ stmt: Statement) -> SourceSpan? {
+        switch stmt {
+        case .returnStmt(_, let span), .breakStmt(let span),
+             .continueStmt(let span), .throwStmt(_, let span):
+            return span
+        case .expression(let expr):
+            return spanOf(expr)
+        case .propertyDecl(let p): return p.span
+        case .assignment(let a): return a.span
+        case .forLoop(let f): return f.span
+        case .whileLoop(let w): return w.span
+        case .doWhileLoop(let d): return d.span
+        case .tryCatch(let tc): return tc.span
+        case .destructuringDecl(let d): return d.span
+        case .declaration: return nil
         }
     }
 }

@@ -1,0 +1,16 @@
+fun main(): Unit {
+    val args = processArgs()
+    val filename: String = toString(listGet(args, 1))
+    val content: String = fileRead(filename)
+    // Count lines and total bytes
+    var lines: Int = 0
+    var bytes: Int = stringLength(content)
+    var i: Int = 0
+    while (i < bytes) {
+        if (charCodeAt(content, i) == 10) {
+            lines = lines + 1
+        }
+        i = i + 1
+    }
+    println(toString(lines) + " " + toString(bytes))
+}

@@ -4263,7 +4263,7 @@ fun main(): Unit {
 
     if (listSize(args) < 2) {
         println("Usage: rockit compile <source.rok> [-o output] [--no-check] [--optimize] [--emit-llvm] [--lib-path <path>]")
-        println("       rockit build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>]")
+        println("       rockit build-native <source.rok> [-o output] [--no-check] [--optimize] [--runtime-path <path>] [--lib-path <path>] [--safety <dal-a|dal-b|dal-c|dal-d|dal-e>]")
         println("       rockit repl")
         println("       rockit version")
         println("       rockit update [--check] [--channel <stable|beta|nightly>]")
@@ -4282,6 +4282,8 @@ fun main(): Unit {
     var noRuntime: Bool = false
     var doOptimize: Bool = false
     var emitLlvm: Bool = false
+    var safetyLevel: String = ""
+    var auditPath: String = ""
     val isBuildNative: Bool = command == "build-native"
     while (ai < listSize(args)) {
         val arg = toString(listGet(args, ai))
@@ -4308,10 +4310,20 @@ fun main(): Unit {
             emitLlvm = true
         } else if (arg == "--no-runtime") {
             noRuntime = true
+        } else if (arg == "--safety") {
+            if (ai + 1 < listSize(args)) {
+                ai = ai + 1
+                safetyLevel = toString(listGet(args, ai))
+            }
         } else if (arg == "--target-triple") {
             if (ai + 1 < listSize(args)) {
                 ai = ai + 1
                 targetTriple = toString(listGet(args, ai))
+            }
+        } else if (arg == "--audit") {
+            if (ai + 1 < listSize(args)) {
+                ai = ai + 1
+                auditPath = toString(listGet(args, ai))
             }
         } else {
             if (stringLength(outputFile) == 0) {
@@ -4396,6 +4408,11 @@ fun main(): Unit {
 
     // Compile
     val compiler = compileProgram(ast)
+    mapPut(compiler, "sourceFile", sourceFile)
+    mapPut(compiler, "dbgFuncIds", mapCreate())
+    mapPut(compiler, "dbgLocations", mapCreate())
+    mapPut(compiler, "dbgLocCache", mapCreate())
+    mapPut(compiler, "dbgNextId", 200)
     if (noRuntime) {
         mapPut(compiler, "noRuntime", true)
     }
@@ -4406,6 +4423,21 @@ fun main(): Unit {
     }
 
     val funcCount = listSize(mapGet(compiler, "functions"))
+
+    // DO-178C: Export audit report if --audit was specified
+    if (stringLength(auditPath) > 0) {
+        var auditJson: String = "{\n"
+        auditJson = stringConcat(auditJson, "  \"compilerVersion\": \"0.1.0-alpha\",\n")
+        auditJson = stringConcat(auditJson, stringConcat("  \"stage\": \"Stage 1\",\n"))
+        auditJson = stringConcat(auditJson, stringConcat("  \"sourceFile\": \"", stringConcat(sourceFile, "\",\n")))
+        auditJson = stringConcat(auditJson, stringConcat("  \"safetyLevel\": \"", stringConcat(if (stringLength(safetyLevel) > 0) { safetyLevel } else { "none" }, "\",\n")))
+        auditJson = stringConcat(auditJson, stringConcat("  \"functionCount\": ", stringConcat(toString(funcCount), ",\n")))
+        auditJson = stringConcat(auditJson, stringConcat("  \"noRuntime\": ", stringConcat(if (noRuntime) { "true" } else { "false" }, "\n")))
+        auditJson = stringConcat(auditJson, "}\n")
+        val auditBytes = stringToBytes(auditJson)
+        fileWriteBytes(auditPath, auditBytes)
+        println(stringConcat("Audit report: ", auditPath))
+    }
 
     if (isBuildNative) {
         // build-native: .rok → LLVM IR → clang → native binary
@@ -4444,15 +4476,15 @@ fun main(): Unit {
             if (endsWith(runtimePath, ".c")) {
                 // Backward compat: C runtime needs -I for the header directory
                 val runtimeDir = dirName(runtimePath)
-                clangCmd = stringConcat(clangBase, stringConcat("-I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile))))))))
+                clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -L /opt/homebrew/opt/openssl@3/lib -o ", outputFile)))))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat(clangBase, stringConcat("-I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile))))))))
+                    clangCmd = stringConcat("clang -O2 -w -I ", stringConcat(runtimeDir, stringConcat(" ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -lm -o ", outputFile)))))))
                 }
             } else {
                 // Pre-built .o runtime — link directly, no -I needed
-                clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -o ", outputFile)))))
+                clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -L /opt/homebrew/opt/openssl@3/lib -o ", outputFile)))))
                 if (toString(platformOS()) == "linux") {
-                    clangCmd = stringConcat(clangBase, stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lm -o ", outputFile)))))
+                    clangCmd = stringConcat("clang -O2 -w ", stringConcat(llFile, stringConcat(" ", stringConcat(runtimePath, stringConcat(" -lssl -lcrypto -lm -o ", outputFile)))))
                 }
             }
         }

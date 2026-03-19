@@ -1,0 +1,18 @@
+// bench_fib_safe.rok — Fibonacci benchmark (recursive, freestanding)
+// Measures: function call overhead, recursion, integer arithmetic
+// Freestanding mode: --no-runtime, uses extern C printf
+// Output must match bench_fib.rok: 102334155
+
+extern fun printf(fmt: Ptr<Int>, ...): Int
+
+fun fib(n: Int): Int {
+    if (n <= 1) { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fun main(): Unit {
+    unsafe {
+        val result: Int = fib(40)
+        printf(cstr("%d\n"), result)
+    }
+}

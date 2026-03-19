@@ -256,6 +256,8 @@ public final class CodeGen {
             return 5   // op(1) + 2*reg(4)
         case .typeCheck, .typeCast:
             return 7   // op(1) + dest(2) + operand(2) + typeIdx(2)
+        case .numericConvert:
+            return 7   // op(1) + dest(2) + operand(2) + fromTag(1) + toTag(1)
         case .stringConcat(_, let parts):
             return 5 + 2 * parts.count  // op(1) + dest(2) + count(2) + parts
         case .tryBegin:
@@ -497,6 +499,14 @@ public final class CodeGen {
             emitter.emitUInt16(resolveRegister(operand))
             emitter.emitUInt16(pool.intern(typeName, kind: .typeName))
 
+        // Numeric conversion
+        case .numericConvert(let dest, let operand, let fromType, let toType):
+            emitter.emitOpcode(.numericConvert)
+            emitter.emitUInt16(resolveRegister(dest))
+            emitter.emitUInt16(resolveRegister(operand))
+            emitter.emitByte(typeTag(for: fromType).rawValue)
+            emitter.emitByte(typeTag(for: toType).rawValue)
+
         // String
         case .stringConcat(let dest, let parts):
             emitter.emitOpcode(.stringConcat)
@@ -593,19 +603,26 @@ public final class CodeGen {
     /// Map a MIRType to a BytecodeTypeTag.
     private func typeTag(for type: MIRType) -> BytecodeTypeTag {
         switch type {
-        case .unit:     return .unit
-        case .int:      return .int
-        case .int32:    return .int32
-        case .int64:    return .int64
-        case .float:    return .float
-        case .float64:  return .float64
-        case .double:   return .double
-        case .bool:     return .bool
-        case .string:   return .string
-        case .nothing:  return .nothing
-        case .nullable: return .nullable
+        case .unit:      return .unit
+        case .int:       return .int
+        case .int8:      return .int8
+        case .int16:     return .int16
+        case .int32:     return .int32
+        case .int64:     return .int64
+        case .uint8:     return .uint8
+        case .uint16:    return .uint16
+        case .uint32:    return .uint32
+        case .uint64:    return .uint64
+        case .float:     return .float
+        case .float32:   return .float32
+        case .float64:   return .float64
+        case .double:    return .double
+        case .bool:      return .bool
+        case .string:    return .string
+        case .nothing:   return .nothing
+        case .nullable:  return .nullable
         case .reference: return .reference
-        case .function: return .function
+        case .function:  return .function
         }
     }
 
@@ -928,6 +945,15 @@ public final class CodeGen {
                 let typeIdx = readUInt16(bytes, at: &pc)
                 let tname = Int(typeIdx) < pool.count ? pool[Int(typeIdx)].value : "#\(typeIdx)"
                 lines.append("  \(offset): \(op)  r\(dest), r\(operand) as \(tname)")
+
+            case .numericConvert:
+                let dest = readUInt16(bytes, at: &pc)
+                let operand = readUInt16(bytes, at: &pc)
+                let fromTag = bytes[pc]; pc += 1
+                let toTag = bytes[pc]; pc += 1
+                let fromName = BytecodeTypeTag(rawValue: fromTag)?.description ?? "?\(fromTag)"
+                let toName = BytecodeTypeTag(rawValue: toTag)?.description ?? "?\(toTag)"
+                lines.append("  \(offset): \(op)  r\(dest), r\(operand) \(fromName) -> \(toName)")
 
             case .stringConcat:
                 let dest = readUInt16(bytes, at: &pc)

@@ -358,8 +358,14 @@ const char* rockit_object_get_type_name(RockitObject* obj) {
 }
 
 int64_t rockit_object_is_type(RockitObject* obj, const char* typeName) {
-    if (!obj || !typeName) return 0;
-    return strcmp(obj->typeName, typeName) == 0 ? 1 : 0;
+    if (!obj || !typeName || !obj->typeName) return 0;
+    // Walk up the type hierarchy (same as rockit_is_type)
+    const char* current = obj->typeName;
+    while (current) {
+        if (strcmp(current, typeName) == 0) return 1;
+        current = find_parent_type(current);
+    }
+    return 0;
 }
 
 // ── RockitList ──────────────────────────────────────────────────────────────
@@ -396,6 +402,21 @@ void rockit_list_append(RockitList* list, int64_t value) {
         list->data = (int64_t*)realloc(list->data, list->capacity * sizeof(int64_t));
     }
     list->data[list->size++] = value;
+}
+
+// Turbo: append known integer — skip rockit_retain_value (no heap pointer check).
+void rockit_list_append_int(RockitList* list, int64_t value) {
+    if (list->size >= list->capacity) {
+        list->capacity *= 2;
+        list->data = (int64_t*)realloc(list->data, list->capacity * sizeof(int64_t));
+    }
+    list->data[list->size++] = value;
+}
+
+// Turbo: grow list capacity only (for inline append fast-path overflow).
+void rockit_list_grow(RockitList* list) {
+    list->capacity *= 2;
+    list->data = (int64_t*)realloc(list->data, list->capacity * sizeof(int64_t));
 }
 
 int64_t rockit_list_get(RockitList* list, int64_t index) {
@@ -766,10 +787,59 @@ static inline void cstr_done(const char* c, RockitString* s, char* buf) {
 
 // ── Conversion ──────────────────────────────────────────────────────────────
 
+// DAL A compliant int→string: bounded loop (max 19 iterations),
+// no snprintf, no locale dependency, deterministic WCET.
+// Handles full int64 range including INT64_MIN.
 RockitString* rockit_int_to_string(int64_t value) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%lld", (long long)value);
-    return rockit_string_new(buf);
+    char buf[22]; // max: "-9223372036854775808\0" = 21 chars + null
+    int pos = 21;
+    buf[pos] = '\0';
+
+    if (value == 0) {
+        buf[--pos] = '0';
+    } else {
+        int negative = value < 0;
+        // Safe unsigned abs: handles INT64_MIN without overflow
+        uint64_t uval = negative ? (uint64_t)(-(value + 1)) + 1 : (uint64_t)value;
+        while (uval > 0) {
+            buf[--pos] = '0' + (char)(uval % 10);
+            uval /= 10;
+        }
+        if (negative) {
+            buf[--pos] = '-';
+        }
+    }
+
+    return rockit_string_new(buf + pos);
+}
+
+// DAL A compliant string→int: bounded loop (max 19 digit iterations),
+// no strtoll, no locale dependency, no pointer heuristic, deterministic WCET.
+// Takes RockitString* directly — no is_likely_string_ptr check.
+int64_t rockit_string_to_int(RockitString* s) {
+    if (!s || s->length == 0) return 0;
+
+    const char* chars = s->chars;
+    int64_t len = s->length;
+    int64_t i = 0;
+    int negative = 0;
+
+    // Handle sign
+    if (chars[i] == '-') { negative = 1; i++; }
+    else if (chars[i] == '+') { i++; }
+
+    // Parse digits — bounded to 19 iterations (max digits in int64)
+    int64_t result = 0;
+    int64_t digits = 0;
+    while (i < len && digits < 19) {
+        char c = chars[i];
+        if (c < '0' || c > '9') break;
+        result = result * 10 + (c - '0');
+        i++;
+        digits++;
+    }
+
+    return negative ? -result : result;
 }
 
 RockitString* rockit_float_to_string(double value) {
@@ -939,6 +1009,33 @@ RockitString* substring(RockitString* s, int64_t start, int64_t end) {
     result->base = s->base ? s->base : s;
     rockit_string_retain(result->base);
     return result;
+}
+
+// Turbo: split string by single character delimiter.
+// Returns RockitList of zero-copy string slices. Bounded: max fields = length + 1.
+RockitList* rockit_string_split_char(RockitString* s, int64_t delim) {
+    RockitList* list = rockit_list_create();
+    if (!s || s->length == 0) {
+        rockit_list_append(list, (int64_t)(intptr_t)rockit_string_new(""));
+        return list;
+    }
+    const char d = (char)delim;
+    int64_t start = 0;
+    RockitString* base = s->base ? s->base : s;
+    for (int64_t i = 0; i <= s->length; i++) {
+        if (i == s->length || s->chars[i] == d) {
+            // Create zero-copy slice [start, i)
+            RockitString* slice = slice_alloc();
+            slice->refCount = 1;
+            slice->length = i - start;
+            slice->chars = s->chars + start;
+            slice->base = base;
+            rockit_string_retain(base);
+            rockit_list_append(list, (int64_t)(intptr_t)slice);
+            start = i + 1;
+        }
+    }
+    return list;
 }
 
 int64_t toInt(int64_t value) {
@@ -1324,6 +1421,62 @@ RockitString* toString(int64_t value) {
         return s;
     }
     return rockit_int_to_string(value);
+}
+
+// -- typeOf (runtime type introspection for native code) --
+
+RockitString* typeOf(int64_t value) {
+    if (value == ROCKIT_NULL) return rockit_string_new("null");
+    if (!is_likely_heap_ptr(value)) return rockit_string_new("Int");
+
+    void* ptr = (void*)(intptr_t)value;
+
+    // Safely probe memory before dereferencing
+#ifdef __APPLE__
+    char _probe[32];
+    vm_size_t _probe_sz;
+    if (vm_read_overwrite(mach_task_self(), (vm_address_t)(intptr_t)value,
+            32, (vm_address_t)_probe, &_probe_sz) != KERN_SUCCESS)
+        return rockit_string_new("Int");
+#endif
+
+    int64_t first_field = *(int64_t*)ptr;
+
+    // RockitObject: first field is typeName (a pointer in heap range)
+    if (is_likely_heap_ptr(first_field)) {
+        RockitObject* obj = (RockitObject*)ptr;
+        if (obj->typeName) return rockit_string_new(obj->typeName);
+        return rockit_string_new("Object");
+    }
+
+    // String/List/Map all have refCount at offset 0.
+    // Distinguish by offset 16: String has chars pointer, List/Map has capacity (small int).
+    int64_t field_at_16 = *((int64_t*)((char*)ptr + 16));
+
+    if (is_likely_heap_ptr(field_at_16)) {
+        // chars pointer at offset 16 → String
+        return rockit_string_new("String");
+    }
+
+    // capacity (small int) at offset 16 → List or Map
+    // Distinguish via malloc_size of the data/entries pointer at offset 24
+    int64_t data_ptr_val = *((int64_t*)((char*)ptr + 24));
+    if (is_likely_heap_ptr(data_ptr_val)) {
+        int64_t capacity = field_at_16;
+#ifdef __APPLE__
+        if (capacity > 0) {
+            size_t data_size = malloc_size((void*)(intptr_t)data_ptr_val);
+            // List data: capacity * 8.  Map entries: capacity * 24.
+            // If allocated > capacity * 12, likely a Map.
+            if (data_size > (size_t)(capacity * 12)) {
+                return rockit_string_new("Map");
+            }
+        }
+#endif
+        return rockit_string_new("List");
+    }
+
+    return rockit_string_new("Int");
 }
 
 // -- floatToString (used by float codegen) --
@@ -2084,4 +2237,52 @@ RockitString* tlsLastError(void) {
     char buf[256];
     ERR_error_string_n(err, buf, sizeof(buf));
     return rockit_string_new(buf);
+}
+
+// ── ByteArray ───────────────────────────────────────────────────────────────────
+// Compact byte buffer — stores uint8_t values, returns/accepts int64 at API boundary.
+// Layout: [size (int64_t)][capacity (int64_t)][data (uint8_t*)]
+
+typedef struct {
+    int64_t size;
+    int64_t capacity;
+    uint8_t* data;
+} ByteArray;
+
+int64_t byteArrayCreate(int64_t capacity) {
+    ByteArray* ba = (ByteArray*)malloc(sizeof(ByteArray));
+    ba->size = 0;
+    ba->capacity = capacity > 0 ? capacity : 16;
+    ba->data = (uint8_t*)calloc(ba->capacity, 1);
+    return (int64_t)ba;
+}
+
+int64_t byteArrayCreateFilled(int64_t size, int64_t fillValue) {
+    ByteArray* ba = (ByteArray*)malloc(sizeof(ByteArray));
+    ba->size = size;
+    ba->capacity = size;
+    ba->data = (uint8_t*)malloc(size);
+    memset(ba->data, (uint8_t)(fillValue & 0xFF), size);
+    return (int64_t)ba;
+}
+
+int64_t byteArrayGet(int64_t handle, int64_t index) {
+    ByteArray* ba = (ByteArray*)handle;
+    if (index < 0 || index >= ba->size) {
+        rockit_panic("byteArray index out of bounds");
+    }
+    return (int64_t)ba->data[index];
+}
+
+void byteArraySet(int64_t handle, int64_t index, int64_t value) {
+    ByteArray* ba = (ByteArray*)handle;
+    if (index < 0 || index >= ba->size) {
+        rockit_panic("byteArray index out of bounds");
+    }
+    ba->data[index] = (uint8_t)(value & 0xFF);
+}
+
+int64_t byteArraySize(int64_t handle) {
+    ByteArray* ba = (ByteArray*)handle;
+    return ba->size;
 }

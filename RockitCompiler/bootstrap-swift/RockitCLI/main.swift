@@ -57,6 +57,17 @@ func printUsage() {
         --trace               Show instruction-level execution trace (with run)
         --gc-stats            Show ARC/memory statistics (with run)
         --no-color            Disable colored output
+
+    SAFETY PROFILE (DO-178C):
+        --safety <level>      Verify code against DO-178C safety level
+                              Levels: dal-a, dal-b, dal-c, dal-d, dal-e
+                              DAL A: no recursion, no dynamic alloc, no closures,
+                                     no exceptions, bounded loops only
+                              DAL B: adds bounded allocation, non-capturing closures
+                              DAL C: adds exceptions, bounded recursion
+
+    AUDIT (DO-330):
+        --audit <path>        Write JSON audit report to <path>
     """)
 }
 
@@ -1744,7 +1755,7 @@ func discoverTestFunctions(ast: SourceFile) -> [String] {
 
 // MARK: - Build Native
 
-func buildNativeCommand(file: String, dumpLLVM: Bool) {
+func buildNativeCommand(file: String, dumpLLVM: Bool, safetyLevel: SafetyLevel? = nil, auditPath: String? = nil) {
     guard FileManager.default.fileExists(atPath: file) else {
         print("error: file not found: \(file)")
         exit(1)
@@ -1768,13 +1779,27 @@ func buildNativeCommand(file: String, dumpLLVM: Bool) {
     let stdlibPaths: [String] = findStdlibDir().map { [$0] } ?? []
 
     do {
+        // When audit path is provided, use CompilerPipeline for phase tracking
+        if let auditPath = auditPath {
+            let diagnostics = DiagnosticEngine()
+            let context = CompilationContext(
+                fileName: file,
+                safetyLevel: safetyLevel,
+                libPaths: stdlibPaths,
+                auditOutputPath: auditPath
+            )
+            let pipeline = CompilerPipeline(context: context, diagnostics: diagnostics)
+            let _ = try pipeline.compileToLLVMIR(source: source)
+        }
+
         let result = try LLVMCodeGen.compileToNative(
             source: source,
             fileName: file,
             outputPath: outputPath,
             runtimeDir: runtimeDir,
             libPaths: stdlibPaths,
-            emitLLVM: false
+            emitLLVM: false,
+            safetyLevel: safetyLevel
         )
         print("\(file) \u{2192} \(result)")
         if dumpLLVM {
@@ -1791,7 +1816,7 @@ func buildNativeCommand(file: String, dumpLLVM: Bool) {
     }
 }
 
-func emitLLVMCommand(file: String) {
+func emitLLVMCommand(file: String, safetyLevel: SafetyLevel? = nil, auditPath: String? = nil) {
     guard FileManager.default.fileExists(atPath: file) else {
         print("error: file not found: \(file)")
         exit(1)
@@ -1802,36 +1827,27 @@ func emitLLVMCommand(file: String) {
         exit(1)
     }
 
+    // Use the modular CompilerPipeline (DO-330 phase architecture)
     let diagnostics = DiagnosticEngine()
-    let lexer = Lexer(source: source, fileName: file, diagnostics: diagnostics)
-    let tokens = lexer.tokenize()
-    let parser = Parser(tokens: tokens, diagnostics: diagnostics)
-    let parsedAST = parser.parse()
+    let context = CompilationContext(
+        fileName: file,
+        safetyLevel: safetyLevel,
+        libPaths: findStdlibDir().map { [$0] } ?? [],
+        auditOutputPath: auditPath
+    )
+    let pipeline = CompilerPipeline(context: context, diagnostics: diagnostics)
 
-    let sourceDir = (file as NSString).deletingLastPathComponent
-    let importResolver = ImportResolver(sourceDir: sourceDir, libPaths: findStdlibDir().map { [$0] } ?? [], diagnostics: diagnostics)
-    let ast = importResolver.resolve(parsedAST)
-
-    let checker = TypeChecker(ast: ast, diagnostics: diagnostics)
-    let typeResult = checker.check()
-
-    if diagnostics.hasErrors {
+    do {
+        let llvmIR = try pipeline.compileToLLVMIR(source: source)
+        print(llvmIR)
+    } catch {
         diagnostics.dump()
         print("\n\(diagnostics.errorCount) error(s)")
         exit(1)
     }
-
-    let lowering = MIRLowering(typeCheckResult: typeResult)
-    let unoptimized = lowering.lower()
-    let optimizer = MIROptimizer()
-    let optimized = optimizer.optimize(unoptimized)
-
-    let codeGen = LLVMCodeGen()
-    let llvmIR = codeGen.emit(module: optimized)
-    print(llvmIR)
 }
 
-func runNativeCommand(file: String) {
+func runNativeCommand(file: String, safetyLevel: SafetyLevel? = nil) {
     guard FileManager.default.fileExists(atPath: file) else {
         print("error: file not found: \(file)")
         exit(1)
@@ -1853,7 +1869,8 @@ func runNativeCommand(file: String) {
             outputPath: outputPath,
             runtimeDir: runtimeDir,
             libPaths: runNativeStdlibPaths,
-            emitLLVM: false
+            emitLLVM: false,
+            safetyLevel: safetyLevel
         )
 
         // Execute the native binary
@@ -2014,21 +2031,56 @@ case "build-native":
         exit(1)
     }
     let dumpLLVM = args.contains("--dump-llvm")
-    buildNativeCommand(file: args[2], dumpLLVM: dumpLLVM)
+    var safetyLevel: SafetyLevel? = nil
+    if let safetyIdx = args.firstIndex(of: "--safety"), safetyIdx + 1 < args.count {
+        if let level = SafetyLevel(rawValue: args[safetyIdx + 1]) {
+            safetyLevel = level
+        } else {
+            print("error: unknown safety level '\(args[safetyIdx + 1])'. Valid: dal-a, dal-b, dal-c, dal-d, dal-e")
+            exit(1)
+        }
+    }
+    var buildNativeAudit: String? = nil
+    if let auditIdx = args.firstIndex(of: "--audit"), auditIdx + 1 < args.count {
+        buildNativeAudit = args[auditIdx + 1]
+    }
+    buildNativeCommand(file: args[2], dumpLLVM: dumpLLVM, safetyLevel: safetyLevel, auditPath: buildNativeAudit)
 
 case "emit-llvm":
     guard args.count >= 3 else {
         print("error: emit-llvm requires a file argument")
         exit(1)
     }
-    emitLLVMCommand(file: args[2])
+    var emitLLVMSafety: SafetyLevel? = nil
+    if let safetyIdx = args.firstIndex(of: "--safety"), safetyIdx + 1 < args.count {
+        if let level = SafetyLevel(rawValue: args[safetyIdx + 1]) {
+            emitLLVMSafety = level
+        } else {
+            print("error: unknown safety level '\(args[safetyIdx + 1])'. Valid: dal-a, dal-b, dal-c, dal-d, dal-e")
+            exit(1)
+        }
+    }
+    var emitLLVMAudit: String? = nil
+    if let auditIdx = args.firstIndex(of: "--audit"), auditIdx + 1 < args.count {
+        emitLLVMAudit = args[auditIdx + 1]
+    }
+    emitLLVMCommand(file: args[2], safetyLevel: emitLLVMSafety, auditPath: emitLLVMAudit)
 
 case "run-native":
     guard args.count >= 3 else {
         print("error: run-native requires a file argument")
         exit(1)
     }
-    runNativeCommand(file: args[2])
+    var runNativeSafety: SafetyLevel? = nil
+    if let safetyIdx = args.firstIndex(of: "--safety"), safetyIdx + 1 < args.count {
+        if let level = SafetyLevel(rawValue: args[safetyIdx + 1]) {
+            runNativeSafety = level
+        } else {
+            print("error: unknown safety level '\(args[safetyIdx + 1])'. Valid: dal-a, dal-b, dal-c, dal-d, dal-e")
+            exit(1)
+        }
+    }
+    runNativeCommand(file: args[2], safetyLevel: runNativeSafety)
 
 case "run":
     guard args.count >= 3 else {

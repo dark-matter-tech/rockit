@@ -48,7 +48,7 @@ Rockit is **not** a wrapper around another language. It has its own compiler, it
 
 ## 3. Status — What's Shipped
 
-The compiler is **self-hosting** and all compiler phases are complete. 542 tests pass across the full pipeline.
+The compiler is **self-hosting** and all compiler phases are complete. 591 tests pass across the full pipeline.
 
 | Component | Status |
 |-----------|--------|
@@ -66,6 +66,9 @@ The compiler is **self-hosting** and all compiler phases are complete. 542 tests
 | Global Variables | **[Shipped]** |
 | Structured Concurrency (VM) | **[Shipped]** |
 | Self-hosting Bootstrap (Stage 2 == Stage 3) | **[Shipped]** |
+| Safety Verification (DO-178C DAL A-E) | **[Shipped]** |
+| LLVM Debug Metadata (DWARF traceability) | **[Shipped]** |
+| Audit Trail (`--audit` JSON export) | **[Shipped]** |
 | Standard Library (15 modules) | **[Shipped]** |
 | Package Manager (Fuel) | **[Shipped]** |
 | Test Framework (Probe) | **[Shipped]** |

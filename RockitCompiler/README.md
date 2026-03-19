@@ -4,7 +4,7 @@
 
 The Rockit language compiler. Self-hosting — Rockit compiles itself.
 
-> **Status:** All phases complete. 542 tests passing. Self-hosting bootstrap verified (Stage 2 == Stage 3). Runtime rewritten in Rockit.
+> **Status:** All phases complete. 591 tests passing. Self-hosting bootstrap verified (Stage 2 == Stage 3). Runtime rewritten in Rockit. DO-178C audit readiness (LLVM debug metadata, safety verification, audit trail).
 
 ---
 
@@ -24,7 +24,7 @@ The installer downloads a prebuilt binary if available, or builds from source as
 
 - `rockit` — compiler and build tool
 - `fuel` — package manager
-- Standard library (22 modules: `rockit.core.*`, `rockit.encoding.*`, `rockit.filesystem.*`, `rockit.networking.*`, `rockit.security.*`, `rockit.testing.*`, `rockit.time.*`)
+- Standard library (15 modules: `rockit.core.*`, `rockit.io.*`, `rockit.net.*`, `rockit.encoding.*`, `rockit.time.*`, `rockit.json`, `rockit.test.*`)
 - C runtime (`rockit_runtime.c`)
 
 **Update:**
@@ -74,6 +74,12 @@ rockit build examples/hello.rok
 
 # Emit LLVM IR
 rockit emit-llvm examples/hello.rok
+
+# Emit LLVM IR with debug metadata (DICompileUnit, DISubprogram, DILocation)
+rockit compile examples/hello.rok --emit-llvm
+
+# Generate DO-178C audit trail (JSON)
+rockit build-native examples/hello.rok --audit /tmp/audit.json
 
 # Start REPL
 rockit launch
@@ -225,7 +231,7 @@ fun main() {
 
 ## Standard Library
 
-The standard library ships under `self-hosted-rockit/stdlib/rockit/` and is imported with `import rockit.<domain>.<module>`. 22 modules covering core utilities, encoding, filesystem, networking, security, testing, and time.
+The standard library ships under `self-hosted-rockit/stdlib/rockit/` and is imported with `import rockit.<module>`. 15 modules covering core utilities, networking, encoding, time, I/O, JSON, XML, and testing.
 
 ### Modules
 
@@ -246,6 +252,7 @@ The standard library ships under `self-hosted-rockit/stdlib/rockit/` and is impo
 | `net/url` | `import rockit.net.url` | URL parser — parse, encode, decode, query params |
 | **Encoding** | | |
 | `encoding/base64` | `import rockit.encoding.base64` | Base64 encode/decode (RFC 4648) |
+| `encoding/xml` | `import rockit.encoding.xml` | XML parsing and generation (W3C XML 1.0) |
 | **Time** | | |
 | `time/datetime` | `import rockit.time.datetime` | Date/time — now, dateFromEpoch, formatDate, isLeapYear, dayOfWeek |
 | **Data** | | |
@@ -538,7 +545,7 @@ See `examples/json_tool.rok` for a complete file-based JSON tool (pretty-print, 
 swift test
 ```
 
-542 test cases covering the full compiler pipeline: lexer, parser, type checker, MIR, optimizer, codegen, VM, collections, strings, ARC, coroutines, actors, structured concurrency, file I/O, and bytecode serialization.
+591 test cases covering the full compiler pipeline: lexer, parser, type checker, MIR, optimizer, codegen, VM, collections, strings, ARC, coroutines, actors, structured concurrency, file I/O, bytecode serialization, safety verification, and audit trail.
 
 ---
 
@@ -572,32 +579,99 @@ The native compiler includes several optimizations that make Rockit competitive 
 
 ### Benchmarks
 
-All benchmarks run on Apple M1, best of 3 runs.
+The benchmark suite covers 23 benchmarks across 4 profiles, with implementations in 5 languages (Rockit, C++, Rust, Go, Node.js). Safety profile benchmarks are Rockit-only.
 
-#### Core Benchmarks
+#### Profiles
 
-| Benchmark | Rockit | Go | Node.js |
-|-----------|--------|-----|---------|
-| **Fibonacci** (fib 40, recursive) | **0.31s** | 0.34s | 1.03s |
-| **Object alloc** (1M data class) | **0.002s** | 0.003s | 0.07s |
-| **Prime sieve** (primes to 1M) | **0.004s** | 0.004s | 0.07s |
-| **Matrix multiply** (200x200) | **0.006s** | 0.011s | 0.08s |
-| **Quicksort** (500K integers) | **0.031s** | 0.034s | 0.18s |
-| **String concat** (500K iterations) | **0.17s** | 0.35s | **0.06s** |
-| **Monkey interpreter** (lex+parse+eval) | 0.25s | **0.19s** | – |
+| Profile | Benchmarks | Languages | Purpose |
+|---------|-----------|-----------|---------|
+| `--standard` | 12 | 5 | Core performance — compute, allocation, strings, CLBG |
+| `--turbo` | 6 | 5 | I/O and data processing — split, parse, file read, CSV pipeline |
+| `--safety` | 7 + 5 | Rockit only | Freestanding vs standard overhead, safety instrumentation cost |
+| `--all` | 23 + 5 | all | Everything |
 
-#### CLBG Benchmarks
+#### Standard Benchmarks (12)
 
-| Benchmark | Rockit | Go |
-|-----------|--------|-----|
-| **Binary trees** (depth 21) | **5.41s** | 10.52s |
-| **Fannkuch** (n=12) | 25.03s | **24.79s** |
-| **N-body** (50M steps) | 2.63s | **2.42s** |
-| **Spectral norm** (n=5500) | 1.15s | **1.14s** |
+| Category | Benchmark | Description |
+|----------|-----------|-------------|
+| Technical | fib | Recursive fib(40) — function call overhead |
+| Technical | loop | Sum 0..100M — tight loop performance |
+| Technical | objects | 1M Point allocations — GC/ARC pressure |
+| Technical | strings | 100K string concat — reallocation strategy |
+| Practical | sieve | Eratosthenes to 1M — array indexing |
+| Practical | matrix | 200x200 multiply — triple nested loop |
+| Practical | sort | Quicksort 500K — recursion + partitioning |
+| CLBG | binarytrees | Depth 21 tree build/check — allocation heavy |
+| CLBG | fannkuch | N=12 permutation flipping — control flow |
+| CLBG | nbody | 50M N-body steps — floating-point heavy |
+| CLBG | spectralnorm | N=5500 eigenvalue — matrix-vector multiply |
+| Real-world | monkey | Monkey lexer+parser 100K iterations |
 
-Rockit beats Go on 7 of 11 benchmarks. Rockit outperforms Node.js 3-15x across all measured benchmarks.
+#### Turbo I/O Benchmarks (6)
 
-Run the full suite: `bash benchmarks/run_benchmarks.sh`
+| Benchmark | Description |
+|-----------|-------------|
+| split | Split 100-column CSV line 500K times |
+| field_extract | Extract column 50 from 100-col line 500K times |
+| parse_int | Parse 1M integers (80% valid, 20% invalid) |
+| file_read | Read 200K-line file, count lines and bytes |
+| csv_pipeline | 500K x 100 CSV — extract 3 columns, parse, sum |
+| list_build | Build 500K-element list from empty, then sum |
+
+#### Safety Profile Benchmarks (7 variants + 5 overhead)
+
+Safety variants compare standard Rockit (with runtime) against freestanding mode (`--no-runtime`) using `Ptr<T>`, pool/region allocation, and direct memory access:
+
+| Variant | What it proves |
+|---------|----------------|
+| fib_safe | Compute overhead at `-O1` (CompCert proxy) |
+| objects_safe | Local vars beat heap allocation |
+| strings_safe | Fixed buffer beats dynamic String |
+| sort_safe | `Ptr<T>` array access vs List access |
+| matrix_safe | Flat pointer arrays vs List wrappers |
+| sieve_safe | `loadByte`/`storeByte` vs `byteArrayGet`/`Set` |
+| binarytrees_safe | Region allocation vs individual malloc+free |
+
+Overhead measurement benchmarks (internal timing):
+
+| Benchmark | What it measures |
+|-----------|-----------------|
+| bounds_check | Cost of array bounds guards |
+| null_check | Cost of null pointer guards |
+| pool_alloc | Pool vs individual malloc/free throughput |
+| region_alloc | Region vs recursive tree deallocation |
+| wcet_variance | Sort timing min/max/mean/stddev/jitter |
+
+#### Published Results (Apple M4, best of 3)
+
+| Benchmark | Rockit | C++ (-O2) | vs C++ |
+|-----------|--------|-----------|--------|
+| **Fibonacci** (fib 40, recursive) | **0.34s** | 0.34s | Tied |
+| **Loop** (sum 0..100M) | **<0.01s** | <0.01s | Tied |
+| **Objects** (1M data class) | **<0.01s** | <0.01s | Tied |
+| **Strings** (100K concat) | **<0.01s** | <0.01s | Tied |
+| **Quicksort** (500K integers) | **0.05s** | 0.04s | Tied |
+| **Spectral norm** (n=5500) | 1.32s | **1.26s** | 5% gap |
+| **N-body** (50M steps) | **2.55s** | 2.64s | **Rockit wins** |
+| **Binary trees** (depth 21) | **4.43s** | 12.42s | **Rockit 2.8x faster** |
+| **Fannkuch** (n=12) | **25.33s** | 25.74s | **Rockit wins** |
+
+Rockit matches or beats C++ on 7 of 9 benchmarks. Binary trees showcases ARC object pooling — 2.8x faster than C++ `new`/`delete`. N-body and fannkuch beat C++ outright. The only gap is spectralnorm (5%), a floating-point-heavy workload.
+
+#### Running Benchmarks
+
+```bash
+# Full suite (all profiles)
+bash benchmarks/run_benchmarks.sh
+
+# Specific profile
+bash benchmarks/run_benchmarks.sh --standard
+bash benchmarks/run_benchmarks.sh --turbo
+bash benchmarks/run_benchmarks.sh --safety
+bash benchmarks/run_benchmarks.sh --all
+```
+
+The harness auto-detects available compilers (Rockit, clang++, rustc, go, node) and skips missing ones. Results show best-of-3 wall-clock time and peak RSS memory per language.
 
 ### Built-in Benchmark Runner
 
@@ -662,13 +736,15 @@ RockitCompiler/
 │   │   ├── MIRLowering.swift
 │   │   ├── MIROptimizer.swift
 │   │   ├── CodeGen.swift      #   MIR → bytecode
-│   │   ├── LLVMCodeGen.swift  #   MIR → LLVM IR → native
+│   │   ├── LLVMCodeGen.swift  #   MIR → LLVM IR → native (with !dbg metadata)
+│   │   ├── SafetyProfile.swift #  DO-178C DAL A-E safety verification
+│   │   ├── CompilerPipeline.swift # Phased compilation with audit trail
 │   │   ├── VM.swift           #   Bytecode interpreter
 │   │   ├── Scheduler.swift    #   Coroutine scheduler
 │   │   ├── Coroutine.swift    #   Coroutine state machine
 │   │   └── ...
 │   ├── RockitCLI/             #   CLI entry point
-│   └── Tests/RockitKitTests/  #   542 Swift tests
+│   └── Tests/RockitKitTests/  #   591 Swift tests
 ├── lsp/
 │   └── RockitLSP/             # Language server (12 files)
 ├── self-hosted-rockit/        # Stage 1 Rockit compiler (~12K lines)
@@ -825,7 +901,52 @@ require('lspconfig').rockit.setup({})
 | **MIR Lowering** | Typed AST | Rockit IR | Complete |
 | **Optimizer** | MIR | Optimized MIR | Complete |
 | **Codegen** | Optimized MIR | Bytecode / LLVM IR | Complete |
+| **Safety Verification** | Typed AST | Safety report | Complete |
 | **Runtime** | Bytecode | Execution | Complete |
+
+---
+
+## DO-178C / DO-330 Audit Readiness
+
+The compiler supports DO-178C DAL A through DAL E safety verification and DO-330 TQL-1 tool qualification.
+
+### Safety Verification
+
+The `SafetyVerifier` checks source code against configurable Design Assurance Levels (DAL A through E). Each level progressively restricts language features that complicate certification:
+
+| Feature | DAL A | DAL B | DAL C | DAL D | DAL E |
+|---------|-------|-------|-------|-------|-------|
+| Unbounded recursion | Block | Block | Block | Block | Allow |
+| Unbounded loops | Block | Block | Block | Block | Allow |
+| Dynamic allocation | Block | Bounded | Allow | Allow | Allow |
+| Closures | Block | Block | Allow | Allow | Allow |
+| Exceptions | Block | Block | Allow | Allow | Allow |
+| Async/await | Block | Block | Block | Allow | Allow |
+| Dynamic strings | Block | Block | Allow | Allow | Allow |
+
+Each violation includes an engineering rationale (ARC-specific costs, WCET impact) and a compliant alternative (pool allocation, `Result<T>`, bounded iteration, `Ptr<T>` buffers).
+
+### LLVM Debug Metadata
+
+Both Stage 0 and Stage 1 emit DWARF-compatible debug metadata in LLVM IR:
+
+- `DICompileUnit` and `DIFile` per compilation unit
+- `DISubprogram` per function with source line mapping
+- `DILocation` per instruction via `!dbg` annotations
+- Source maps track MIR instruction → original `.rok` source line/column
+
+### Audit Trail
+
+The `--audit <path>` flag generates a JSON audit report containing:
+
+- Compiler version and build identity
+- Phase-by-phase compilation artifacts
+- Safety verification results with violation details
+- Source-to-IR traceability via MIR source maps
+
+```bash
+rockit build-native app.rok --audit /tmp/audit.json
+```
 
 ---
 

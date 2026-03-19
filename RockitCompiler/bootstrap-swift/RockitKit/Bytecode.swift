@@ -62,6 +62,7 @@ public enum Opcode: UInt8 {
     // Type operations
     case typeCheck      = 0x90
     case typeCast       = 0x91
+    case numericConvert = 0x92
 
     // String
     case stringConcat   = 0xA0
@@ -123,8 +124,9 @@ extension Opcode: CustomStringConvertible {
         case .nullCheck:    return "NULL_CHECK"
         case .isNull:       return "IS_NULL"
         case .typeCheck:    return "TYPE_CHECK"
-        case .typeCast:     return "TYPE_CAST"
-        case .stringConcat: return "STRING_CONCAT"
+        case .typeCast:         return "TYPE_CAST"
+        case .numericConvert:   return "NUMERIC_CONVERT"
+        case .stringConcat:     return "STRING_CONCAT"
         case .tryBegin:     return "TRY_BEGIN"
         case .tryEnd:       return "TRY_END"
         case .throwOp:      return "THROW"
@@ -181,6 +183,38 @@ public enum BytecodeTypeTag: UInt8 {
     case nullable   = 0x0A
     case reference  = 0x0B
     case function   = 0x0C
+    case int8       = 0x0D
+    case int16      = 0x0E
+    case uint8      = 0x0F
+    case uint16     = 0x10
+    case uint32     = 0x11
+    case uint64     = 0x12
+    case float32    = 0x13
+
+    public var description: String {
+        switch self {
+        case .unit: return "Unit"
+        case .int: return "Int"
+        case .int8: return "Int8"
+        case .int16: return "Int16"
+        case .int32: return "Int32"
+        case .int64: return "Int64"
+        case .uint8: return "UInt8"
+        case .uint16: return "UInt16"
+        case .uint32: return "UInt32"
+        case .uint64: return "UInt64"
+        case .float: return "Float"
+        case .float32: return "Float32"
+        case .float64: return "Float64"
+        case .double: return "Double"
+        case .bool: return "Bool"
+        case .string: return "String"
+        case .nothing: return "Nothing"
+        case .nullable: return "Nullable"
+        case .reference: return "Reference"
+        case .function: return "Function"
+        }
+    }
 }
 
 // MARK: - Bytecode Function

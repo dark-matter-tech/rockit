@@ -236,6 +236,7 @@ double rockit_math_log(double x);
 double rockit_math_exp(double x);
 double rockit_math_abs(double x);
 double rockit_math_atan2(double y, double x);
+RockitString* typeOf(int64_t value);
 RockitString* formatFloat(double value, int64_t decimals);
 double toFloat(int64_t value);
 void listSetFloat(RockitList* list, int64_t index, double value);
