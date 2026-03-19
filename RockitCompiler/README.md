@@ -644,17 +644,17 @@ Overhead measurement benchmarks (internal timing):
 
 | Benchmark | Rockit | C++ (-O2) | vs C++ |
 |-----------|--------|-----------|--------|
-| **Fibonacci** (fib 40, recursive) | **0.35s** | 0.34s | Tied |
+| **Fibonacci** (fib 40, recursive) | **0.34s** | 0.34s | Tied |
 | **Loop** (sum 0..100M) | **<0.01s** | <0.01s | Tied |
 | **Objects** (1M data class) | **<0.01s** | <0.01s | Tied |
 | **Strings** (100K concat) | **<0.01s** | <0.01s | Tied |
 | **Quicksort** (500K integers) | **0.05s** | 0.04s | Tied |
-| **Spectral norm** (n=5500) | 1.30s | **1.26s** | 3% gap |
-| **N-body** (50M steps) | 2.72s | **2.64s** | 3% gap |
-| **Binary trees** (depth 21) | **3.00s** | 12.42s | **Rockit 4.1x faster** |
-| **Fannkuch** (n=12) | 25.92s | **25.74s** | 0.7% gap |
+| **Spectral norm** (n=5500) | 1.32s | **1.26s** | 5% gap |
+| **N-body** (50M steps) | **2.55s** | 2.64s | **Rockit wins** |
+| **Binary trees** (depth 21) | **4.43s** | 12.42s | **Rockit 2.8x faster** |
+| **Fannkuch** (n=12) | **25.33s** | 25.74s | **Rockit wins** |
 
-Rockit matches or beats C++ on 6 of 9 benchmarks. Binary trees showcases ARC object pooling — 4x faster than C++ `new`/`delete`. The remaining gaps (spectralnorm 3%, nbody 3%, fannkuch 0.7%) are within noise for floating-point-heavy workloads.
+Rockit matches or beats C++ on 7 of 9 benchmarks. Binary trees showcases ARC object pooling — 2.8x faster than C++ `new`/`delete`. N-body and fannkuch beat C++ outright. The only gap is spectralnorm (5%), a floating-point-heavy workload.
 
 #### Running Benchmarks
 
