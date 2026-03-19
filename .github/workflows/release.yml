@@ -427,6 +427,9 @@ jobs:
             done
           done
 
+          # Delete existing release if re-running with same version
+          gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
+
           gh release create "${TAG}" \
             --title "Rockit ${TAG}" \
             --notes "${RELEASE_BODY}" \
