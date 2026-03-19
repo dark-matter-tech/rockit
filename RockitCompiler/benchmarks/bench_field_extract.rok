@@ -1,0 +1,34 @@
+fun main(): Unit {
+    var line: String = "f0"
+    var i: Int = 1
+    while (i < 100) {
+        line = line + ",f" + toString(i)
+        i = i + 1
+    }
+
+    var result: String = ""
+    i = 0
+    while (i < 500000) {
+        // Find 50th comma-separated field (0-indexed)
+        var fieldIdx: Int = 0
+        var start: Int = 0
+        var j: Int = 0
+        while (j < stringLength(line)) {
+            if (charCodeAt(line, j) == 44) {
+                if (fieldIdx == 50) {
+                    result = substring(line, start, j)
+                    j = stringLength(line)  // break
+                } else {
+                    fieldIdx = fieldIdx + 1
+                    start = j + 1
+                }
+            }
+            j = j + 1
+        }
+        if (fieldIdx == 50) {
+            result = substring(line, start, stringLength(line))
+        }
+        i = i + 1
+    }
+    println(result)
+}

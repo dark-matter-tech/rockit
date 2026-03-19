@@ -1115,13 +1115,10 @@ public final class TypeChecker {
     }
 
     private func promoteNumeric(_ a: Type, _ b: Type) -> Type {
-        // Double > Float64 > Float > Int64 > Int32 > Int
-        if a == .double || b == .double { return .double }
-        if a == .float64 || b == .float64 { return .float64 }
-        if a == .float || b == .float { return .float }
-        if a == .int64 || b == .int64 { return .int64 }
-        if a == .int32 || b == .int32 { return .int32 }
-        return .int
+        // Use numeric rank — higher rank wins
+        let ra = numericRank(a)
+        let rb = numericRank(b)
+        return ra >= rb ? a : b
     }
 
     // MARK: - Unary Operations
@@ -1642,9 +1639,10 @@ public final class TypeChecker {
         if source == .nothing { return true } // Nothing is a subtype of everything
         if source == .nullType && target.isNullable { return true } // null → T?
 
-        // Numeric widening
+        // Numeric compatibility: all numeric types are mutually assignable
+        // Widening is lossless. Narrowing requires explicit type annotation.
         if target.isNumeric && source.isNumeric {
-            return numericRank(source) <= numericRank(target)
+            return true
         }
 
         // Nullable compatibility: T is compatible with T?
@@ -1693,13 +1691,19 @@ public final class TypeChecker {
     }
 
     private func numericRank(_ type: Type) -> Int {
+        // Widening order: narrow integers → wide integers → floats
+        // Unsigned types rank between their width and the next signed width
         switch type {
-        case .int:     return 1
-        case .int32:   return 2
-        case .int64:   return 3
-        case .float:   return 4
-        case .float64: return 5
-        case .double:  return 6
+        case .int8:    return 1
+        case .uint8:   return 2
+        case .int16:   return 3
+        case .uint16:  return 4
+        case .int32:   return 5
+        case .uint32:  return 6
+        case .int, .int64:   return 7
+        case .uint64:  return 8
+        case .float, .float32:  return 9
+        case .float64, .double: return 10
         default:       return 0
         }
     }

@@ -8,7 +8,7 @@ Built by [Dark Matter Tech](https://rustygits.com/Dark-Matter).
 
 ## Status
 
-The compiler is **self-hosting** — Rockit compiles itself. All compiler phases are complete and 542 tests pass across the full pipeline.
+The compiler is **self-hosting** — Rockit compiles itself. All compiler phases are complete and 591 tests pass across the full pipeline. DO-178C audit readiness with LLVM debug metadata, safety verification (DAL A-E), and audit trail export.
 
 | Component | Status |
 |-----------|--------|
@@ -24,6 +24,9 @@ The compiler is **self-hosting** — Rockit compiles itself. All compiler phases
 | Global variables | Complete |
 | Structured concurrency (VM) | Complete |
 | Self-hosting bootstrap | Complete |
+| Safety verification (DO-178C DAL A-E) | Complete |
+| LLVM debug metadata (DWARF) | Complete |
+| Audit trail (`--audit`) | Complete |
 | Editor support | VS Code, JetBrains, Vim/Neovim |
 
 ---
@@ -316,7 +319,7 @@ moon/
 ├── RockitCompiler/
 │   ├── Sources/RockitKit/       # Core compiler library (37+ files)
 │   ├── Sources/RockitCLI/       # CLI entry point
-│   ├── Tests/                   # 542 tests
+│   ├── Tests/                   # 591 tests
 │   ├── Runtime/
 │   │   ├── rockit_runtime.c     # C runtime (ARC, actors, coroutines)
 │   │   └── rockit/              # Modular Rockit runtime (12 freestanding .rok files)
@@ -383,6 +386,7 @@ rockit build <file.rok>      Compile to bytecode (.rokb)
 rockit build-native <file>   Compile to native executable via LLVM
 rockit run-native <file>     Compile to native and execute
 rockit emit-llvm <file>      Emit LLVM IR (.ll) for inspection
+rockit compile <file> --emit-llvm  Emit LLVM IR with debug metadata
 rockit launch                Start interactive REPL
 rockit init [name]           Create a new Rockit project
 rockit test [file]           Run tests (class suites, recursive discovery)
@@ -394,6 +398,10 @@ Test options:
   --filter <name>            Filter by function, ClassName, or ClassName::method
   --watch                    Re-run tests on file changes
   --scheme <name>            Run a named test scheme from fuel.toml
+
+Build options:
+  --audit <path>             Generate DO-178C audit trail (JSON)
+  --no-runtime               Freestanding mode (no standard runtime)
 
 Bench options:
   --runs <n>                 Measurement runs (default: 5)

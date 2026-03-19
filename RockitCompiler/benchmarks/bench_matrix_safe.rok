@@ -1,0 +1,54 @@
+// bench_matrix_safe.rok — Matrix multiplication (freestanding)
+// Measures: nested loops, pointer indexing, arithmetic
+// Freestanding mode: --no-runtime, uses extern C malloc/free/printf
+// Output must match bench_matrix.rok: diagonal checksum of 200x200 multiply
+
+extern fun printf(fmt: Ptr<Int>, ...): Int
+extern fun malloc(size: Int): Ptr<Int>
+extern fun free(ptr: Ptr<Int>): Unit
+
+fun main(): Unit {
+    unsafe {
+        val n: Int = 200
+        val total: Int = n * n
+        val a: Ptr<Int> = malloc(total * 8)
+        val b: Ptr<Int> = malloc(total * 8)
+        val c: Ptr<Int> = malloc(total * 8)
+
+        var i: Int = 0
+        while (i < total) {
+            a.offset(i).store(i % 100)
+            b.offset(i).store((i * 3 + 7) % 100)
+            c.offset(i).store(0)
+            i = i + 1
+        }
+
+        i = 0
+        while (i < n) {
+            var j: Int = 0
+            while (j < n) {
+                var sum: Int = 0
+                var k: Int = 0
+                while (k < n) {
+                    sum = sum + a.offset(i * n + k).load() * b.offset(k * n + j).load()
+                    k = k + 1
+                }
+                c.offset(i * n + j).store(sum)
+                j = j + 1
+            }
+            i = i + 1
+        }
+
+        var checksum: Int = 0
+        i = 0
+        while (i < n) {
+            checksum = checksum + c.offset(i * n + i).load()
+            i = i + 1
+        }
+        printf(cstr("%d\n"), checksum)
+
+        free(a)
+        free(b)
+        free(c)
+    }
+}

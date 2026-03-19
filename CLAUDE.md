@@ -16,7 +16,7 @@ The compiler follows a standard self-hosting bootstrap:
 
 From Stage 2 onward, each new version of `command` is compiled by the previous version. Self-hosted.
 
-**Current status:** Self-hosting achieved. All compiler phases complete. 542 unit tests passing. Runtime rewritten in modular Rockit.
+**Current status:** Self-hosting achieved. All compiler phases complete. 591 unit tests passing. Runtime rewritten in modular Rockit. DO-178C audit readiness (safety verification, LLVM debug metadata, audit trail).
 
 ## Ecosystem
 
@@ -143,6 +143,9 @@ ARC with cycle detector, coroutine scheduler, actor message dispatch, platform c
 ### Phase 8: Freestanding Mode (`--no-runtime`) ✅
 Compiles Rockit programs without the standard runtime. Enables low-level systems programming with `Ptr<T>`, `alloc`/`free`, `bitcast`, `cstr`, `unsafe` blocks, `loadByte`/`storeByte`, `extern` C functions, `@CRepr` structs. The runtime itself (`runtime/rockit/`) is written in Rockit using this mode.
 
+### Phase 9: Safety Verification (DO-178C) ✅
+Configurable Design Assurance Level (DAL A through DAL E) enforcement. Checks for unbounded recursion, dynamic allocation, closures, exceptions, unbounded loops, dynamic strings, async/await, and heap construction. Each violation includes an engineering rationale (ARC-specific costs) and compliant alternative. LLVM debug metadata emission (DICompileUnit, DIFile, DISubprogram, DILocation with `!dbg` annotations). Audit trail export via `--audit <path>` flag generates JSON report with phase artifacts and safety verification results.
+
 ## Project Structure
 
 ```
@@ -163,10 +166,12 @@ RockitCompiler/
 │   │   ├── CodeGen.swift            # MIR → bytecode
 │   │   ├── VM.swift                 # Bytecode interpreter
 │   │   ├── Heap.swift               # Object heap (RockitObject)
-│   │   └── ...                      # 37+ files total
+│   │   ├── SafetyProfile.swift      # DO-178C DAL A-E safety verification
+│   │   ├── CompilerPipeline.swift   # Phased compilation with audit trail
+│   │   └── ...                      # 39+ files total
 │   ├── RockitCLI/                   # CLI entry point
 │   │   └── main.swift               # command tool
-│   └── Tests/RockitKitTests/        # 14+ test files, 542 tests
+│   └── Tests/RockitKitTests/        # 17+ test files, 591 tests
 ├── lsp/
 │   └── RockitLSP/                   # Language server (12 files)
 ├── self-hosted-rockit/              # Self-hosting compiler in Rockit (~12K lines)

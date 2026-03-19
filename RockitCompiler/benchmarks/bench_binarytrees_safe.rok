@@ -1,0 +1,99 @@
+// bench_binarytrees_safe.rok — Binary Trees (CLBG, freestanding)
+// Measures: allocation, recursion, memory throughput
+// Freestanding mode: --no-runtime, region-based bump allocator
+// Output must match bench_binarytrees.rok (standard CLBG format)
+// N=21 for performance testing
+
+extern fun printf(fmt: Ptr<Int>, ...): Int
+extern fun malloc(size: Int): Ptr<Int>
+extern fun free(ptr: Ptr<Int>): Unit
+
+var regionBase: Ptr<Int> = bitcast(0)
+var regionNext: Int = 0
+
+fun regionReset(): Unit {
+    unsafe {
+        regionNext = 0
+    }
+}
+
+fun newNode(left: Int, right: Int): Int {
+    unsafe {
+        val id: Int = regionNext
+        regionBase.offset(id * 2).store(left)
+        regionBase.offset(id * 2 + 1).store(right)
+        regionNext = regionNext + 1
+        return id
+    }
+}
+
+fun bottomUpTree(depth: Int): Int {
+    if (depth == 0) { return newNode(-1, -1) }
+    val left: Int = bottomUpTree(depth - 1)
+    val right: Int = bottomUpTree(depth - 1)
+    return newNode(left, right)
+}
+
+fun itemCheck(node: Int): Int {
+    unsafe {
+        val left: Int = regionBase.offset(node * 2).load()
+        if (left == -1) { return 1 }
+        val right: Int = regionBase.offset(node * 2 + 1).load()
+        return 1 + itemCheck(left) + itemCheck(right)
+    }
+}
+
+fun main(): Unit {
+    unsafe {
+        val maxNodes: Int = 8388608
+        regionBase = malloc(maxNodes * 2 * 8)
+
+        val n: Int = 21
+        val minDepth: Int = 4
+        var maxDepth: Int = n
+        if (minDepth + 2 > n) { maxDepth = minDepth + 2 }
+        val stretchDepth: Int = maxDepth + 1
+
+        // Stretch tree
+        regionReset()
+        val stretchTree: Int = bottomUpTree(stretchDepth)
+        val stretchCheck: Int = itemCheck(stretchTree)
+        printf(cstr("stretch tree of depth %d\t check: %d\n"), stretchDepth, stretchCheck)
+
+        // Long-lived tree
+        regionReset()
+        val longLivedTree: Int = bottomUpTree(maxDepth)
+        val longRegionNext: Int = regionNext
+
+        // Iterative trees
+        var depth: Int = minDepth
+        while (depth <= maxDepth) {
+            var iterations: Int = 1
+            var shift: Int = maxDepth - depth + minDepth
+            while (shift > 0) {
+                iterations = iterations * 2
+                shift = shift - 1
+            }
+
+            var check: Int = 0
+            var i: Int = 0
+            while (i < iterations) {
+                regionNext = longRegionNext
+                val tree: Int = bottomUpTree(depth)
+                check = check + itemCheck(tree)
+                i = i + 1
+            }
+
+            printf(cstr("%d\t trees of depth %d\t check: %d\n"), iterations, depth, check)
+            depth = depth + 2
+        }
+
+        // Rebuild and check long-lived tree
+        regionNext = 0
+        val longLivedTree2: Int = bottomUpTree(maxDepth)
+        val longCheck: Int = itemCheck(longLivedTree2)
+        printf(cstr("long lived tree of depth %d\t check: %d\n"), maxDepth, longCheck)
+
+        free(regionBase)
+    }
+}

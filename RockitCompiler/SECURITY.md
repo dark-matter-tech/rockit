@@ -104,6 +104,21 @@ on macOS and Windows respectively.
 - Public keys published in the repo (`keys/`) and at well-known URL
 - `sign.sh` gracefully skips signing when credentials are not configured (dev builds)
 
+### Layer 3.5 — DO-178C Safety Verification
+
+**Status:** Implemented
+**Priority:** High
+
+The compiler includes a safety verification pass supporting DO-178C Design Assurance Levels A through E and DO-330 TQL-1 tool qualification:
+
+- **SafetyVerifier** checks source code against configurable DAL levels, enforcing restrictions on dynamic allocation, unbounded recursion/loops, closures, exceptions, async/await, dynamic strings, and heap construction
+- **LLVM debug metadata** — `DICompileUnit`, `DIFile`, `DISubprogram`, `DILocation` with `!dbg` annotations on instructions for source-to-binary traceability
+- **MIR source maps** track instruction-level mapping from MIR back to original `.rok` source line/column
+- **Audit trail** — `--audit <path>` flag generates a JSON report containing compiler version, phase-by-phase artifacts, and safety verification results with violation details and compliant alternatives
+- Each safety violation includes an engineering rationale (ARC-specific costs, WCET impact) and a compliant alternative (pool allocation, `Result<T>`, bounded iteration, `Ptr<T>` buffers)
+
+Both Stage 0 (Swift) and Stage 1 (Rockit) emit identical debug metadata, ensuring traceability is maintained through the bootstrap chain.
+
 ### Layer 4 — Bootstrap Chain Verification
 
 **Status:** Implemented (`rockit verify-bootstrap` command + CI verification)

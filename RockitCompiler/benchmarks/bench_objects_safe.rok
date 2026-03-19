@@ -1,0 +1,21 @@
+// bench_objects_safe.rok — Object allocation benchmark (freestanding)
+// Measures: integer arithmetic in tight loop (no heap allocation)
+// Freestanding mode: --no-runtime, uses extern C printf
+// Output must match bench_objects.rok: 499999500000 (x and y)
+
+extern fun printf(fmt: Ptr<Int>, ...): Int
+
+fun main(): Unit {
+    unsafe {
+        var px: Int = 0
+        var py: Int = 0
+        var i: Int = 0
+        while (i < 1000000) {
+            px = px + i
+            py = py + i
+            i = i + 1
+        }
+        printf(cstr("%d\n"), px)
+        printf(cstr("%d\n"), py)
+    }
+}

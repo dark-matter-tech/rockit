@@ -132,12 +132,24 @@ public final class TypeResolver {
     /// Map builtin type names to semantic types
     private func builtinType(for name: String) -> Type? {
         switch name {
-        case "Int":       return .int
+        // Signed integers
+        case "Int":       return .int        // Int = Int64
+        case "Int8":      return .int8
+        case "Int16":     return .int16
         case "Int32":     return .int32
-        case "Int64":     return .int64
-        case "Float":     return .float
-        case "Float64":   return .float64
-        case "Double":    return .double
+        case "Int64":     return .int64      // Int64 = Int
+        // Unsigned integers
+        case "UInt":      return .uint64     // UInt = UInt64
+        case "UInt8":     return .uint8
+        case "UInt16":    return .uint16
+        case "UInt32":    return .uint32
+        case "UInt64":    return .uint64
+        // Floating point
+        case "Float":     return .float      // Float = Float32 (32-bit)
+        case "Float32":   return .float32    // Float32 = Float
+        case "Float64":   return .float64    // Float64 = Double (64-bit)
+        case "Double":    return .double     // Double = Float64
+        // Other
         case "Bool":      return .bool
         case "String":    return .string
         case "ByteArray": return .byteArray
