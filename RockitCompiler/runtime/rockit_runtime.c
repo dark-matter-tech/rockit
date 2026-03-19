@@ -1641,11 +1641,18 @@ double rockit_math_atan2(double y, double x) { return atan2(y, x); }
 
 // ── Networking, Time & Random (Foundation builtins) ────────────────────────
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <time.h>
+#pragma comment(lib, "ws2_32.lib")
+#else
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <sys/time.h>
 #include <time.h>
+#endif
 
 static int random_seeded = 0;
 
@@ -1659,13 +1666,24 @@ int64_t randomInt(int64_t bound) {
 }
 
 int64_t currentTimeMillis(void) {
+#ifdef _WIN32
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    int64_t t = ((int64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    return (t / 10000) - 11644473600000LL; // Convert to Unix epoch millis
+#else
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (int64_t)tv.tv_sec * 1000 + (int64_t)tv.tv_usec / 1000;
+#endif
 }
 
 void sleepMillis(int64_t ms) {
+#ifdef _WIN32
+    Sleep((DWORD)ms);
+#else
     usleep((useconds_t)(ms * 1000));
+#endif
 }
 
 int64_t epochToComponents(int64_t epochSec) {
@@ -1685,9 +1703,26 @@ int64_t epochToComponents(int64_t epochSec) {
     return map;
 }
 
+#ifdef _WIN32
+static int winsock_initialized = 0;
+static void ensure_winsock(void) {
+    if (!winsock_initialized) {
+        WSADATA wsa;
+        WSAStartup(MAKEWORD(2, 2), &wsa);
+        winsock_initialized = 1;
+    }
+}
+#define ROCKIT_CLOSE_SOCKET(fd) closesocket((SOCKET)(fd))
+#else
+#define ROCKIT_CLOSE_SOCKET(fd) close((int)(fd))
+#endif
+
 int64_t tcpConnect(const char *host_str, int64_t port) {
     // host_str is a Rockit string pointer — extract chars
     if (!host_str) return -1;
+#ifdef _WIN32
+    ensure_winsock();
+#endif
     int64_t *hdr = (int64_t *)host_str;
     int64_t len = hdr[1];
     char *chars = (char *)hdr[2];
@@ -1706,11 +1741,11 @@ int64_t tcpConnect(const char *host_str, int64_t port) {
     hints.ai_socktype = SOCK_STREAM;
     if (getaddrinfo(hostname, portstr, &hints, &res) != 0) return -1;
 
-    int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    int fd = (int)socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (fd < 0) { freeaddrinfo(res); return -1; }
 
-    if (connect(fd, res->ai_addr, res->ai_addrlen) < 0) {
-        close(fd);
+    if (connect(fd, res->ai_addr, (int)res->ai_addrlen) < 0) {
+        ROCKIT_CLOSE_SOCKET(fd);
         freeaddrinfo(res);
         return -1;
     }
@@ -1723,7 +1758,7 @@ int64_t tcpSend(int64_t fd, const char *msg_str) {
     int64_t *hdr = (int64_t *)msg_str;
     int64_t len = hdr[1];
     char *chars = (char *)hdr[2];
-    ssize_t sent = send((int)fd, chars, (size_t)len, 0);
+    int sent = send((int)fd, chars, (int)len, 0);
     return (int64_t)sent;
 }
 
@@ -1732,7 +1767,7 @@ static RockitString* rockit_string_from_bytes(const unsigned char *data, int64_t
 RockitString *tcpRecv(int64_t fd, int64_t maxBytes) {
     char *buf = malloc(maxBytes + 1);
     if (!buf) return rockit_string_new("");
-    ssize_t n = recv((int)fd, buf, (size_t)maxBytes, 0);
+    int n = recv((int)fd, buf, (int)maxBytes, 0);
     if (n <= 0) { free(buf); return rockit_string_new(""); }
     RockitString *result = rockit_string_from_bytes((unsigned char *)buf, n);
     free(buf);
@@ -1740,11 +1775,12 @@ RockitString *tcpRecv(int64_t fd, int64_t maxBytes) {
 }
 
 void tcpClose(int64_t fd) {
-    close((int)fd);
+    ROCKIT_CLOSE_SOCKET(fd);
 }
 
 // ── OpenSSL: TLS, Crypto, X.509 Builtins ────────────────────────────────────
 
+#ifndef _WIN32
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -2238,6 +2274,7 @@ RockitString* tlsLastError(void) {
     ERR_error_string_n(err, buf, sizeof(buf));
     return rockit_string_new(buf);
 }
+#endif // !_WIN32 (OpenSSL section)
 
 // ── ByteArray ───────────────────────────────────────────────────────────────────
 // Compact byte buffer — stores uint8_t values, returns/accepts int64 at API boundary.
