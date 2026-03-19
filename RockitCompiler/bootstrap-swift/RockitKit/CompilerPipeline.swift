@@ -292,8 +292,7 @@ public final class CompilerPipeline {
     /// - Returns: The typed output for the next phase
     public func run<P: CompilerPhase>(_ phase: P, input: P.Input) throws -> P.Output {
         if verbose {
-            print("  \(phase.name)...", terminator: "")
-            fflush(stdout)
+            FileHandle.standardError.write(Data("  \(phase.name)...".utf8))
         }
 
         let diagCountBefore = diagnostics.diagnostics.count
@@ -313,7 +312,7 @@ public final class CompilerPipeline {
         artifacts.append(artifact)
 
         if verbose {
-            print(" done")
+            FileHandle.standardError.write(Data(" done\n".utf8))
         }
 
         return output
@@ -340,15 +339,17 @@ public final class CompilerPipeline {
 
     /// Print an audit summary of all phases that have run.
     public func printAuditTrail() {
-        print("\n  --- Compilation Audit Trail ---")
+        let stderr = FileHandle.standardError
+        func eprintln(_ s: String) { stderr.write(Data((s + "\n").utf8)) }
+        eprintln("\n  --- Compilation Audit Trail ---")
         for (i, artifact) in artifacts.enumerated() {
-            print("  Phase \(i + 1): \(artifact.phaseName) " +
-                  "[\(String(format: "%.3f", artifact.duration))s, " +
-                  "\(artifact.diagnosticCount) diagnostics]")
+            eprintln("  Phase \(i + 1): \(artifact.phaseName) " +
+                     "[\(String(format: "%.3f", artifact.duration))s, " +
+                     "\(artifact.diagnosticCount) diagnostics]")
         }
         let total = artifacts.reduce(0.0) { $0 + $1.duration }
-        print("  Total: \(String(format: "%.3f", total))s across \(artifacts.count) phases")
-        print("  ---")
+        eprintln("  Total: \(String(format: "%.3f", total))s across \(artifacts.count) phases")
+        eprintln("  ---")
     }
 
     /// Execute the standard Rockit native compilation pipeline.
