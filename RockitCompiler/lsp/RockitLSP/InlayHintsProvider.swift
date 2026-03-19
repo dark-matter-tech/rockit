@@ -166,9 +166,16 @@ public final class InlayHintsProvider {
     private static func typeToString(_ type: Type) -> String {
         switch type {
         case .int: return "Int"
+        case .int8: return "Int8"
+        case .int16: return "Int16"
         case .int32: return "Int32"
         case .int64: return "Int64"
+        case .uint8: return "UInt8"
+        case .uint16: return "UInt16"
+        case .uint32: return "UInt32"
+        case .uint64: return "UInt64"
         case .float: return "Float"
+        case .float32: return "Float32"
         case .float64: return "Float64"
         case .double: return "Double"
         case .bool: return "Bool"

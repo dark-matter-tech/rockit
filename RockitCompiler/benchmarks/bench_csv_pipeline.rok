@@ -1,0 +1,24 @@
+fun main(): Unit {
+    val n: Int = 500000
+    val cols: Int = 100
+    var seed: Int = 42
+    var totalSum: Int = 0
+    var row: Int = 0
+    while (row < n) {
+        var col10: Int = 0
+        var col50: Int = 0
+        var col90: Int = 0
+        var c: Int = 0
+        while (c < cols) {
+            seed = (seed * 1103515245 + 12345) % 2147483648
+            val v: Int = seed % 1000
+            if (c == 10) { col10 = v }
+            if (c == 50) { col50 = v }
+            if (c == 90) { col90 = v }
+            c = c + 1
+        }
+        totalSum = totalSum + col10 + col50 + col90
+        row = row + 1
+    }
+    println(toString(totalSum))
+}

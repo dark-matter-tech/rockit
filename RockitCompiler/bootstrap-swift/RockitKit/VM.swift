@@ -256,8 +256,11 @@ public final class VM {
             let nameIdx = global.nameIndex
             // Initialize with default value based on type
             switch global.typeTag {
-            case .int, .int32, .int64:  globals[nameIdx] = .int(0)
-            case .float, .float64, .double: globals[nameIdx] = .float(0.0)
+            case .int, .int8, .int16, .int32, .int64,
+                 .uint8, .uint16, .uint32, .uint64:
+                globals[nameIdx] = .int(0)
+            case .float, .float32, .float64, .double:
+                globals[nameIdx] = .float(0.0)
             case .bool:                 globals[nameIdx] = .bool(false)
             case .string:               globals[nameIdx] = .string("")
             case .nullable:             globals[nameIdx] = .null
@@ -546,6 +549,15 @@ public final class VM {
                         throw VMError.invalidCast(from: operand.typeName, to: typeName)
                     }
                     callStack[frameIdx].registers[Int(dest)] = operand
+
+                // MARK: Numeric Conversion
+                case .numericConvert:
+                    let dest = readUInt16(bytecode, frame: frameIdx)
+                    let operandReg = readUInt16(bytecode, frame: frameIdx)
+                    let _ = bytecode[Int(callStack[frameIdx].pc)]; callStack[frameIdx].pc += 1  // fromTag
+                    let _ = bytecode[Int(callStack[frameIdx].pc)]; callStack[frameIdx].pc += 1  // toTag
+                    // VM uses uniform Value representation — just copy the value
+                    callStack[frameIdx].registers[Int(dest)] = callStack[frameIdx].registers[Int(operandReg)]
 
                 // MARK: String
                 case .stringConcat:

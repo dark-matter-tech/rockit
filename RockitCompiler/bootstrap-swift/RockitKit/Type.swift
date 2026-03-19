@@ -27,14 +27,27 @@ public struct ExpressionID: Hashable {
 /// This is distinct from `TypeNode` (which is syntactic, from the parser).
 public indirect enum Type: Equatable {
 
-    // MARK: Primitives
+    // MARK: Primitives — Integer
 
-    case int
+    case int        // Int = Int64
+    case int8
+    case int16
     case int32
-    case int64
-    case float
-    case float64
-    case double
+    case int64      // Int64 = Int
+    case uint8
+    case uint16
+    case uint32
+    case uint64     // UInt = UInt64
+
+    // MARK: Primitives — Floating Point
+
+    case float      // Float = Float32 (32-bit)
+    case float32    // Float32 = Float
+    case float64    // Float64 = Double (64-bit)
+    case double     // Double = Float64
+
+    // MARK: Primitives — Other
+
     case bool
     case string
     case byteArray
@@ -115,20 +128,16 @@ extension Type {
         return false
     }
 
-    /// Whether this type is numeric (Int, Int32, Int64, Float, Float64, Double)
+    /// Whether this type is numeric
     public var isNumeric: Bool {
-        switch self {
-        case .int, .int32, .int64, .float, .float64, .double:
-            return true
-        default:
-            return false
-        }
+        isInteger || isFloatingPoint
     }
 
-    /// Whether this type is an integer type
+    /// Whether this type is an integer type (signed or unsigned)
     public var isInteger: Bool {
         switch self {
-        case .int, .int32, .int64:
+        case .int, .int8, .int16, .int32, .int64,
+             .uint8, .uint16, .uint32, .uint64:
             return true
         default:
             return false
@@ -138,10 +147,31 @@ extension Type {
     /// Whether this type is a floating-point type
     public var isFloatingPoint: Bool {
         switch self {
-        case .float, .float64, .double:
+        case .float, .float32, .float64, .double:
             return true
         default:
             return false
+        }
+    }
+
+    /// Whether this type is an unsigned integer
+    public var isUnsigned: Bool {
+        switch self {
+        case .uint8, .uint16, .uint32, .uint64:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Bit width of numeric types (0 for non-numeric)
+    public var bitWidth: Int {
+        switch self {
+        case .int8, .uint8:     return 8
+        case .int16, .uint16:   return 16
+        case .int32, .uint32, .float, .float32: return 32
+        case .int, .int64, .uint64, .float64, .double: return 64
+        default:                return 0
         }
     }
 
@@ -166,9 +196,16 @@ extension Type: CustomStringConvertible {
     public var description: String {
         switch self {
         case .int:          return "Int"
+        case .int8:         return "Int8"
+        case .int16:        return "Int16"
         case .int32:        return "Int32"
         case .int64:        return "Int64"
+        case .uint8:        return "UInt8"
+        case .uint16:       return "UInt16"
+        case .uint32:       return "UInt32"
+        case .uint64:       return "UInt64"
         case .float:        return "Float"
+        case .float32:      return "Float32"
         case .float64:      return "Float64"
         case .double:       return "Double"
         case .bool:         return "Bool"
