@@ -142,9 +142,9 @@ jobs:
           if [ "${{ matrix.platform }}" = "linux-x86_64" ]; then
             echo "machine ${GITHUB_SERVER_URL#https://} login x-access-token password ${FUEL_TOKEN}" > ~/.netrc
             chmod 600 ~/.netrc
-            git clone --depth 1 --branch develop "${GITHUB_SERVER_URL}/Dark-Matter/fuel.git" /tmp/fuel
+            git clone --depth 1 --branch master "https://x-access-token:${FUEL_TOKEN}@github.com/dark-matter-tech/rockit-fuel.git" /tmp/fuel
           else
-            git clone --depth 1 --branch develop "https://github.com/dark-matter-tech/fuel.git" /tmp/fuel || true
+            git clone --depth 1 --branch master "https://github.com/dark-matter-tech/rockit-fuel.git" /tmp/fuel || true
           fi
           if [ -d /tmp/fuel ]; then
             RockitCompiler/self-hosted-rockit/command build-native /tmp/fuel/src/fuel.rok -o /tmp/fuel/fuel \
