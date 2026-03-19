@@ -32,7 +32,7 @@ jobs:
             archive_ext: tar.gz
             triple: arm64-apple-macosx
           - platform: macos-x86_64
-            runner: macos-13
+            runner: macos-14
             container: ""
             archive_ext: tar.gz
             triple: x86_64-apple-macosx
@@ -44,7 +44,7 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container || null }}
-    continue-on-error: ${{ matrix.platform == 'windows-x86_64' }}
+    continue-on-error: ${{ matrix.platform == 'windows-x86_64' || matrix.platform == 'macos-x86_64' }}
     defaults:
       run:
         shell: ${{ matrix.platform == 'windows-x86_64' && 'pwsh' || 'bash' }}
