@@ -2120,13 +2120,19 @@ public final class LLVMCodeGen {
             }
         }
 
-        // Pass 4: Propagate knownIntTemps through store edges
+        // Pass 4: Propagate knownIntTemps through store edges (must-analysis)
+        // A dest is knownInt only if ALL incoming store sources are knownInt.
+        // First, collect all sources per dest.
+        var storeSourcesByDest: [String: [String]] = [:]
+        for edge in storeEdges {
+            storeSourcesByDest[edge.dest, default: []].append(edge.src)
+        }
         changed = true
         while changed {
             changed = false
-            for edge in storeEdges {
-                if knownIntTemps.contains(edge.src) && !knownIntTemps.contains(edge.dest) {
-                    knownIntTemps.insert(edge.dest)
+            for (dest, sources) in storeSourcesByDest {
+                if !knownIntTemps.contains(dest) && sources.allSatisfy({ knownIntTemps.contains($0) }) {
+                    knownIntTemps.insert(dest)
                     changed = true
                 }
             }
@@ -3714,9 +3720,10 @@ public final class LLVMCodeGen {
         if function == "toInt", let dest = dest, args.count == 1 {
             let arg = args[0]
             let argType = typeOf(arg)
-            // Fast path: if arg is already i64 (known int, or listGet result), just copy.
-            // This eliminates the runtime toInt call for integer-typed temporaries.
-            if knownIntTemps.contains(arg) || argType == "i64" {
+            // Fast path: if arg is a proven integer (via knownIntTemps analysis), just copy.
+            // NOTE: Do NOT use argType == "i64" here — typeOf() defaults to "i64" for
+            // unregistered temps, which would incorrectly elide toInt on string arguments.
+            if knownIntTemps.contains(arg) {
                 let tmp = nextSSA()
                 var lines: [String] = []
                 lines.append("\(tmp) = load \(argType), ptr \(addrOf(arg))")
