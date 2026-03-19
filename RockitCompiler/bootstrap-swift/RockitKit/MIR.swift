@@ -8,12 +8,23 @@
 /// Unlike `Type` (semantic), `MIRType` omits type parameters, variance,
 /// and other front-end concerns — only what codegen needs.
 public indirect enum MIRType: Equatable {
-    case int
+    // Signed integers
+    case int        // Int = Int64
+    case int8
+    case int16
     case int32
-    case int64
-    case float
-    case float64
-    case double
+    case int64      // Int64 = Int
+    // Unsigned integers
+    case uint8
+    case uint16
+    case uint32
+    case uint64     // UInt = UInt64
+    // Floating point
+    case float      // Float = Float32 (32-bit)
+    case float32    // Float32 = Float
+    case float64    // Float64 = Double (64-bit)
+    case double     // Double = Float64
+    // Other
     case bool
     case string
     case unit
@@ -28,9 +39,16 @@ extension MIRType {
     public static func from(_ type: Type) -> MIRType {
         switch type {
         case .int:          return .int
+        case .int8:         return .int8
+        case .int16:        return .int16
         case .int32:        return .int32
         case .int64:        return .int64
+        case .uint8:        return .uint8
+        case .uint16:       return .uint16
+        case .uint32:       return .uint32
+        case .uint64:       return .uint64
         case .float:        return .float
+        case .float32:      return .float32
         case .float64:      return .float64
         case .double:       return .double
         case .bool:         return .bool
@@ -78,9 +96,16 @@ extension MIRType: CustomStringConvertible {
     public var description: String {
         switch self {
         case .int:          return "Int"
+        case .int8:         return "Int8"
+        case .int16:        return "Int16"
         case .int32:        return "Int32"
         case .int64:        return "Int64"
+        case .uint8:        return "UInt8"
+        case .uint16:       return "UInt16"
+        case .uint32:       return "UInt32"
+        case .uint64:       return "UInt64"
         case .float:        return "Float"
+        case .float32:      return "Float32"
         case .float64:      return "Float64"
         case .double:       return "Double"
         case .bool:         return "Bool"
@@ -94,6 +119,64 @@ extension MIRType: CustomStringConvertible {
         case .function(let params, let ret):
             let p = params.map { "\($0)" }.joined(separator: ", ")
             return "(\(p)) -> \(ret)"
+        }
+    }
+}
+
+extension MIRType {
+    /// Whether this is an integer type (signed or unsigned)
+    public var isInteger: Bool {
+        switch self {
+        case .int, .int8, .int16, .int32, .int64,
+             .uint8, .uint16, .uint32, .uint64:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Whether this is a floating-point type
+    public var isFloatingPoint: Bool {
+        switch self {
+        case .float, .float32, .float64, .double:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Whether this is an unsigned integer
+    public var isUnsigned: Bool {
+        switch self {
+        case .uint8, .uint16, .uint32, .uint64:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Bit width of numeric types (0 for non-numeric)
+    public var bitWidth: Int {
+        switch self {
+        case .int8, .uint8:     return 8
+        case .int16, .uint16:   return 16
+        case .int32, .uint32, .float, .float32: return 32
+        case .int, .int64, .uint64, .float64, .double: return 64
+        default:                return 0
+        }
+    }
+
+    /// The LLVM IR type string for this MIRType
+    public var llvmName: String {
+        switch self {
+        case .int8, .uint8:     return "i8"
+        case .int16, .uint16:   return "i16"
+        case .int32, .uint32:   return "i32"
+        case .int, .int64, .uint64: return "i64"
+        case .float, .float32:  return "float"
+        case .float64, .double: return "double"
+        case .bool:             return "i1"
+        default:                return "i64"
         }
     }
 }
@@ -157,6 +240,9 @@ public enum MIRInstruction {
     case typeCheck(dest: String, operand: String, typeName: String)
     case typeCast(dest: String, operand: String, typeName: String)
 
+    // Numeric conversion (widening, narrowing, int↔float)
+    case numericConvert(dest: String, operand: String, from: MIRType, to: MIRType)
+
     // String
     case stringConcat(dest: String, parts: [String])
 
@@ -200,6 +286,9 @@ extension MIRInstruction: CustomStringConvertible {
         case .and(let d, let l, let r):     return "\(d) = and \(l), \(r)"
         case .or(let d, let l, let r):      return "\(d) = or \(l), \(r)"
         case .not(let d, let o):            return "\(d) = not \(o)"
+
+        case .numericConvert(let d, let o, let from, let to):
+            return "\(d) = convert \(o) \(from) -> \(to)"
 
         case .call(let d, let f, let a):
             let args = a.joined(separator: ", ")
@@ -426,10 +515,13 @@ public struct MIRTypeDecl {
     public let sealedSubclasses: [String]
     public let isActor: Bool
     public let isValueType: Bool
+    /// True when all fields have known types and no inheritance — enables compact LLVM struct layout.
+    public let useTypedLayout: Bool
 
     public init(name: String, fields: [(String, MIRType)] = [], methods: [String] = [],
                 parentType: String? = nil, sealedSubclasses: [String] = [],
-                isActor: Bool = false, isValueType: Bool = false) {
+                isActor: Bool = false, isValueType: Bool = false,
+                useTypedLayout: Bool = false) {
         self.name = name
         self.fields = fields
         self.methods = methods
@@ -437,6 +529,7 @@ public struct MIRTypeDecl {
         self.sealedSubclasses = sealedSubclasses
         self.isActor = isActor
         self.isValueType = isValueType
+        self.useTypedLayout = useTypedLayout
     }
 }
 

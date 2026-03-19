@@ -358,8 +358,14 @@ const char* rockit_object_get_type_name(RockitObject* obj) {
 }
 
 int64_t rockit_object_is_type(RockitObject* obj, const char* typeName) {
-    if (!obj || !typeName) return 0;
-    return strcmp(obj->typeName, typeName) == 0 ? 1 : 0;
+    if (!obj || !typeName || !obj->typeName) return 0;
+    // Walk up the type hierarchy (same as rockit_is_type)
+    const char* current = obj->typeName;
+    while (current) {
+        if (strcmp(current, typeName) == 0) return 1;
+        current = find_parent_type(current);
+    }
+    return 0;
 }
 
 // ── RockitList ──────────────────────────────────────────────────────────────
@@ -1417,6 +1423,62 @@ RockitString* toString(int64_t value) {
     return rockit_int_to_string(value);
 }
 
+// -- typeOf (runtime type introspection for native code) --
+
+RockitString* typeOf(int64_t value) {
+    if (value == ROCKIT_NULL) return rockit_string_new("null");
+    if (!is_likely_heap_ptr(value)) return rockit_string_new("Int");
+
+    void* ptr = (void*)(intptr_t)value;
+
+    // Safely probe memory before dereferencing
+#ifdef __APPLE__
+    char _probe[32];
+    vm_size_t _probe_sz;
+    if (vm_read_overwrite(mach_task_self(), (vm_address_t)(intptr_t)value,
+            32, (vm_address_t)_probe, &_probe_sz) != KERN_SUCCESS)
+        return rockit_string_new("Int");
+#endif
+
+    int64_t first_field = *(int64_t*)ptr;
+
+    // RockitObject: first field is typeName (a pointer in heap range)
+    if (is_likely_heap_ptr(first_field)) {
+        RockitObject* obj = (RockitObject*)ptr;
+        if (obj->typeName) return rockit_string_new(obj->typeName);
+        return rockit_string_new("Object");
+    }
+
+    // String/List/Map all have refCount at offset 0.
+    // Distinguish by offset 16: String has chars pointer, List/Map has capacity (small int).
+    int64_t field_at_16 = *((int64_t*)((char*)ptr + 16));
+
+    if (is_likely_heap_ptr(field_at_16)) {
+        // chars pointer at offset 16 → String
+        return rockit_string_new("String");
+    }
+
+    // capacity (small int) at offset 16 → List or Map
+    // Distinguish via malloc_size of the data/entries pointer at offset 24
+    int64_t data_ptr_val = *((int64_t*)((char*)ptr + 24));
+    if (is_likely_heap_ptr(data_ptr_val)) {
+        int64_t capacity = field_at_16;
+#ifdef __APPLE__
+        if (capacity > 0) {
+            size_t data_size = malloc_size((void*)(intptr_t)data_ptr_val);
+            // List data: capacity * 8.  Map entries: capacity * 24.
+            // If allocated > capacity * 12, likely a Map.
+            if (data_size > (size_t)(capacity * 12)) {
+                return rockit_string_new("Map");
+            }
+        }
+#endif
+        return rockit_string_new("List");
+    }
+
+    return rockit_string_new("Int");
+}
+
 // -- floatToString (used by float codegen) --
 
 RockitString* floatToString(double value) {
@@ -2174,4 +2236,52 @@ RockitString* tlsLastError(void) {
     char buf[256];
     ERR_error_string_n(err, buf, sizeof(buf));
     return rockit_string_new(buf);
+}
+
+// ── ByteArray ───────────────────────────────────────────────────────────────────
+// Compact byte buffer — stores uint8_t values, returns/accepts int64 at API boundary.
+// Layout: [size (int64_t)][capacity (int64_t)][data (uint8_t*)]
+
+typedef struct {
+    int64_t size;
+    int64_t capacity;
+    uint8_t* data;
+} ByteArray;
+
+int64_t byteArrayCreate(int64_t capacity) {
+    ByteArray* ba = (ByteArray*)malloc(sizeof(ByteArray));
+    ba->size = 0;
+    ba->capacity = capacity > 0 ? capacity : 16;
+    ba->data = (uint8_t*)calloc(ba->capacity, 1);
+    return (int64_t)ba;
+}
+
+int64_t byteArrayCreateFilled(int64_t size, int64_t fillValue) {
+    ByteArray* ba = (ByteArray*)malloc(sizeof(ByteArray));
+    ba->size = size;
+    ba->capacity = size;
+    ba->data = (uint8_t*)malloc(size);
+    memset(ba->data, (uint8_t)(fillValue & 0xFF), size);
+    return (int64_t)ba;
+}
+
+int64_t byteArrayGet(int64_t handle, int64_t index) {
+    ByteArray* ba = (ByteArray*)handle;
+    if (index < 0 || index >= ba->size) {
+        rockit_panic("byteArray index out of bounds");
+    }
+    return (int64_t)ba->data[index];
+}
+
+void byteArraySet(int64_t handle, int64_t index, int64_t value) {
+    ByteArray* ba = (ByteArray*)handle;
+    if (index < 0 || index >= ba->size) {
+        rockit_panic("byteArray index out of bounds");
+    }
+    ba->data[index] = (uint8_t)(value & 0xFF);
+}
+
+int64_t byteArraySize(int64_t handle) {
+    ByteArray* ba = (ByteArray*)handle;
+    return ba->size;
 }

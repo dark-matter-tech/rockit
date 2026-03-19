@@ -1384,6 +1384,7 @@ public final class Parser {
     /// Check if the current keyword can be used as an identifier in expression context
     private func keywordAsIdentifier() -> String? {
         switch currentKind {
+        case .kwData: return "data"
         case .kwRoute: return "route"
         case .kwStyle: return "style"
         case .kwInit: return "init"

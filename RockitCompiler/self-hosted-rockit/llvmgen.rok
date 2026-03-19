@@ -69,6 +69,7 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "mapCreate", "i64|")
     mapPut(t, "mapKeys", "i64|i64")
     mapPut(t, "toInt", "i64|i64")
+    mapPut(t, "typeOf", "ptr|i64")
     mapPut(t, "processArgs", "i64|")
     mapPut(t, "executablePath", "i64|")
     mapPut(t, "platformOS", "i64|")
@@ -1352,8 +1353,22 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val spInfo = mapGet(mapGet(state, "stackPromoted"), toString(dest))
             var tobj: String = ""
             if (spInfo != null) {
-                // Stack-promoted: use pre-allocated alloca, skip header init
+                // Stack-promoted: use pre-allocated alloca, init header manually
                 tobj = stringConcat("%t", stringConcat(toString(dest), ".stack"))
+                // Store typeName at offset 0
+                llvmLine(buf, stringConcat("  store ptr ", stringConcat(tyGlobal, stringConcat(", ptr ", tobj))))
+                // Store refCount = -1 (stack sentinel) at offset 8
+                val spRefGep = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(spRefGep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobj, ", i64 8")))))
+                llvmLine(buf, stringConcat("  store i64 -1, ptr ", spRefGep))
+                // Store fieldCount at offset 16
+                val spFcGep = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(spFcGep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobj, ", i64 16")))))
+                llvmLine(buf, stringConcat("  store i32 ", stringConcat(toString(totalFields), stringConcat(", ptr ", spFcGep))))
+                // Store ptrFieldBits = 0 at offset 20 (stack objects don't cascade release)
+                val spBitsGep = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(spBitsGep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobj, ", i64 20")))))
+                llvmLine(buf, stringConcat("  store i32 0, ptr ", spBitsGep))
             } else {
                 // Heap-allocated: call rockit_object_alloc
                 tobj = llvmNextSSA(state)

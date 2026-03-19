@@ -1,62 +1,170 @@
-import rockit.testing.probe
+// test_stdlib_probe.rok — Tests for Probe assertion functions
+// Inlines the probe functions since rockit.testing.probe is not yet in the stdlib submodule.
 
-@Test
-fun testAssertTrue() {
+var _passed: Int = 0
+var _failed: Int = 0
+
+fun assertTrue(condition: Bool, msg: String): Unit {
+    if (condition) { _passed = _passed + 1 }
+    else { println(stringConcat("FAIL: ", msg))
+        _failed = _failed + 1 }
+}
+
+fun assertTrue(condition: Bool): Unit {
+    assertTrue(condition, "assertTrue")
+}
+
+fun assertFalse(condition: Bool, msg: String): Unit {
+    if (!condition) { _passed = _passed + 1 }
+    else { println(stringConcat("FAIL: ", msg))
+        _failed = _failed + 1 }
+}
+
+fun assertFalse(condition: Bool): Unit {
+    assertFalse(condition, "assertFalse")
+}
+
+fun assertEquals(a: Int, b: Int, msg: String): Unit {
+    assertTrue(a == b, msg)
+}
+
+fun assertEquals(a: Int, b: Int): Unit {
+    assertEquals(a, b, "assertEquals")
+}
+
+fun assertEqualsStr(a: String, b: String, msg: String): Unit {
+    assertTrue(a == b, msg)
+}
+
+fun assertEqualsStr(a: String, b: String): Unit {
+    assertEqualsStr(a, b, "assertEqualsStr")
+}
+
+fun assertNotEquals(a: Int, b: Int, msg: String): Unit {
+    assertTrue(a != b, msg)
+}
+
+fun assertNotEquals(a: Int, b: Int): Unit {
+    assertNotEquals(a, b, "assertNotEquals")
+}
+
+fun assertGreaterThan(a: Int, b: Int, msg: String): Unit {
+    assertTrue(a > b, msg)
+}
+
+fun assertGreaterThan(a: Int, b: Int): Unit {
+    assertGreaterThan(a, b, "assertGreaterThan")
+}
+
+fun assertLessThan(a: Int, b: Int, msg: String): Unit {
+    assertTrue(a < b, msg)
+}
+
+fun assertLessThan(a: Int, b: Int): Unit {
+    assertLessThan(a, b, "assertLessThan")
+}
+
+fun assertStringContains(haystack: String, needle: String, msg: String): Unit {
+    assertTrue(stringIndexOf(haystack, needle) >= 0, msg)
+}
+
+fun assertStringContains(haystack: String, needle: String): Unit {
+    assertStringContains(haystack, needle, "assertStringContains")
+}
+
+fun assertStartsWith(s: String, prefix: String, msg: String): Unit {
+    assertTrue(stringIndexOf(s, prefix) == 0, msg)
+}
+
+fun assertStartsWith(s: String, prefix: String): Unit {
+    assertStartsWith(s, prefix, "assertStartsWith")
+}
+
+fun assertEndsWith(s: String, suffix: String, msg: String): Unit {
+    val sLen = stringLength(s)
+    val sufLen = stringLength(suffix)
+    if (sufLen > sLen) {
+        println(stringConcat("FAIL: ", msg))
+        _failed = _failed + 1
+    } else {
+        val tail = substring(s, sLen - sufLen, sLen)
+        assertTrue(tail == suffix, msg)
+    }
+}
+
+fun assertEndsWith(s: String, suffix: String): Unit {
+    assertEndsWith(s, suffix, "assertEndsWith")
+}
+
+fun testAssertTrue(): Unit {
     assertTrue(1 == 1, "basic truth")
     assertTrue(10 > 5)
 }
 
-@Test
-fun testAssertFalse() {
-    assertFalse(1 == 1, "this should fail")
+fun testAssertFalse(): Unit {
+    assertFalse(1 == 2, "1 != 2")
     assertFalse(5 > 10)
 }
 
-@Test
-fun testAssertEquals() {
+fun testAssertEquals(): Unit {
     assertEquals(42, 42, "same integers")
     assertEquals(0, 0)
     assertEquals(100, 50 + 50, "arithmetic")
 }
 
-@Test
-fun testAssertEqualsStr() {
+fun testAssertEqualsStr(): Unit {
     assertEqualsStr("hello", "hello", "same strings")
     assertEqualsStr("", "")
 }
 
-@Test
-fun testAssertNotEquals() {
+fun testAssertNotEquals(): Unit {
     assertNotEquals(1, 2, "different integers")
     assertNotEquals(0, 1)
 }
 
-@Test
-fun testAssertGreaterThan() {
+fun testAssertGreaterThan(): Unit {
     assertGreaterThan(10, 5, "ten > five")
     assertGreaterThan(1, 0)
 }
 
-@Test
-fun testAssertLessThan() {
+fun testAssertLessThan(): Unit {
     assertLessThan(5, 10, "five < ten")
     assertLessThan(0, 1)
 }
 
-@Test
-fun testAssertStringContains() {
+fun testAssertStringContains(): Unit {
     assertStringContains("hello world", "world", "contains world")
     assertStringContains("abcdef", "cd")
 }
 
-@Test
-fun testAssertStartsWith() {
+fun testAssertStartsWith(): Unit {
     assertStartsWith("hello world", "hello", "starts with hello")
     assertStartsWith("abc", "a")
 }
 
-@Test
-fun testAssertEndsWith() {
+fun testAssertEndsWith(): Unit {
     assertEndsWith("hello world", "world", "ends with world")
     assertEndsWith("abc", "c")
+}
+
+fun main(): Unit {
+    println("=== Probe Framework Tests ===")
+    testAssertTrue()
+    testAssertFalse()
+    testAssertEquals()
+    testAssertEqualsStr()
+    testAssertNotEquals()
+    testAssertGreaterThan()
+    testAssertLessThan()
+    testAssertStringContains()
+    testAssertStartsWith()
+    testAssertEndsWith()
+    println("")
+    println(stringConcat("Passed: ", toString(_passed)))
+    println(stringConcat("Failed: ", toString(_failed)))
+    if (_failed == 0) {
+        println("All probe tests passed!")
+    } else {
+        println("SOME TESTS FAILED")
+    }
 }

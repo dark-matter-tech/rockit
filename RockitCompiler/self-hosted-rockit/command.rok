@@ -847,11 +847,26 @@ fun skipNewlines(p: Map): Unit {
     }
 }
 
+fun isSoftKeyword(tokType: String): Bool {
+    if (tokType == "KW_DATA") { return true }
+    if (tokType == "KW_ROUTE") { return true }
+    if (tokType == "KW_STYLE") { return true }
+    if (tokType == "KW_INIT") { return true }
+    if (tokType == "KW_IN") { return true }
+    if (tokType == "KW_OUT") { return true }
+    if (tokType == "KW_IS") { return true }
+    return false
+}
+
 fun expect(p: Map, expectedType: String): Map {
     skipNewlines(p)
     val tok = peekToken(p)
     val tokType = toString(mapGet(tok, "type"))
     if (tokType == expectedType) {
+        return advance(p)
+    }
+    // Accept soft keywords as identifiers
+    if (expectedType == "IDENT" && isSoftKeyword(tokType)) {
         return advance(p)
     }
     // Error: unexpected token
@@ -872,7 +887,10 @@ fun matchToken(p: Map, expectedType: String): Bool {
 
 fun check(p: Map, expectedType: String): Bool {
     skipNewlines(p)
-    return peekType(p) == expectedType
+    val tt = peekType(p)
+    if (tt == expectedType) { return true }
+    if (expectedType == "IDENT" && isSoftKeyword(tt)) { return true }
+    return false
 }
 
 // ---------------------------------------------------------------------------
@@ -1112,7 +1130,7 @@ fun parsePrimary(p: Map): Map {
     }
 
     // Identifier (or keyword used as identifier)
-    if (tt == "IDENT" || tt == "KW_THIS" || tt == "KW_SUPER") {
+    if (tt == "IDENT" || tt == "KW_THIS" || tt == "KW_SUPER" || isSoftKeyword(tt)) {
         val tok = advance(p)
         val node = makeNodeAt("ident", line, col)
         val identName = toString(mapGet(tok, "value"))
@@ -4822,6 +4840,7 @@ fun llvmBuildSigTable(): Map {
     mapPut(t, "mapCreate", "i64|")
     mapPut(t, "mapKeys", "i64|i64")
     mapPut(t, "toInt", "i64|i64")
+    mapPut(t, "typeOf", "ptr|i64")
     mapPut(t, "processArgs", "i64|")
     mapPut(t, "executablePath", "i64|")
     mapPut(t, "platformOS", "i64|")
@@ -6105,8 +6124,22 @@ fun emitLLVMFunction(compiler: Map, funcRec: Map, sigTable: Map, definedFuncs: M
             val spInfo = mapGet(mapGet(state, "stackPromoted"), toString(dest))
             var tobj: String = ""
             if (spInfo != null) {
-                // Stack-promoted: use pre-allocated alloca, skip header init
+                // Stack-promoted: use pre-allocated alloca, init header manually
                 tobj = stringConcat("%t", stringConcat(toString(dest), ".stack"))
+                // Store typeName at offset 0
+                llvmLine(buf, stringConcat("  store ptr ", stringConcat(tyGlobal, stringConcat(", ptr ", tobj))))
+                // Store refCount = -1 (stack sentinel) at offset 8
+                val spRefGep = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(spRefGep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobj, ", i64 8")))))
+                llvmLine(buf, stringConcat("  store i64 -1, ptr ", spRefGep))
+                // Store fieldCount at offset 16
+                val spFcGep = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(spFcGep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobj, ", i64 16")))))
+                llvmLine(buf, stringConcat("  store i32 ", stringConcat(toString(totalFields), stringConcat(", ptr ", spFcGep))))
+                // Store ptrFieldBits = 0 at offset 20 (stack objects don't cascade release)
+                val spBitsGep = llvmNextSSA(state)
+                llvmLine(buf, stringConcat("  ", stringConcat(spBitsGep, stringConcat(" = getelementptr i8, ptr ", stringConcat(tobj, ", i64 20")))))
+                llvmLine(buf, stringConcat("  store i32 0, ptr ", spBitsGep))
             } else {
                 // Heap-allocated: call rockit_object_alloc
                 tobj = llvmNextSSA(state)
@@ -8686,9 +8719,9 @@ fun updateBackgroundNotice(currentVersion: String): Unit {
 // Build Identity (injected by build.sh)
 // ---------------------------------------------------------------------------
 val ROCKIT_VERSION: String = "0.1.0"
-val ROCKIT_GIT_HASH: String = "1454c04e44b1271477be8be9e13d5cb9447c8693"
-val ROCKIT_SOURCE_HASH: String = "sha256:881613a4ae09f5ef35430dec907efd41d27fb9def87e81f6cd27c8537cbf8ac5"
-val ROCKIT_BUILD_TIMESTAMP: String = "2026-03-17T18:13:02Z"
+val ROCKIT_GIT_HASH: String = "65cf992092f222993b8ffa6267b344c6f4acff4c"
+val ROCKIT_SOURCE_HASH: String = "sha256:d63e398e970428b0b2680aa2c572eb7679f062995623a9a0ea40a0410f4f3e1f"
+val ROCKIT_BUILD_TIMESTAMP: String = "2026-03-19T03:13:51Z"
 val ROCKIT_BUILD_PLATFORM: String = "darwin-arm64"
 
 // ---------------------------------------------------------------------------

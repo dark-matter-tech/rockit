@@ -24,6 +24,8 @@ public final class MIROptimizer {
         passes = [
             InliningPass(),
             ConstantFoldingPass(),
+            FlagLoopEliminationPass(),
+            ListShiftEliminationPass(),
             DeadCodeEliminationPass(),
             TreeShakingPass(),
         ]

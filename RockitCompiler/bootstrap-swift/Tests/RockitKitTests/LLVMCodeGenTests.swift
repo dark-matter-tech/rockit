@@ -365,7 +365,9 @@ final class LLVMCodeGenTests: XCTestCase {
         }
         """)
         XCTAssertTrue(ir.contains("define internal i64 @IntPair_sum(ptr %this"), "Method should have this param")
-        XCTAssertTrue(ir.contains("rockit_object_get_field"), "Method should access fields via this")
+        // With typed layouts, field access uses typed GEP instead of runtime call
+        XCTAssertTrue(ir.contains("getelementptr %IntPair") || ir.contains("rockit_object_get_field"),
+                      "Method should access fields via this")
     }
 
     func testStringFieldRoundTrip() {
@@ -376,8 +378,11 @@ final class LLVMCodeGenTests: XCTestCase {
             println(n.name)
         }
         """)
-        XCTAssertTrue(ir.contains("ptrtoint ptr"), "Should convert ptr to i64 for storage")
-        XCTAssertTrue(ir.contains("inttoptr i64"), "Should convert i64 back to ptr for retrieval")
+        // With typed layouts, ptr fields are stored/loaded directly at ptr width
+        // (no ptrtoint/inttoptr round-trip needed). The Named struct is:
+        // %Named = type { i64, ptr }  (refCount, name)
+        XCTAssertTrue(ir.contains("%Named = type { i64, ptr }") || ir.contains("ptrtoint ptr"),
+                      "Should define typed struct or use ptrtoint for storage")
         XCTAssertTrue(ir.contains("rockit_println_string"), "Should print as string")
     }
 
@@ -642,8 +647,9 @@ final class LLVMCodeGenTests: XCTestCase {
             println(sum)
         }
         """)
-        XCTAssertTrue(ir.contains("alloca i8, i64 40"),
-                      "Non-escaping value type should be stack-allocated (40 = 24 header + 2*8 fields)")
+        // Typed layout: uses %Point struct alloca instead of raw bytes
+        XCTAssertTrue(ir.contains("alloca %Point") || ir.contains("alloca i8, i64 40"),
+                      "Non-escaping value type should be stack-allocated")
         XCTAssertFalse(ir.contains("call ptr @rockit_object_alloc"),
                        "Non-escaping value type should NOT use heap allocation")
     }
@@ -659,7 +665,8 @@ final class LLVMCodeGenTests: XCTestCase {
             println(p.x)
         }
         """)
-        XCTAssertTrue(ir.contains("rockit_object_alloc"),
+        // With typed layouts: malloc instead of rockit_object_alloc
+        XCTAssertTrue(ir.contains("@malloc") || ir.contains("rockit_object_alloc"),
                       "Returned value type should use heap allocation")
     }
 
@@ -675,7 +682,7 @@ final class LLVMCodeGenTests: XCTestCase {
         }
         """)
         // p is passed to readX, but readX only reads fields — doesn't escape
-        XCTAssertTrue(ir.contains("alloca i8, i64 40"),
+        XCTAssertTrue(ir.contains("alloca %Point") || ir.contains("alloca i8, i64 40"),
                       "Value type passed to read-only function should be stack-promoted")
     }
 }

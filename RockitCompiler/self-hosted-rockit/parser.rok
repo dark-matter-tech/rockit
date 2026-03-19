@@ -69,11 +69,26 @@ fun skipNewlines(p: Map): Unit {
     }
 }
 
+fun isSoftKeyword(tokType: String): Bool {
+    if (tokType == "KW_DATA") { return true }
+    if (tokType == "KW_ROUTE") { return true }
+    if (tokType == "KW_STYLE") { return true }
+    if (tokType == "KW_INIT") { return true }
+    if (tokType == "KW_IN") { return true }
+    if (tokType == "KW_OUT") { return true }
+    if (tokType == "KW_IS") { return true }
+    return false
+}
+
 fun expect(p: Map, expectedType: String): Map {
     skipNewlines(p)
     val tok = peekToken(p)
     val tokType = toString(mapGet(tok, "type"))
     if (tokType == expectedType) {
+        return advance(p)
+    }
+    // Accept soft keywords as identifiers
+    if (expectedType == "IDENT" && isSoftKeyword(tokType)) {
         return advance(p)
     }
     // Error: unexpected token
@@ -94,7 +109,10 @@ fun matchToken(p: Map, expectedType: String): Bool {
 
 fun check(p: Map, expectedType: String): Bool {
     skipNewlines(p)
-    return peekType(p) == expectedType
+    val tt = peekType(p)
+    if (tt == expectedType) { return true }
+    if (expectedType == "IDENT" && isSoftKeyword(tt)) { return true }
+    return false
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +352,7 @@ fun parsePrimary(p: Map): Map {
     }
 
     // Identifier (or keyword used as identifier)
-    if (tt == "IDENT" || tt == "KW_THIS" || tt == "KW_SUPER") {
+    if (tt == "IDENT" || tt == "KW_THIS" || tt == "KW_SUPER" || isSoftKeyword(tt)) {
         val tok = advance(p)
         val node = makeNodeAt("ident", line, col)
         val identName = toString(mapGet(tok, "value"))

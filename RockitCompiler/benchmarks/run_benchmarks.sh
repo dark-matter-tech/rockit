@@ -153,18 +153,21 @@ run_benchmark() {
     if $HAS_ROCKIT && [ -f "$rok_file" ]; then
         echo -ne "  ${YELLOW}Compiling${NC} Rockit...  "
         cd "$PROJECT_DIR"
-        swift run rockit build-native "$rok_file" > /dev/null 2>&1
-        echo -e "${GREEN}done${NC}"
+        if swift run rockit build-native "$rok_file" > /dev/null 2>&1; then
+            echo -e "${GREEN}done${NC}"
 
-        echo -ne "  ${BLUE}Running${NC}   Rockit...  "
-        if [ -n "$extra_args" ]; then
-            rok_time=$(best_time "$RUNS" "$rok_actual_bin" $extra_args)
-            rok_mem=$(measure_mem "$rok_actual_bin" $extra_args)
+            echo -ne "  ${BLUE}Running${NC}   Rockit...  "
+            if [ -n "$extra_args" ]; then
+                rok_time=$(best_time "$RUNS" "$rok_actual_bin" $extra_args)
+                rok_mem=$(measure_mem "$rok_actual_bin" $extra_args)
+            else
+                rok_time=$(best_time "$RUNS" "$rok_actual_bin")
+                rok_mem=$(measure_mem "$rok_actual_bin")
+            fi
+            echo -e "${GREEN}${rok_time}s${NC}  mem: ${rok_mem} KB"
         else
-            rok_time=$(best_time "$RUNS" "$rok_actual_bin")
-            rok_mem=$(measure_mem "$rok_actual_bin")
+            echo -e "${RED}FAIL${NC} (compile error, skipping)"
         fi
-        echo -e "${GREEN}${rok_time}s${NC}  mem: ${rok_mem} KB"
     fi
 
     # Compile & run C++
@@ -276,26 +279,32 @@ run_benchmark_safe() {
             local rok_actual_bin="${rok_file%.rok}"
             echo -ne "  ${YELLOW}Compiling${NC} Standard... "
             cd "$PROJECT_DIR"
-            swift run rockit build-native "$rok_file" > /dev/null 2>&1
-            echo -e "${GREEN}done${NC}"
+            if swift run rockit build-native "$rok_file" > /dev/null 2>&1; then
+                echo -e "${GREEN}done${NC}"
 
-            echo -ne "  ${BLUE}Running${NC}   Standard... "
-            std_time=$(best_time "$RUNS" "$rok_actual_bin")
-            std_mem=$(measure_mem "$rok_actual_bin")
-            echo -e "${GREEN}${std_time}s${NC}  mem: ${std_mem} KB"
+                echo -ne "  ${BLUE}Running${NC}   Standard... "
+                std_time=$(best_time "$RUNS" "$rok_actual_bin")
+                std_mem=$(measure_mem "$rok_actual_bin")
+                echo -e "${GREEN}${std_time}s${NC}  mem: ${std_mem} KB"
+            else
+                echo -e "${RED}FAIL${NC} (compile error, skipping)"
+            fi
         fi
 
         # Compile & run safety version
         local safe_actual_bin="${safe_file%.rok}"
         echo -ne "  ${YELLOW}Compiling${NC} Safety...   "
         cd "$PROJECT_DIR"
-        swift run rockit build-native --no-runtime "$safe_file" > /dev/null 2>&1
-        echo -e "${GREEN}done${NC}"
+        if swift run rockit build-native --no-runtime "$safe_file" > /dev/null 2>&1; then
+            echo -e "${GREEN}done${NC}"
 
-        echo -ne "  ${BLUE}Running${NC}   Safety...   "
-        safe_time=$(best_time "$RUNS" "$safe_actual_bin")
-        safe_mem=$(measure_mem "$safe_actual_bin")
-        echo -e "${GREEN}${safe_time}s${NC}  mem: ${safe_mem} KB"
+            echo -ne "  ${BLUE}Running${NC}   Safety...   "
+            safe_time=$(best_time "$RUNS" "$safe_actual_bin")
+            safe_mem=$(measure_mem "$safe_actual_bin")
+            echo -e "${GREEN}${safe_time}s${NC}  mem: ${safe_mem} KB"
+        else
+            echo -e "${RED}FAIL${NC} (compile error, skipping)"
+        fi
     fi
 
     # Compute overhead ratio
@@ -401,9 +410,6 @@ run_standard_profile() {
     run_benchmark "nbody"
     run_benchmark "spectralnorm"
 
-    echo -e "${BOLD}  Real-world${NC}"
-    echo ""
-    run_benchmark "monkey"
 }
 
 run_turbo_profile() {

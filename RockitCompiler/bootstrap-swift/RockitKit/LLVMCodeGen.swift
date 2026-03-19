@@ -8,7 +8,7 @@ import Foundation
 
 /// Generates LLVM IR text (.ll) from an optimized MIR module.
 /// The emitted IR uses alloca-based register mapping; LLVM's mem2reg pass
-/// (triggered by clang -O1) promotes allocas to SSA form.
+/// (triggered by clang -O2) promotes allocas to SSA form.
 public final class LLVMCodeGen {
 
     /// Counter for unique SSA names within a function.
@@ -74,6 +74,19 @@ public final class LLVMCodeGen {
     /// The current MIR function being emitted (for source map lookups).
     private var currentMIRFunction: MIRFunction? = nil
 
+    // MARK: - Typed Object Layouts
+
+    /// Set of type names that use compact typed struct layout instead of generic RockitObject.
+    private var typedLayoutTypes: Set<String> = []
+    /// For each typed layout type: the LLVM field types (index 0 = refCount:i64, 1+ = declared fields).
+    private var typedStructFields: [String: [(name: String, llvmType: String, mirType: MIRType)]] = [:]
+
+    // MARK: - Bounds Check Control
+
+    /// When false, list access skips bounds checks for maximum performance (C-equivalent speed).
+    /// Safety profiles (DAL A-E) force this to true. Default: false (performance mode).
+    public var boundsChecksEnabled: Bool = false
+
     public init() {}
 
     // MARK: - Public API
@@ -107,10 +120,23 @@ public final class LLVMCodeGen {
         locationCache = [:]
         debugMetadataLines = []
         currentMIRFunction = nil
+        typedLayoutTypes = []
+        typedStructFields = [:]
 
         // Index type declarations
         for t in module.types {
             typeDecls[t.name] = t
+        }
+
+        // Build typed layout info for eligible types
+        for t in module.types where t.useTypedLayout {
+            typedLayoutTypes.insert(t.name)
+            var fields: [(name: String, llvmType: String, mirType: MIRType)] = []
+            fields.append(("refCount", "i64", .int))
+            for (fname, ftype) in t.fields {
+                fields.append((fname, llvmFieldType(ftype), ftype))
+            }
+            typedStructFields[t.name] = fields
         }
 
         // Index function signatures for call-site return type resolution
@@ -192,6 +218,15 @@ public final class LLVMCodeGen {
         lines.append("target triple = \"\(targetTriple())\"")
         lines.append("")
 
+        // Emit typed struct definitions for compact object layouts
+        for typeName in typedLayoutTypes.sorted() {
+            if let fields = typedStructFields[typeName] {
+                let fieldTypes = fields.map { $0.llvmType }.joined(separator: ", ")
+                lines.append("%\(typeName) = type { \(fieldTypes) }")
+            }
+        }
+        if !typedLayoutTypes.isEmpty { lines.append("") }
+
         // Collect string literals and type names from all functions
         collectStrings(module: module)
         collectTypeNames(module: module)
@@ -220,7 +255,7 @@ public final class LLVMCodeGen {
             let dataLen = value.utf8.count + 1  // +1 for null terminator
             let strLen = value.utf8.count
             // chars = GEP into the data[] portion of the same global (offset 40 = 5 * i64)
-            lines.append("\(name) = private global <{ i64, i64, ptr, ptr, i64, [\(dataLen) x i8] }> <{ i64 9223372036854775807, i64 \(strLen), ptr getelementptr (i8, ptr \(name), i64 40), ptr null, i64 \(strLen), [\(dataLen) x i8] c\"\(escaped)\\00\" }>")
+            lines.append("\(name) = private constant <{ i64, i64, ptr, ptr, i64, [\(dataLen) x i8] }> <{ i64 9223372036854775807, i64 \(strLen), ptr getelementptr (i8, ptr \(name), i64 40), ptr null, i64 \(strLen), [\(dataLen) x i8] c\"\(escaped)\\00\" }>")
         }
         if !stringPool.isEmpty || !typeNamePool.isEmpty || !rockitStringGlobals.isEmpty {
             lines.append("")
@@ -251,10 +286,67 @@ public final class LLVMCodeGen {
             lines.append("")
         }
 
+        // Interprocedural analysis: compute which globals each function may store to,
+        // transitively through called functions. Used by the per-function ARC elision
+        // to safely skip retain/release on global loads.
+        do {
+            var directStores: [String: Set<String>] = [:]
+            var callees: [String: Set<String>] = [:]
+            for function in module.functions {
+                var stores: Set<String> = []
+                var calls: Set<String> = []
+                for block in function.blocks {
+                    for inst in block.instructions {
+                        if case .store(let dest, _) = inst, dest.hasPrefix("global.") {
+                            stores.insert(dest)
+                        }
+                        if case .call(_, let callee, _) = inst {
+                            calls.insert(callee)
+                        }
+                        if case .callIndirect(_, _, _) = inst {
+                            // Conservative: indirect calls could modify any global.
+                            // Mark with sentinel that will match all globals.
+                            stores.insert("global.*")
+                        }
+                    }
+                }
+                directStores[function.name] = stores
+                callees[function.name] = calls
+            }
+            // Fixed-point: propagate transitive stores through call graph
+            transitiveGlobalStores = directStores
+            var changed = true
+            while changed {
+                changed = false
+                for function in module.functions {
+                    let callerCalls = callees[function.name] ?? []
+                    for callee in callerCalls {
+                        if let calleeStores = transitiveGlobalStores[callee] {
+                            let before = transitiveGlobalStores[function.name]?.count ?? 0
+                            transitiveGlobalStores[function.name, default: []].formUnion(calleeStores)
+                            if (transitiveGlobalStores[function.name]?.count ?? 0) > before {
+                                changed = true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Emit functions first (to discover all external calls)
+        emittedAliasScopes = []
         var functionBodies: [String] = []
         for function in module.functions {
             functionBodies.append(emitFunction(function))
+            functionBodies.append("")
+        }
+
+        // Emit typed retain/release functions for compact struct layouts
+        for typeName in typedLayoutTypes.sorted() {
+            guard let fields = typedStructFields[typeName] else { continue }
+            functionBodies.append(emitTypedRetainFunction(typeName: typeName))
+            functionBodies.append("")
+            functionBodies.append(emitTypedReleaseFunction(typeName: typeName, fields: fields))
             functionBodies.append("")
         }
 
@@ -264,6 +356,11 @@ public final class LLVMCodeGen {
         var definedFunctions = Set(module.functions.map { $0.name })
         for f in module.functions {
             definedFunctions.insert(llvmFunctionName(f.name))
+        }
+        // Typed layout retain/release are defined in this module
+        for tn in typedLayoutTypes {
+            definedFunctions.insert("__retain_\(tn)")
+            definedFunctions.insert("__release_\(tn)")
         }
         var declaredNames: Set<String> = []
         for decl in externalDecls.sorted() {
@@ -293,18 +390,46 @@ public final class LLVMCodeGen {
         // Append function bodies
         lines.append(contentsOf: functionBodies)
 
-        // TBAA metadata for alias analysis — lets LLVM hoist list struct
-        // field loads (size, data pointer) out of loops that store to elements
+        // TBAA metadata for alias analysis — separate tags for each list field
+        // lets LLVM hoist capacity and data pointer loads out of loops that
+        // modify size or elements. All four tags are siblings under the root,
+        // so LLVM proves they don't alias each other.
         lines.append("")
         lines.append("; TBAA metadata")
         lines.append("!0 = !{!\"Rockit TBAA\"}")
-        lines.append("!1 = !{!\"list_struct_field\", !0}")
+        lines.append("!1 = !{!\"list_size\", !0}")
         lines.append("!2 = !{!\"list_element\", !0}")
-        lines.append("!3 = !{!1, !1, i64 0}")
-        lines.append("!4 = !{!2, !2, i64 0}")
+        lines.append("!3 = !{!1, !1, i64 0}")      // list size access
+        lines.append("!4 = !{!2, !2, i64 0}")       // list element access
+        lines.append("!6 = !{!\"list_capacity\", !0}")
+        lines.append("!7 = !{!\"list_data_ptr\", !0}")
+        lines.append("!8 = !{!6, !6, i64 0}")       // list capacity access
+        lines.append("!9 = !{!7, !7, i64 0}")       // list data pointer access
         lines.append("")
         lines.append("; Branch weight metadata for bounds checks (hot path = in-bounds)")
         lines.append("!5 = !{!\"branch_weights\", i32 2000000, i32 1}")
+
+        // Alias scope metadata for compact int lists — enables LLVM to prove
+        // distinct lists don't alias, allowing load-store reordering and vectorization.
+        if !emittedAliasScopes.isEmpty {
+            lines.append("")
+            lines.append("; Alias scope metadata for compact list noalias")
+            lines.append("!499 = !{!499, !\"RockitListDomain\"}")
+            for (scopeId, name) in emittedAliasScopes {
+                // Scope node and singleton scope list
+                lines.append("!\(scopeId) = !{!\(scopeId), !499, !\"list.\(name)\"}")
+                lines.append("!\(scopeId + 1) = !{!\(scopeId)}")
+            }
+            // Noalias sets: for each scope, list all OTHER scopes
+            for (i, _) in emittedAliasScopes.enumerated() {
+                let others = emittedAliasScopes.enumerated()
+                    .filter { $0.offset != i }
+                    .map { "!\($0.element.scopeId)" }
+                if !others.isEmpty {
+                    lines.append("!\(700 + i) = !{\(others.joined(separator: ", "))}")
+                }
+            }
+        }
 
         // DO-178C 6.3.4g: Source-to-object traceability via LLVM debug metadata.
         // The DICompileUnit and DIFile establish source file identity.
@@ -492,11 +617,14 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare ptr @rockit_string_concat(ptr, ptr)")
         externalDecls.insert("declare void @rockit_string_retain(ptr)")
         externalDecls.insert("declare void @rockit_string_release(ptr)")
-        externalDecls.insert("declare i64 @rockit_string_length(ptr)")
+        externalDecls.insert("declare i64 @rockit_string_length(ptr) readonly nounwind")
         externalDecls.insert("declare ptr @rockit_int_to_string(i64)")
         externalDecls.insert("declare ptr @rockit_float_to_string(double)")
         externalDecls.insert("declare ptr @rockit_bool_to_string(i1)")
         externalDecls.insert("declare void @rockit_panic(ptr) noreturn")
+        // Malloc/free for typed layouts
+        externalDecls.insert("declare ptr @malloc(i64)")
+        externalDecls.insert("declare void @free(ptr)")
         // Object runtime
         externalDecls.insert("declare ptr @rockit_object_alloc(ptr, i32)")
         externalDecls.insert("declare i64 @rockit_object_get_field(ptr, i32)")
@@ -507,24 +635,24 @@ public final class LLVMCodeGen {
         externalDecls.insert("declare void @rockit_retain_value(i64)")
         externalDecls.insert("declare void @rockit_release_value(i64)")
         // Type checking runtime
-        externalDecls.insert("declare i8 @rockit_is_type(ptr, ptr)")
-        externalDecls.insert("declare ptr @rockit_object_get_type_name(ptr)")
+        externalDecls.insert("declare i8 @rockit_is_type(ptr, ptr) readonly nounwind")
+        externalDecls.insert("declare ptr @rockit_object_get_type_name(ptr) readonly nounwind")
         externalDecls.insert("declare void @rockit_set_type_hierarchy(ptr, i32)")
         // List runtime
         externalDecls.insert("declare ptr @rockit_list_create()")
         externalDecls.insert("declare ptr @rockit_list_create_filled(i64, i64)")
         externalDecls.insert("declare void @rockit_list_append(ptr, i64)")
-        externalDecls.insert("declare i64 @rockit_list_get(ptr, i64)")
+        externalDecls.insert("declare i64 @rockit_list_get(ptr, i64) readonly nounwind")
         externalDecls.insert("declare void @rockit_list_set(ptr, i64, i64)")
-        externalDecls.insert("declare i64 @rockit_list_size(ptr)")
-        externalDecls.insert("declare i1 @rockit_list_is_empty(ptr)")
+        externalDecls.insert("declare i64 @rockit_list_size(ptr) readonly nounwind")
+        externalDecls.insert("declare i1 @rockit_list_is_empty(ptr) readonly nounwind")
         externalDecls.insert("declare void @rockit_list_release(ptr)")
         // ByteArray runtime
         externalDecls.insert("declare i64 @byteArrayCreate(i64)")
         externalDecls.insert("declare i64 @byteArrayCreateFilled(i64, i64)")
-        externalDecls.insert("declare i64 @byteArrayGet(i64, i64)")
+        externalDecls.insert("declare i64 @byteArrayGet(i64, i64) readonly nounwind")
         externalDecls.insert("declare void @byteArraySet(i64, i64, i64)")
-        externalDecls.insert("declare i64 @byteArraySize(i64)")
+        externalDecls.insert("declare i64 @byteArraySize(i64) readonly nounwind")
         // Map runtime (string-keyed)
         externalDecls.insert("declare i64 @mapCreate()")
         externalDecls.insert("declare i64 @mapPut(i64, ptr, i64)")
@@ -544,25 +672,25 @@ public final class LLVMCodeGen {
         // Builtin wrappers (used by Stage 1 and user programs)
         // String operations
         externalDecls.insert("declare ptr @charAt(ptr, i64)")
-        externalDecls.insert("declare i64 @charCodeAt(ptr, i64)")
+        externalDecls.insert("declare i64 @charCodeAt(ptr, i64) readonly nounwind")
         externalDecls.insert("declare ptr @intToChar(i64)")
-        externalDecls.insert("declare i1 @startsWith(ptr, ptr)")
-        externalDecls.insert("declare i1 @endsWith(ptr, ptr)")
+        externalDecls.insert("declare i1 @startsWith(ptr, ptr) readonly nounwind")
+        externalDecls.insert("declare i1 @endsWith(ptr, ptr) readonly nounwind")
         externalDecls.insert("declare ptr @stringConcat(ptr, ptr)")
-        externalDecls.insert("declare i64 @stringIndexOf(ptr, ptr)")
-        externalDecls.insert("declare i64 @stringLength(ptr)")
+        externalDecls.insert("declare i64 @stringIndexOf(ptr, ptr) readonly nounwind")
+        externalDecls.insert("declare i64 @stringLength(ptr) readonly nounwind")
         externalDecls.insert("declare ptr @stringTrim(ptr)")
         externalDecls.insert("declare ptr @substring(ptr, i64, i64)")
         externalDecls.insert("declare i64 @toInt(i64)")
         externalDecls.insert("declare i64 @rockit_string_to_int(ptr)")
         // Character checks
-        externalDecls.insert("declare i1 @isDigit(ptr)")
-        externalDecls.insert("declare i1 @isLetter(ptr)")
-        externalDecls.insert("declare i1 @isLetterOrDigit(ptr)")
+        externalDecls.insert("declare i1 @isDigit(ptr) readonly nounwind")
+        externalDecls.insert("declare i1 @isLetter(ptr) readonly nounwind")
+        externalDecls.insert("declare i1 @isLetterOrDigit(ptr) readonly nounwind")
         // Type checks
-        externalDecls.insert("declare i1 @isMap(i64)")
+        externalDecls.insert("declare i1 @isMap(i64) readonly nounwind")
         // Additional native runtime (remapped from bytecode builtins in emitCall)
-        externalDecls.insert("declare i8 @rockit_list_contains(ptr, i64)")
+        externalDecls.insert("declare i8 @rockit_list_contains(ptr, i64) readonly nounwind")
         externalDecls.insert("declare i64 @rockit_list_remove_at(ptr, i64)")
         // Turbo: integer-specific list append (skips retain) and list grow
         externalDecls.insert("declare void @rockit_list_append_int(ptr, i64)")
@@ -587,27 +715,40 @@ public final class LLVMCodeGen {
         // Polymorphic toString (handles both raw ints and string pointers)
         externalDecls.insert("declare ptr @toString(i64)")
         // String comparison (content-based, not pointer-based)
-        externalDecls.insert("declare i1 @rockit_string_eq(i64, i64)")
-        externalDecls.insert("declare i1 @rockit_string_neq(i64, i64)")
+        externalDecls.insert("declare i1 @rockit_string_eq(i64, i64) readonly nounwind")
+        externalDecls.insert("declare i1 @rockit_string_neq(i64, i64) readonly nounwind")
         // Process args initialization
         externalDecls.insert("declare void @rockit_set_args(i32, ptr)")
-        // Math functions
-        externalDecls.insert("declare double @rockit_math_sqrt(double)")
-        externalDecls.insert("declare double @rockit_math_sin(double)")
-        externalDecls.insert("declare double @rockit_math_cos(double)")
-        externalDecls.insert("declare double @rockit_math_tan(double)")
-        externalDecls.insert("declare double @rockit_math_pow(double, double)")
-        externalDecls.insert("declare double @rockit_math_floor(double)")
-        externalDecls.insert("declare double @rockit_math_ceil(double)")
-        externalDecls.insert("declare double @rockit_math_round(double)")
-        externalDecls.insert("declare double @rockit_math_log(double)")
-        externalDecls.insert("declare double @rockit_math_exp(double)")
-        externalDecls.insert("declare double @rockit_math_abs(double)")
-        externalDecls.insert("declare double @rockit_math_atan2(double, double)")
+        // Math functions — readnone: pure arithmetic, no memory access.
+        // Enables LLVM to hoist data pointer loads past math calls in inner loops.
+        externalDecls.insert("declare double @rockit_math_sqrt(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_sin(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_cos(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_tan(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_pow(double, double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_floor(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_ceil(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_round(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_log(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_exp(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_abs(double) readnone nounwind")
+        externalDecls.insert("declare double @rockit_math_atan2(double, double) readnone nounwind")
+        // LLVM math intrinsics — compile to single hardware instructions (fsqrt, fabs, etc.)
+        externalDecls.insert("declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+        externalDecls.insert("declare double @llvm.sqrt.f64(double)")
+        externalDecls.insert("declare double @llvm.sin.f64(double)")
+        externalDecls.insert("declare double @llvm.cos.f64(double)")
+        externalDecls.insert("declare double @llvm.pow.f64(double, double)")
+        externalDecls.insert("declare double @llvm.exp.f64(double)")
+        externalDecls.insert("declare double @llvm.log.f64(double)")
+        externalDecls.insert("declare double @llvm.floor.f64(double)")
+        externalDecls.insert("declare double @llvm.ceil.f64(double)")
+        externalDecls.insert("declare double @llvm.round.f64(double)")
+        externalDecls.insert("declare double @llvm.fabs.f64(double)")
         externalDecls.insert("declare ptr @formatFloat(double, i64)")
-        externalDecls.insert("declare double @toFloat(i64)")
+        externalDecls.insert("declare double @toFloat(i64) readnone nounwind")
         externalDecls.insert("declare void @listSetFloat(ptr, i64, double)")
-        externalDecls.insert("declare double @listGetFloat(ptr, i64)")
+        externalDecls.insert("declare double @listGetFloat(ptr, i64) readonly nounwind")
         // Networking
         externalDecls.insert("declare i64 @tcpConnect(ptr, i64)")
         externalDecls.insert("declare i64 @tcpSend(i64, ptr)")
@@ -714,14 +855,20 @@ public final class LLVMCodeGen {
         knownIntTemps = []
         tempHeapKinds = [:]
         tempObjectTypes = [:]
+        intOnlyLists = []
+        compactIntLists = []
+        stackPromotedLists = [:]
+        stackPromotedListAllocas = [:]
+        stackPromotedCreateDests = []
         stackPromotedTemps = []
         stackOnlyTemps = []
         stackAllocaNames = [:]
 
-        // Pre-pass: build temp → type name mapping for value type objects
+        // Pre-pass: build temp → type name mapping for value type / typed layout objects
         // 1. Track function parameters with known reference types
         for (name, type) in function.parameters {
-            if case .reference(let typeName) = type, isValueType(typeName) {
+            if case .reference(let typeName) = type,
+               isValueType(typeName) || typedLayoutTypes.contains(typeName) {
                 tempObjectTypes[name] = typeName
                 tempObjectTypes["param.\(name)"] = typeName
             }
@@ -794,6 +941,27 @@ public final class LLVMCodeGen {
         // Compute temps that only ever hold stack-promoted pointers (exclude from ARC)
         stackOnlyTemps = computeStackOnlyTemps(function)
 
+        // Pre-pass: find globals that are loaded but never stored to — directly or
+        // transitively through called functions. Uses the module-level interprocedural
+        // analysis (transitiveGlobalStores) for DO-178C DAL A soundness.
+        do {
+            var loadedGlobals: Set<String> = []
+            for block in function.blocks {
+                for inst in block.instructions {
+                    if case .load(_, let src) = inst, src.hasPrefix("global.") {
+                        loadedGlobals.insert(src)
+                    }
+                }
+            }
+            let mayStore = transitiveGlobalStores[function.name] ?? []
+            // If any indirect call exists (sentinel "global.*"), no global is safe
+            if mayStore.contains("global.*") {
+                unmodifiedGlobals = []
+            } else {
+                unmodifiedGlobals = loadedGlobals.subtracting(mayStore)
+            }
+        }
+
         var lines: [String] = []
 
         // Detect if this is a method (name contains ".", e.g. "Point.sum")
@@ -864,6 +1032,326 @@ public final class LLVMCodeGen {
 
         // Alloca prologue block: emit allocas for all temps
         let allTemps = collectTemps(function)
+
+        // Post-collectTemps: identify int-only lists for typed array optimization
+        do {
+            var listTemps = Set<String>()
+            var listAppendArgs: [String: Set<String>] = [:]
+            for block in function.blocks {
+                for inst in block.instructions {
+                    if case .call(let dest, let callee, _) = inst,
+                       (callee == "listCreate" || callee == "listCreateFilled"),
+                       let d = dest {
+                        listTemps.insert(d)
+                    }
+                    if case .call(_, let callee, let args) = inst,
+                       callee == "listAppend", args.count >= 2 {
+                        listAppendArgs[args[0], default: []].insert(args[1])
+                    }
+                }
+            }
+            // Propagate list identity through store/load
+            var changed = true
+            while changed {
+                changed = false
+                for block in function.blocks {
+                    for inst in block.instructions {
+                        if case .store(let d, let s) = inst, listTemps.contains(s), !listTemps.contains(d) {
+                            listTemps.insert(d); changed = true
+                        }
+                        if case .load(let d, let s) = inst, listTemps.contains(s), !listTemps.contains(d) {
+                            listTemps.insert(d); changed = true
+                        }
+                    }
+                }
+            }
+            // Check: all appended values are known integers.
+            // Propagate listAppendArgs through load/store chains so aliases share append info.
+            var propagatedAppendArgs = listAppendArgs
+            var laChanged = true
+            while laChanged {
+                laChanged = false
+                for block in function.blocks {
+                    for inst in block.instructions {
+                        if case .store(let d, let s) = inst {
+                            if let args = propagatedAppendArgs[s], propagatedAppendArgs[d] == nil {
+                                propagatedAppendArgs[d] = args; laChanged = true
+                            }
+                        }
+                        if case .load(let d, let s) = inst {
+                            if let args = propagatedAppendArgs[s], propagatedAppendArgs[d] == nil {
+                                propagatedAppendArgs[d] = args; laChanged = true
+                            }
+                        }
+                    }
+                }
+            }
+            for lt in listTemps {
+                let appended = propagatedAppendArgs[lt] ?? []
+                // allSatisfy({}) on empty returns true — only mark as int-only if there
+                // are actual appends OR it's a listCreateFilled (initialized with ints).
+                if !appended.isEmpty {
+                    if appended.allSatisfy({ knownIntTemps.contains($0) }) {
+                        intOnlyLists.insert(lt)
+                    }
+                } else {
+                    // No appends tracked: only mark int-only if created via listCreateFilled
+                    // (which initializes with integer values). listCreate() with no appends
+                    // may hold any type — do NOT assume int-only.
+                    let isFilledList = function.blocks.contains { block in
+                        block.instructions.contains { inst in
+                            if case .call(let d, let callee, _) = inst,
+                               callee == "listCreateFilled", d == lt { return true }
+                            return false
+                        }
+                    }
+                    if isFilledList { intOnlyLists.insert(lt) }
+                }
+            }
+            // Propagate int-only status
+            changed = true
+            while changed {
+                changed = false
+                for block in function.blocks {
+                    for inst in block.instructions {
+                        if case .store(let d, let s) = inst, intOnlyLists.contains(s), !intOnlyLists.contains(d) {
+                            intOnlyLists.insert(d); changed = true
+                        }
+                        if case .load(let d, let s) = inst, intOnlyLists.contains(s), !intOnlyLists.contains(d) {
+                            intOnlyLists.insert(d); changed = true
+                        }
+                    }
+                }
+            }
+        }
+
+        // Compute compact int lists: intOnlyLists that can use i32 element storage.
+        // Requirements: created via listCreateFilled, never appended to or passed to
+        // functions that assume i64 element layout, never escapes to user-defined functions.
+        do {
+            let listBuiltins: Set<String> = [
+                "listGet", "listSet", "listSize", "listAppend", "listClear",
+                "listContains", "listRemoveAt", "listGetFloat", "listSetFloat",
+                "listCreateFilled", "listCreate", "toInt", "println", "print",
+                "toString", "__builtin_list_shift_left"
+            ]
+            var filledLists: Set<String> = []
+            var disqualified: Set<String> = []
+            for block in function.blocks {
+                for inst in block.instructions {
+                    // Track listCreateFilled destinations
+                    if case .call(let dest, let callee, _) = inst,
+                       callee == "listCreateFilled", let d = dest {
+                        filledLists.insert(d)
+                    }
+                    // Disqualify: listAppend (runtime realloc assumes i64)
+                    if case .call(_, let callee, let args) = inst,
+                       (callee == "listAppend" || callee == "listRemoveAt"),
+                       args.count >= 1 {
+                        disqualified.insert(args[0])
+                    }
+                    // Disqualify: passed to user-defined function (callee uses i64 GEP)
+                    if case .call(_, let callee, let args) = inst,
+                       !listBuiltins.contains(callee) {
+                        for arg in args where intOnlyLists.contains(arg) {
+                            disqualified.insert(arg)
+                        }
+                    }
+                    if case .callIndirect(_, _, let args) = inst {
+                        for arg in args where intOnlyLists.contains(arg) {
+                            disqualified.insert(arg)
+                        }
+                    }
+                    // Disqualify: stored to global (other functions use i64 layout)
+                    if case .store(let dest, let src) = inst,
+                       dest.hasPrefix("global."), intOnlyLists.contains(src) {
+                        disqualified.insert(src)
+                    }
+                }
+            }
+            // Propagate filledLists through copies
+            var changed = true
+            while changed {
+                changed = false
+                for block in function.blocks {
+                    for inst in block.instructions {
+                        if case .store(let d, let s) = inst, filledLists.contains(s), !filledLists.contains(d) {
+                            filledLists.insert(d); changed = true
+                        }
+                        if case .load(let d, let s) = inst, filledLists.contains(s), !filledLists.contains(d) {
+                            filledLists.insert(d); changed = true
+                        }
+                    }
+                }
+            }
+            // Propagate disqualification bidirectionally through copies
+            changed = true
+            while changed {
+                changed = false
+                for block in function.blocks {
+                    for inst in block.instructions {
+                        if case .store(let d, let s) = inst {
+                            if disqualified.contains(s), intOnlyLists.contains(d), !disqualified.contains(d) {
+                                disqualified.insert(d); changed = true
+                            }
+                            if disqualified.contains(d), intOnlyLists.contains(s), !disqualified.contains(s) {
+                                disqualified.insert(s); changed = true
+                            }
+                        }
+                        if case .load(let d, let s) = inst {
+                            if disqualified.contains(s), intOnlyLists.contains(d), !disqualified.contains(d) {
+                                disqualified.insert(d); changed = true
+                            }
+                            if disqualified.contains(d), intOnlyLists.contains(s), !disqualified.contains(s) {
+                                disqualified.insert(s); changed = true
+                            }
+                        }
+                    }
+                }
+            }
+            compactIntLists = intOnlyLists.intersection(filledLists).subtracting(disqualified)
+            // Assign alias scopes to each compact list origin for noalias metadata.
+            // Group aliases of the same list to the same scope.
+            compactListScopes = [:]
+            // Map each list origin (listCreateFilled dest) to a scope ID
+            var originScope: [String: Int] = [:]
+            for block in function.blocks {
+                for inst in block.instructions {
+                    if case .call(let dest, let callee, _) = inst,
+                       callee == "listCreateFilled", let d = dest,
+                       compactIntLists.contains(d) {
+                        let scopeId = aliasScopeCounter
+                        aliasScopeCounter += 2 // reserve 2 IDs: scope + scope list
+                        originScope[d] = scopeId
+                        compactListScopes[d] = scopeId
+                        emittedAliasScopes.append((scopeId: scopeId, name: d))
+                    }
+                }
+            }
+            // Propagate scope through load/store chains
+            var scopeChanged = true
+            while scopeChanged {
+                scopeChanged = false
+                for block in function.blocks {
+                    for inst in block.instructions {
+                        if case .store(let d, let s) = inst {
+                            if let sc = compactListScopes[s], compactListScopes[d] == nil, compactIntLists.contains(d) {
+                                compactListScopes[d] = sc; scopeChanged = true
+                            }
+                        }
+                        if case .load(let d, let s) = inst {
+                            if let sc = compactListScopes[s], compactListScopes[d] == nil, compactIntLists.contains(d) {
+                                compactListScopes[d] = sc; scopeChanged = true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Stack-promoted lists: compact int lists with constant size <= 64.
+        // Use stack allocas instead of heap allocation, enabling LLVM SROA.
+        do {
+            // Build constant value map: propagate constInt through store/load chains
+            var constValues: [String: Int64] = [:]
+            for block in function.blocks {
+                for inst in block.instructions {
+                    if case .constInt(let dest, let value) = inst {
+                        constValues[dest] = value
+                    }
+                }
+            }
+            // Propagate through store/load: val n: Int = 12 → store n t1 → constValues["n"] = 12
+            var cvChanged = true
+            while cvChanged {
+                cvChanged = false
+                for block in function.blocks {
+                    for inst in block.instructions {
+                        if case .store(let d, let s) = inst,
+                           let v = constValues[s], constValues[d] == nil {
+                            constValues[d] = v; cvChanged = true
+                        }
+                        if case .load(let d, let s) = inst,
+                           let v = constValues[s], constValues[d] == nil {
+                            constValues[d] = v; cvChanged = true
+                        }
+                    }
+                }
+            }
+            for block in function.blocks {
+                for inst in block.instructions {
+                    if case .call(let dest, let callee, let args) = inst,
+                       callee == "listCreateFilled", let d = dest, args.count >= 2,
+                       let sizeVal = constValues[args[0]], sizeVal > 0, sizeVal <= 64,
+                       compactIntLists.contains(d) {
+                        stackPromotedLists[d] = sizeVal
+                    }
+                }
+            }
+            // Record original create dests before disqualification/propagation
+            stackPromotedCreateDests = Set(stackPromotedLists.keys)
+            // Disqualify: lists used with operations that expect struct layout,
+            // or that escape the function (returned, stored to globals).
+            var spDisqualified: Set<String> = []
+            for block in function.blocks {
+                for inst in block.instructions {
+                    // listClear/listContains expect struct layout;
+                    // listAppend/listRemoveAt change size (stack arrays are fixed)
+                    if case .call(_, let callee, let args) = inst,
+                       (callee == "listClear" || callee == "listContains" ||
+                        callee == "listAppend" || callee == "listRemoveAt"),
+                       args.count >= 1 {
+                        spDisqualified.insert(args[0])
+                    }
+                    // Disqualify: passed to user-defined functions (expect struct layout)
+                    let spListBuiltins: Set<String> = [
+                        "listGet", "listSet", "listSize", "listAppend", "listClear",
+                        "listContains", "listRemoveAt", "listGetFloat", "listSetFloat",
+                        "listCreateFilled", "listCreate", "toInt", "toString", "println",
+                        "print", "__builtin_list_shift_left"
+                    ]
+                    if case .call(_, let callee, let args) = inst,
+                       !spListBuiltins.contains(callee) {
+                        for arg in args where stackPromotedLists[arg] != nil {
+                            spDisqualified.insert(arg)
+                        }
+                    }
+                    // Disqualify: stored to global
+                    if case .store(let dest, let src) = inst,
+                       dest.hasPrefix("global."), stackPromotedLists[src] != nil {
+                        spDisqualified.insert(src)
+                    }
+                }
+                // Returned lists can't be stack-promoted (dangling pointer)
+                if case .ret(let val) = block.terminator, let v = val {
+                    spDisqualified.insert(v)
+                }
+            }
+            for d in spDisqualified {
+                stackPromotedLists.removeValue(forKey: d)
+                stackPromotedCreateDests.remove(d)
+            }
+            // Propagate stack-promoted status through load/store chains
+            var spChanged = true
+            while spChanged {
+                spChanged = false
+                for block in function.blocks {
+                    for inst in block.instructions {
+                        if case .store(let d, let s) = inst,
+                           let size = stackPromotedLists[s], stackPromotedLists[d] == nil,
+                           compactIntLists.contains(d) {
+                            stackPromotedLists[d] = size; spChanged = true
+                        }
+                        if case .load(let d, let s) = inst,
+                           let size = stackPromotedLists[s], stackPromotedLists[d] == nil,
+                           compactIntLists.contains(d) {
+                            stackPromotedLists[d] = size; spChanged = true
+                        }
+                    }
+                }
+            }
+        }
+
         let hasAllocas = !allTemps.isEmpty || !function.parameters.isEmpty || isMethod
         let firstBlockLabel = function.blocks.first.map { llvmLabel($0.label) } ?? "body"
 
@@ -910,17 +1398,33 @@ public final class LLVMCodeGen {
                     lines.append("  store ptr null, ptr \(allocaName)")
                 }
             }
-            // Stack-promoted value type allocas (in prologue so they're safe inside loops)
+            // Stack-promoted object allocas (in prologue so they're safe inside loops)
             for dest in stackPromotedTemps {
                 if let typeName = tempObjectTypes[dest],
                    let decl = typeDecls[typeName] {
-                    let fieldCount = decl.fields.count
-                    let totalSize = 24 + fieldCount * 8
                     let rawName = dest.hasPrefix("%") ? String(dest.dropFirst()) : dest
                     let allocaName = "%\(rawName).stack"
-                    lines.append("  \(allocaName) = alloca i8, i64 \(totalSize)")
+                    if typedLayoutTypes.contains(typeName) {
+                        // Typed layout: use named struct alloca
+                        lines.append("  \(allocaName) = alloca %\(typeName)")
+                    } else {
+                        // Legacy: raw byte alloca
+                        let fieldCount = decl.fields.count
+                        let totalSize = 24 + fieldCount * 8
+                        lines.append("  \(allocaName) = alloca i8, i64 \(totalSize)")
+                    }
                     stackAllocaNames[dest] = allocaName
                 }
+            }
+            // Stack-promoted list allocas: raw [N x i32] arrays on the stack.
+            // These replace the list struct entirely — no refcount, no data pointer indirection.
+            // Only create allocas for original listCreateFilled dests, not propagated aliases.
+            for dest in stackPromotedCreateDests {
+                guard let size = stackPromotedLists[dest] else { continue }
+                let rawName = dest.hasPrefix("%") ? String(dest.dropFirst()) : dest
+                let allocaName = "%\(rawName).arr"
+                lines.append("  \(allocaName) = alloca [\(size) x i32]")
+                stackPromotedListAllocas[dest] = allocaName
             }
             // ARC flag allocas: i1 flags for heap temp tracking.
             // Each flag is initialized to 0 (not allocated) and set to 1 at creation sites.
@@ -935,13 +1439,14 @@ public final class LLVMCodeGen {
             }
             // Initialize process args and module globals (main only)
             if isMain {
-                lines.append("  call void @rockit_set_args(i32 %argc, ptr %argv)")
+                let prologueDbg = ", !dbg !\(defaultDebugLocationId())"
+                lines.append("  call void @rockit_set_args(i32 %argc, ptr %argv)\(prologueDbg)")
                 // Initialize module-level globals (enum singletons, etc.)
                 for (globalName, initFunc) in globalInitializers.sorted(by: { $0.key < $1.key }) {
                     let ty = moduleGlobals[globalName] ?? "ptr"
                     let funcName = llvmFunctionName(initFunc)
                     let tmp = nextSSA()
-                    lines.append("  \(tmp) = call \(ty) @\(funcName)()")
+                    lines.append("  \(tmp) = call \(ty) @\(funcName)()\(prologueDbg)")
                     lines.append("  store \(ty) \(tmp), ptr @\(globalName)")
                 }
             }
@@ -1090,9 +1595,8 @@ public final class LLVMCodeGen {
             }
             if let term = block.terminator {
                 let emitted = emitTerminator(term, returnType: function.returnType)
-                for line in emitted {
-                    lines.append("  \(line)")
-                }
+                let termDbg = debugSuffix(block: block.label, index: block.instructions.count)
+                appendWithDbg(emitted, dbg: termDbg, to: &lines)
             }
         }
 
@@ -1115,18 +1619,43 @@ public final class LLVMCodeGen {
         return id
     }
 
-    /// Look up the source span for a MIR instruction and return a `!dbg !N` suffix, or empty string.
+    /// Look up the source span for a MIR instruction and return a `!dbg !N` suffix.
+    /// Falls back to line 0 when no source map entry exists (required by LLVM verifier
+    /// when the function has a DISubprogram — all calls must have !dbg locations).
     private func debugSuffix(block: String, index: Int) -> String {
-        guard let function = currentMIRFunction,
-              let span = function.sourceMap.lookup(block: block, index: index) else {
-            return ""
+        if let function = currentMIRFunction,
+           let span = function.sourceMap.lookup(block: block, index: index) {
+            let locId = debugLocationId(for: span)
+            return ", !dbg !\(locId)"
         }
-        let locId = debugLocationId(for: span)
+        // Default location: line 0 in the current subprogram scope
+        let locId = defaultDebugLocationId()
         return ", !dbg !\(locId)"
     }
 
-    /// Append emitted lines to output, attaching !dbg to the last non-label line.
+    /// Get or create a default DILocation (line 0, column 0) for the current subprogram.
+    private func defaultDebugLocationId() -> Int {
+        let key = "0:0:\(currentSubprogramId)"
+        if let existing = locationCache[key] {
+            return existing
+        }
+        let id = debugMetadataCounter
+        debugMetadataCounter += 1
+        locationCache[key] = id
+        debugMetadataLines.append("!\(id) = !DILocation(line: 0, column: 0, scope: !\(currentSubprogramId))")
+        return id
+    }
+
+    /// Append emitted lines to output, attaching !dbg to lines that need it.
+    /// LLVM requires !dbg on every `call` instruction in functions with debug info.
+    /// Also attaches !dbg to the last non-label line for general traceability.
     private func appendWithDbg(_ emitted: [String], dbg: String, to lines: inout [String]) {
+        guard !dbg.isEmpty else {
+            for line in emitted {
+                lines.append("  \(line)")
+            }
+            return
+        }
         var lastNonLabel = emitted.count - 1
         while lastNonLabel >= 0 {
             let trimmed = emitted[lastNonLabel].trimmingCharacters(in: .whitespaces)
@@ -1134,7 +1663,14 @@ public final class LLVMCodeGen {
             lastNonLabel -= 1
         }
         for (i, line) in emitted.enumerated() {
-            lines.append("  \(line)\(i == lastNonLabel ? dbg : "")")
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let needsDbg = i == lastNonLabel || trimmed.contains(" call ") || trimmed.hasPrefix("call ")
+            // Don't double-attach if already has !dbg
+            if needsDbg && !line.contains("!dbg") {
+                lines.append("  \(line)\(dbg)")
+            } else {
+                lines.append("  \(line)")
+            }
         }
     }
 
@@ -1181,6 +1717,8 @@ public final class LLVMCodeGen {
                              .stringConcat(let d, _) where d == val,
                              .newObject(let d, _, _) where d == val:
                             return "ptr"
+                        case .numericConvert(let d, _, _, let to) where d == val:
+                            return to.llvmName
                         case .getField(let d, _, _) where d == val:
                             return "i64"  // Default; could look up field type
                         case .call(let d, let fn, _) where d == val:
@@ -1232,6 +1770,8 @@ public final class LLVMCodeGen {
                     }
                     inferParamFromOperand(l, type: lt, originMap: originMap, inferred: &inferred)
                     inferParamFromOperand(r, type: lt, originMap: originMap, inferred: &inferred)
+                case .numericConvert(_, let o, let from, _):
+                    inferParamFromOperand(o, type: from.llvmName, originMap: originMap, inferred: &inferred)
                 case .stringConcat(_, let parts):
                     for part in parts {
                         inferParamFromOperand(part, type: "ptr", originMap: originMap, inferred: &inferred)
@@ -1333,6 +1873,9 @@ public final class LLVMCodeGen {
         var tempTypes: [String: String] = [:]
         // Track store relationships: dest ← src
         var storeEdges: [(dest: String, src: String)] = []
+        // Literal constant temps — can be narrowed to match store target type
+        var constIntTemps: Set<String> = []
+        var constFloatTemps: Set<String> = []
         // Inferred parameter types
         let inferredParams = inferParamTypes(function)
 
@@ -1343,8 +1886,10 @@ public final class LLVMCodeGen {
                 case .constInt(let d, _):
                     tempTypes[d] = "i64"
                     knownIntTemps.insert(d)
+                    constIntTemps.insert(d)
                 case .constFloat(let d, _):
                     tempTypes[d] = "double"
+                    constFloatTemps.insert(d)
                 case .constBool(let d, _):
                     tempTypes[d] = "i1"
                 case .constString(let d, _):
@@ -1396,18 +1941,23 @@ public final class LLVMCodeGen {
                     storeEdges.append((dest: d, src: src))
                 case .store(let dest, let src):
                     storeEdges.append((dest: dest, src: src))
-                case .add(let d, _, _, let t), .sub(let d, _, _, let t),
-                     .mul(let d, _, _, let t), .div(let d, _, _, let t),
-                     .mod(let d, _, _, let t):
+                case .add(let d, let l, let r, let t), .sub(let d, let l, let r, let t),
+                     .mul(let d, let l, let r, let t), .div(let d, let l, let r, let t),
+                     .mod(let d, let l, let r, let t):
                     if case .string = t {
                         tempTypes[d] = "ptr"  // String add → string concat
                     } else {
-                        tempTypes[d] = llvmArithType(t)
-                        if case .int = t { knownIntTemps.insert(d) }
+                        let lt = llvmArithType(t)
+                        tempTypes[d] = lt
+                        if t.isInteger { knownIntTemps.insert(d) }
+                        // Create type edges from operands so constInt/constFloat
+                        // temps can be narrowed to match the arithmetic type
+                        storeEdges.append((dest: d, src: l))
+                        storeEdges.append((dest: d, src: r))
                     }
                 case .neg(let d, _, let t):
                     tempTypes[d] = llvmArithType(t)
-                    if case .int = t { knownIntTemps.insert(d) }
+                    if t.isInteger { knownIntTemps.insert(d) }
                 case .eq(let d, _, _, _), .neq(let d, _, _, _),
                      .lt(let d, _, _, _), .lte(let d, _, _, _),
                      .gt(let d, _, _, _), .gte(let d, _, _, _):
@@ -1468,7 +2018,7 @@ public final class LLVMCodeGen {
                     }
                     if !resolved { tempTypes[d] = "i64" }
                     // Track int fields so println can use _int instead of _any
-                    if let ft = fieldMIRType, case .int = ft { knownIntTemps.insert(d) }
+                    if let ft = fieldMIRType, ft.isInteger { knownIntTemps.insert(d) }
                 case .setField:
                     break
                 case .newObject(let d, _, _):
@@ -1481,6 +2031,9 @@ public final class LLVMCodeGen {
                     tempTypes[d] = "i1"
                 case .typeCast(let d, _, _):
                     tempTypes[d] = "ptr"
+                case .numericConvert(let d, _, _, let to):
+                    tempTypes[d] = to.llvmName
+                    if to.isInteger { knownIntTemps.insert(d) }
                 case .stringConcat(let d, _):
                     tempTypes[d] = "ptr"
                 case .tryBegin(_, let d):
@@ -1509,6 +2062,19 @@ public final class LLVMCodeGen {
                 }
                 if let destType = tempTypes[edge.dest], destType != "void" {
                     if tempTypes[edge.src] == nil || tempTypes[edge.src] == "void" {
+                        tempTypes[edge.src] = destType
+                        changed = true
+                    }
+                    // Literal temps adapt to their store target's type
+                    // e.g., constFloat 3.14 stored into Float alloca → narrow to "float"
+                    if constFloatTemps.contains(edge.src) && tempTypes[edge.src] != destType
+                       && (destType == "float" || destType == "double") {
+                        tempTypes[edge.src] = destType
+                        changed = true
+                    }
+                    // constInt 42 stored into Int32 alloca → narrow to "i32"
+                    if constIntTemps.contains(edge.src) && tempTypes[edge.src] != destType
+                       && (destType == "i8" || destType == "i16" || destType == "i32") {
                         tempTypes[edge.src] = destType
                         changed = true
                     }
@@ -1581,9 +2147,22 @@ public final class LLVMCodeGen {
     private func emitInstruction(_ inst: MIRInstruction) -> [String] {
         switch inst {
         case .constInt(let dest, let value):
-            return [storeToTemp(dest, value: "\(value)", type: "i64")]
+            // Use the register's actual type width if narrower than i64
+            let destType = registerTypes[dest] ?? "i64"
+            return [storeToTemp(dest, value: "\(value)", type: destType)]
 
         case .constFloat(let dest, let value):
+            // Check if this float constant flows into a float (32-bit) alloca
+            let destType = registerTypes[dest] ?? "double"
+            if destType == "float" {
+                // LLVM quirk: float constants use double-width hex encoding
+                // Convert to float first (for precision), then back to double for hex
+                let f32 = Float(value)
+                let asDouble = Double(f32)
+                let hexBits = String(asDouble.bitPattern, radix: 16, uppercase: true)
+                let llvmHex = "0x\(hexBits)"
+                return [storeToTemp(dest, value: llvmHex, type: "float")]
+            }
             let hexBits = String(value.bitPattern, radix: 16, uppercase: true)
             let llvmHex = "0x\(hexBits)"
             return [storeToTemp(dest, value: llvmHex, type: "double")]
@@ -1600,9 +2179,10 @@ public final class LLVMCodeGen {
             }
             // Use immortal RockitString global — no malloc, no free needed.
             // The global has refCount = INT64_MAX, so retain/release are no-ops.
+            // Skip ARC write barrier: immortal strings never need release.
             let rstrName = rockitStringGlobals[value]!
             trackHeapTemp(dest, kind: .string)
-            var result = emitOldTempRelease(dest: dest, kind: .string)
+            var result: [String] = []
             result.append(storeToTemp(dest, value: rstrName, type: "ptr"))
             if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
             return result
@@ -1642,6 +2222,8 @@ public final class LLVMCodeGen {
                     result.append(contentsOf: emitInlineStringRelease(oldTmp))
                 case .object:
                     result.append("call void @rockit_release(ptr \(oldTmp))")
+                case .typedObject(let tn):
+                    result.append("call void @__release_\(tn)(ptr \(oldTmp))")
                 default:
                     let oldI64 = nextSSA()
                     result.append("\(oldI64) = ptrtoint ptr \(oldTmp) to i64")
@@ -1654,6 +2236,8 @@ public final class LLVMCodeGen {
                     result.append(contentsOf: emitInlineStringRetain(tmp))
                 case .object:
                     result.append("call void @rockit_retain(ptr \(tmp))")
+                case .typedObject(let tn):
+                    result.append("call void @__retain_\(tn)(ptr \(tmp))")
                 default:
                     let newI64 = nextSSA()
                     result.append("\(newI64) = ptrtoint ptr \(tmp) to i64")
@@ -1680,6 +2264,8 @@ public final class LLVMCodeGen {
                     result.append(contentsOf: emitInlineStringRetain(tmp))
                 case .object:
                     result.append("call void @rockit_retain(ptr \(tmp))")
+                case .typedObject(let tn):
+                    result.append("call void @__retain_\(tn)(ptr \(tmp))")
                 default:
                     let tmpI64 = nextSSA()
                     result.append("\(tmpI64) = ptrtoint ptr \(tmp) to i64")
@@ -1721,7 +2307,15 @@ public final class LLVMCodeGen {
                 // and release the dest temp's old value (if any). This ensures the
                 // value survives if the global is overwritten, and handles loops
                 // where the dest temp is reused (each iteration releases the old).
+                // OPTIMIZATION: If this function never stores to this global,
+                // skip retain/release — the global's own reference keeps the object alive.
                 if src.hasPrefix("global."), srcType == "ptr" {
+                    if unmodifiedGlobals.contains(src) {
+                        return [
+                            "\(tmp) = load \(srcType), ptr \(addrOf(src))",
+                            "store \(srcType) \(tmp), ptr \(addrOf(dest))"
+                        ]
+                    }
                     let kind = tempHeapKinds[src] ?? .unknown
                     var result = emitOldTempRelease(dest: dest, kind: kind)
                     result.append("\(tmp) = load \(srcType), ptr \(addrOf(src))")
@@ -1730,6 +2324,8 @@ public final class LLVMCodeGen {
                         result.append(contentsOf: emitInlineStringRetain(tmp))
                     case .object:
                         result.append("call void @rockit_retain(ptr \(tmp))")
+                    case .typedObject(let tn):
+                        result.append("call void @__retain_\(tn)(ptr \(tmp))")
                     default:
                         let tmpI64 = nextSSA()
                         result.append("\(tmpI64) = ptrtoint ptr \(tmp) to i64")
@@ -1776,10 +2372,12 @@ public final class LLVMCodeGen {
             return emitBinaryArith("mul", "fmul", dest: dest, lhs: lhs, rhs: rhs, type: type)
 
         case .div(let dest, let lhs, let rhs, let type):
-            return emitBinaryArith("sdiv", "fdiv", dest: dest, lhs: lhs, rhs: rhs, type: type)
+            let intOp = type.isUnsigned ? "udiv" : "sdiv"
+            return emitBinaryArith(intOp, "fdiv", dest: dest, lhs: lhs, rhs: rhs, type: type)
 
         case .mod(let dest, let lhs, let rhs, let type):
-            return emitBinaryArith("srem", "frem", dest: dest, lhs: lhs, rhs: rhs, type: type)
+            let intOp = type.isUnsigned ? "urem" : "srem"
+            return emitBinaryArith(intOp, "frem", dest: dest, lhs: lhs, rhs: rhs, type: type)
 
         case .neg(let dest, let operand, let type):
             let lt = llvmArithType(type)
@@ -1804,13 +2402,17 @@ public final class LLVMCodeGen {
         case .neq(let dest, let lhs, let rhs, let type):
             return emitComparison("icmp ne", "fcmp one", dest: dest, lhs: lhs, rhs: rhs, type: type)
         case .lt(let dest, let lhs, let rhs, let type):
-            return emitComparison("icmp slt", "fcmp olt", dest: dest, lhs: lhs, rhs: rhs, type: type)
+            let cmp = type.isUnsigned ? "icmp ult" : "icmp slt"
+            return emitComparison(cmp, "fcmp olt", dest: dest, lhs: lhs, rhs: rhs, type: type)
         case .lte(let dest, let lhs, let rhs, let type):
-            return emitComparison("icmp sle", "fcmp ole", dest: dest, lhs: lhs, rhs: rhs, type: type)
+            let cmp = type.isUnsigned ? "icmp ule" : "icmp sle"
+            return emitComparison(cmp, "fcmp ole", dest: dest, lhs: lhs, rhs: rhs, type: type)
         case .gt(let dest, let lhs, let rhs, let type):
-            return emitComparison("icmp sgt", "fcmp ogt", dest: dest, lhs: lhs, rhs: rhs, type: type)
+            let cmp = type.isUnsigned ? "icmp ugt" : "icmp sgt"
+            return emitComparison(cmp, "fcmp ogt", dest: dest, lhs: lhs, rhs: rhs, type: type)
         case .gte(let dest, let lhs, let rhs, let type):
-            return emitComparison("icmp sge", "fcmp oge", dest: dest, lhs: lhs, rhs: rhs, type: type)
+            let cmp = type.isUnsigned ? "icmp uge" : "icmp sge"
+            return emitComparison(cmp, "fcmp oge", dest: dest, lhs: lhs, rhs: rhs, type: type)
 
         case .and(let dest, let lhs, let rhs):
             let tmp1 = nextSSA()
@@ -1964,6 +2566,9 @@ public final class LLVMCodeGen {
         case .stringConcat(let dest, let parts):
             return emitStringConcat(dest: dest, parts: parts)
 
+        case .numericConvert(let dest, let operand, let fromType, let toType):
+            return emitNumericConvert(dest: dest, operand: operand, from: fromType, to: toType)
+
         case .tryBegin(let catchLabel, _):
             // Push exception frame, call _setjmp, branch on result
             let bufTmp = nextSSA()
@@ -2036,6 +2641,46 @@ public final class LLVMCodeGen {
         if let tn = tempObjectTypes[temp], isValueType(tn) { return tn }
         if temp == "this", let cn = currentClassName, isValueType(cn) { return cn }
         return nil
+    }
+
+    /// Resolve the typed layout name for an object temp, if known.
+    private func typedLayoutForTemp(_ temp: String) -> String? {
+        if let tn = tempObjectTypes[temp], typedLayoutTypes.contains(tn) { return tn }
+        if temp == "this", let cn = currentClassName, typedLayoutTypes.contains(cn) { return cn }
+        return nil
+    }
+
+    /// Determine the HeapKind for a field's MIR type (for retain/release dispatch).
+    private func heapKindForFieldType(_ type: MIRType) -> HeapKind {
+        switch type {
+        case .string:
+            return .string
+        case .reference(let tn):
+            if typedLayoutTypes.contains(tn) { return .typedObject(tn) }
+            return .object
+        case .nullable(let inner):
+            return heapKindForFieldType(inner)
+        default:
+            return .unknown
+        }
+    }
+
+    /// Emit retain for a pointer field value based on its heap kind.
+    private func emitFieldRetain(_ val: String, kind: HeapKind) -> [String] {
+        switch kind {
+        case .string:
+            return emitInlineStringRetain(val)
+        case .object:
+            return ["call void @rockit_retain(ptr \(val))"]
+        case .typedObject(let tn):
+            return ["call void @__retain_\(tn)(ptr \(val))"]
+        default:
+            let i64Tmp = nextSSA()
+            return [
+                "\(i64Tmp) = ptrtoint ptr \(val) to i64",
+                "call void @rockit_retain_value(i64 \(i64Tmp))"
+            ]
+        }
     }
 
     // MARK: - Escape Analysis (Stack Promotion)
@@ -2270,11 +2915,12 @@ public final class LLVMCodeGen {
 
     /// The kind of heap object a temp holds (for choosing the correct release function).
     private enum HeapKind {
-        case string   // rockit_string_release
-        case object   // rockit_release
-        case list     // rockit_list_release
-        case map      // rockit_map_release
-        case unknown  // rockit_release_value (type unknown at compile time, e.g. getField/listGet/mapGet)
+        case string         // rockit_string_release
+        case object         // rockit_release (generic RockitObject)
+        case typedObject(String)  // __release_TypeName (compact typed layout)
+        case list           // rockit_list_release
+        case map            // rockit_map_release
+        case unknown        // rockit_release_value (type unknown at compile time)
     }
 
     /// Temps that own newly-allocated heap objects and need release at function exit.
@@ -2291,11 +2937,58 @@ public final class LLVMCodeGen {
     private var knownIntTemps: Set<String> = []
     /// Maps temp name → last assigned HeapKind, so .store barriers use type-specific release.
     private var tempHeapKinds: [String: HeapKind] = [:]
+    /// Globals that this function loads but never stores to (directly or transitively).
+    /// Safe to skip retain/release on load — the global's own reference keeps the object alive.
+    private var unmodifiedGlobals: Set<String> = []
+    /// Module-level: for each function, the set of globals it may store to (directly or
+    /// transitively through called functions). Computed once before emitting any function.
+    private var transitiveGlobalStores: [String: Set<String>] = [:]
 
     /// Maps heap temp name → flag alloca name (e.g., "t5" → "%t5.arc").
     /// Flag allocas are i1 values initialized to 0 in the prologue, set to 1 at creation sites.
     /// Used by emitARCCleanup to conditionally release only initialized temps.
     private var arcFlags: [String: String] = [:]
+
+    /// Temps that hold lists where all appended values are known to be integers.
+    /// For these lists, listGet results are knownInt and listClear can skip ARC release.
+    private var intOnlyLists: Set<String> = []
+    /// Subset of intOnlyLists that can use i32 element storage instead of i64.
+    /// Requires: created via listCreateFilled, never passed to listAppend/listRemoveAt,
+    /// never escapes to user-defined functions. Halves memory and enables NEON vectorization.
+    private var compactIntLists: Set<String> = []
+    /// Maps compact list temps to their alias scope metadata ID.
+    /// Enables LLVM to prove distinct lists don't alias, allowing load-store reordering
+    /// and vectorization of copy loops.
+    private var compactListScopes: [String: Int] = [:]
+    /// Next available metadata ID for alias scopes (starts after reserved TBAA/debug IDs).
+    private var aliasScopeCounter: Int = 500
+    /// All emitted alias scopes across all functions: [(scopeId, listName)]
+    private var emittedAliasScopes: [(scopeId: Int, name: String)] = []
+
+    /// Lists eligible for stack promotion: temp name → known constant element count.
+    /// Stack-promoted lists use LLVM allocas instead of malloc/calloc, eliminating
+    /// pointer indirection (no list struct, direct array access).
+    /// Requirements: compact int list + listCreateFilled with constant size <= 64.
+    private var stackPromotedLists: [String: Int64] = [:]
+
+    /// Maps stack-promoted list temps to their LLVM alloca name.
+    /// Only populated for original listCreateFilled dests (not propagated temps).
+    private var stackPromotedListAllocas: [String: String] = [:]
+
+    /// Set of temps that are original listCreateFilled destinations for stack-promoted lists.
+    /// Used to distinguish create sites (need alloca) from propagated aliases (share the alloca).
+    private var stackPromotedCreateDests: Set<String> = []
+
+    /// Returns the alias scope / noalias metadata suffix for a compact list element access.
+    /// E.g., ", !alias.scope !501, !noalias !700"
+    private func compactListAliasSuffix(_ listTemp: String) -> String {
+        guard let scopeId = compactListScopes[listTemp],
+              emittedAliasScopes.count > 1 else { return "" }
+        let scopeListId = scopeId + 1
+        guard let idx = emittedAliasScopes.firstIndex(where: { $0.scopeId == scopeId }) else { return "" }
+        let noaliasId = 700 + idx
+        return ", !alias.scope !\(scopeListId), !noalias !\(noaliasId)"
+    }
 
     /// Emit a "temp write barrier" for a retained heap value.
     /// If the temp already holds a retained value (flag is set), release the old value first.
@@ -2409,6 +3102,12 @@ public final class LLVMCodeGen {
                 "\(ptr) = inttoptr i64 \(valI64) to ptr",
                 "call void @rockit_retain(ptr \(ptr))"
             ]
+        case .typedObject(let tn):
+            let ptr = nextSSA()
+            return [
+                "\(ptr) = inttoptr i64 \(valI64) to ptr",
+                "call void @__retain_\(tn)(ptr \(ptr))"
+            ]
         default:
             return ["call void @rockit_retain_value(i64 \(valI64))"]
         }
@@ -2431,6 +3130,15 @@ public final class LLVMCodeGen {
             return [
                 "\(ptr) = inttoptr i64 \(val) to ptr",
                 "call void @rockit_release(ptr \(ptr))"
+            ]
+        case .typedObject(let tn):
+            if llType == "ptr" {
+                return ["call void @__release_\(tn)(ptr \(val))"]
+            }
+            let ptr = nextSSA()
+            return [
+                "\(ptr) = inttoptr i64 \(val) to ptr",
+                "call void @__release_\(tn)(ptr \(ptr))"
             ]
         default:
             if llType == "ptr" {
@@ -2481,6 +3189,8 @@ public final class LLVMCodeGen {
             lines.append(contentsOf: emitInlineStringRelease(oldPtr).map { "  " + $0 })
         case .object:
             lines.append("  call void @rockit_release(ptr \(oldPtr))")
+        case .typedObject(let tn):
+            lines.append("  call void @__release_\(tn)(ptr \(oldPtr))")
         case .list:
             lines.append("  call void @rockit_list_release(ptr \(oldPtr))")
         case .map:
@@ -2566,6 +3276,8 @@ public final class LLVMCodeGen {
                 lines.append(contentsOf: emitInlineStringRelease(valPtr).map { "  " + $0 })
             case .object:
                 lines.append("  call void @rockit_release(ptr \(valPtr))")
+            case .typedObject(let tn):
+                lines.append("  call void @__release_\(tn)(ptr \(valPtr))")
             case .list:
                 lines.append("  call void @rockit_list_release(ptr \(valPtr))")
             case .map:
@@ -2677,6 +3389,65 @@ public final class LLVMCodeGen {
         ]
     }
 
+    // MARK: - Numeric Conversion
+
+    private func emitNumericConvert(dest: String, operand: String, from: MIRType, to: MIRType) -> [String] {
+        let fromLLVM = from.llvmName
+        let toLLVM = to.llvmName
+
+        // Same type — just copy
+        if fromLLVM == toLLVM {
+            let tmp = nextSSA()
+            return [
+                "\(tmp) = load \(fromLLVM), ptr \(addrOf(operand))",
+                storeToTemp(dest, value: tmp, type: toLLVM)
+            ]
+        }
+
+        let tmp1 = nextSSA()
+        let tmp2 = nextSSA()
+        var lines: [String] = []
+        lines.append("\(tmp1) = load \(fromLLVM), ptr \(addrOf(operand))")
+
+        let fromIsInt = from.isInteger
+        let toIsInt = to.isInteger
+        let fromIsFloat = from.isFloatingPoint
+        let toIsFloat = to.isFloatingPoint
+
+        if fromIsInt && toIsInt {
+            // Integer-to-integer conversion
+            if from.bitWidth < to.bitWidth {
+                // Widening
+                let op = from.isUnsigned ? "zext" : "sext"
+                lines.append("\(tmp2) = \(op) \(fromLLVM) \(tmp1) to \(toLLVM)")
+            } else {
+                // Narrowing (or same-width signed↔unsigned — bitcast via trunc/zext)
+                lines.append("\(tmp2) = trunc \(fromLLVM) \(tmp1) to \(toLLVM)")
+            }
+        } else if fromIsFloat && toIsFloat {
+            // Float-to-float conversion
+            if from.bitWidth < to.bitWidth {
+                lines.append("\(tmp2) = fpext \(fromLLVM) \(tmp1) to \(toLLVM)")
+            } else {
+                lines.append("\(tmp2) = fptrunc \(fromLLVM) \(tmp1) to \(toLLVM)")
+            }
+        } else if fromIsInt && toIsFloat {
+            // Int-to-float
+            let op = from.isUnsigned ? "uitofp" : "sitofp"
+            lines.append("\(tmp2) = \(op) \(fromLLVM) \(tmp1) to \(toLLVM)")
+        } else if fromIsFloat && toIsInt {
+            // Float-to-int
+            let op = to.isUnsigned ? "fptoui" : "fptosi"
+            lines.append("\(tmp2) = \(op) \(fromLLVM) \(tmp1) to \(toLLVM)")
+        } else {
+            // Fallback: bitcast
+            lines.append("\(tmp2) = bitcast \(fromLLVM) \(tmp1) to \(toLLVM)")
+        }
+
+        lines.append(storeToTemp(dest, value: tmp2, type: toLLVM))
+        return lines
+    }
+
     // MARK: - Comparison Helper
 
     private func emitComparison(
@@ -2707,7 +3478,8 @@ public final class LLVMCodeGen {
         if isEqOrNeq {
             let isKnownIntType: Bool
             switch type {
-            case .int, .int32, .int64, .bool:
+            case .int, .int8, .int16, .int32, .int64,
+                 .uint8, .uint16, .uint32, .uint64, .bool:
                 isKnownIntType = true
             default:
                 isKnownIntType = false
@@ -2720,14 +3492,15 @@ public final class LLVMCodeGen {
             let hasStringOperand = lhsIsPtr || rhsIsPtr
 
             if !hasStringOperand && (isKnownIntType || hasKnownIntOperand) {
-                // Direct integer comparison — no function call
+                // Direct integer comparison — use the correct integer width
+                let lt = llvmArithType(type)
                 let tmp1 = nextSSA()
                 let tmp2 = nextSSA()
                 let tmp3 = nextSSA()
                 return [
-                    "\(tmp1) = load i64, ptr \(addrOf(lhs))",
-                    "\(tmp2) = load i64, ptr \(addrOf(rhs))",
-                    "\(tmp3) = \(intCmp) i64 \(tmp1), \(tmp2)",
+                    "\(tmp1) = load \(lt), ptr \(addrOf(lhs))",
+                    "\(tmp2) = load \(lt), ptr \(addrOf(rhs))",
+                    "\(tmp3) = \(intCmp) \(lt) \(tmp1), \(tmp2)",
                     storeToTemp(dest, value: tmp3, type: "i1")
                 ]
             }
@@ -2940,9 +3713,11 @@ public final class LLVMCodeGen {
         // Inline toInt() for known integer arguments — avoids runtime call
         if function == "toInt", let dest = dest, args.count == 1 {
             let arg = args[0]
-            if knownIntTemps.contains(arg) {
+            let argType = typeOf(arg)
+            // Fast path: if arg is already i64 (known int, or listGet result), just copy.
+            // This eliminates the runtime toInt call for integer-typed temporaries.
+            if knownIntTemps.contains(arg) || argType == "i64" {
                 let tmp = nextSSA()
-                let argType = typeOf(arg)
                 var lines: [String] = []
                 lines.append("\(tmp) = load \(argType), ptr \(addrOf(arg))")
                 lines.append(storeToTemp(dest, value: tmp, type: "i64"))
@@ -2952,7 +3727,6 @@ public final class LLVMCodeGen {
             }
             // DAL A: known string argument — call rockit_string_to_int directly.
             // Bounded digit parser (max 19 iterations), no is_likely_string_ptr syscall.
-            let argType = typeOf(arg)
             if argType == "ptr" {
                 let tmp = nextSSA()
                 let resultTmp = nextSSA()
@@ -2964,6 +3738,126 @@ public final class LLVMCodeGen {
                 knownIntTemps.insert(dest)
                 return lines
             }
+        }
+
+        // Inline toFloat() as sitofp — eliminates external call, makes callers pure arithmetic.
+        // This enables LLVM to see that functions like evalA() are readnone (no memory access),
+        // allowing data pointer hoisting past such calls in inner loops (e.g., spectralnorm).
+        if function == "toFloat", let dest = dest, args.count == 1 {
+            let arg = args[0]
+            var lines: [String] = []
+            let argType = typeOf(arg)
+            let intVal = nextSSA()
+            if argType == "i64" || knownIntTemps.contains(arg) {
+                lines.append("\(intVal) = load i64, ptr \(addrOf(arg))")
+            } else {
+                let raw = nextSSA()
+                lines.append("\(raw) = load \(argType), ptr \(addrOf(arg))")
+                if argType == "ptr" {
+                    lines.append("\(intVal) = ptrtoint ptr \(raw) to i64")
+                } else {
+                    lines.append("\(intVal) = sext \(argType) \(raw) to i64")
+                }
+            }
+            let result = nextSSA()
+            lines.append("\(result) = sitofp i64 \(intVal) to double")
+            lines.append(storeToTemp(dest, value: result, type: "double"))
+            registerTypes[dest] = "double"
+            return lines
+        }
+
+        // Inline math functions as LLVM intrinsics — eliminates function call overhead,
+        // compiles to single hardware instructions (e.g., fsqrt, fabs).
+        let mathIntrinsics: [String: String] = [
+            "rockit_math_sqrt": "llvm.sqrt.f64",
+            "rockit_math_sin": "llvm.sin.f64",
+            "rockit_math_cos": "llvm.cos.f64",
+            "rockit_math_exp": "llvm.exp.f64",
+            "rockit_math_log": "llvm.log.f64",
+            "rockit_math_floor": "llvm.floor.f64",
+            "rockit_math_ceil": "llvm.ceil.f64",
+            "rockit_math_round": "llvm.round.f64",
+            "rockit_math_abs": "llvm.fabs.f64",
+        ]
+        if let intrinsic = mathIntrinsics[function], let dest = dest, args.count == 1 {
+            var lines: [String] = []
+            let arg = args[0]
+            let argType = typeOf(arg)
+            let argVal = nextSSA()
+            lines.append("\(argVal) = load \(argType), ptr \(addrOf(arg))")
+            var dblVal = argVal
+            if argType != "double" {
+                let conv = nextSSA()
+                if argType == "i64" {
+                    lines.append("\(conv) = sitofp i64 \(argVal) to double")
+                } else if argType == "ptr" {
+                    let iconv = nextSSA()
+                    lines.append("\(iconv) = ptrtoint ptr \(argVal) to i64")
+                    lines.append("\(conv) = sitofp i64 \(iconv) to double")
+                } else {
+                    lines.append("\(conv) = bitcast \(argType) \(argVal) to double")
+                }
+                dblVal = conv
+            }
+            let result = nextSSA()
+            lines.append("\(result) = call double @\(intrinsic)(double \(dblVal))")
+            lines.append(storeToTemp(dest, value: result, type: "double"))
+            registerTypes[dest] = "double"
+            return lines
+        }
+
+        // Inline rockit_math_pow as llvm.pow.f64 (2 args)
+        if function == "rockit_math_pow", let dest = dest, args.count == 2 {
+            var lines: [String] = []
+            let baseArg = args[0], expArg = args[1]
+            let baseVal = nextSSA()
+            lines.append("\(baseVal) = load \(typeOf(baseArg)), ptr \(addrOf(baseArg))")
+            var baseDbl = baseVal
+            if typeOf(baseArg) != "double" {
+                let c = nextSSA()
+                lines.append("\(c) = sitofp i64 \(baseVal) to double")
+                baseDbl = c
+            }
+            let expVal = nextSSA()
+            lines.append("\(expVal) = load \(typeOf(expArg)), ptr \(addrOf(expArg))")
+            var expDbl = expVal
+            if typeOf(expArg) != "double" {
+                let c = nextSSA()
+                lines.append("\(c) = sitofp i64 \(expVal) to double")
+                expDbl = c
+            }
+            let result = nextSSA()
+            lines.append("\(result) = call double @llvm.pow.f64(double \(baseDbl), double \(expDbl))")
+            lines.append(storeToTemp(dest, value: result, type: "double"))
+            registerTypes[dest] = "double"
+            return lines
+        }
+
+        // Inline rockit_math_atan2 as atan2 libm call (already declared, but ensure double args)
+        if function == "rockit_math_atan2", let dest = dest, args.count == 2 {
+            var lines: [String] = []
+            let yArg = args[0], xArg = args[1]
+            let yVal = nextSSA()
+            lines.append("\(yVal) = load \(typeOf(yArg)), ptr \(addrOf(yArg))")
+            var yDbl = yVal
+            if typeOf(yArg) != "double" {
+                let c = nextSSA()
+                lines.append("\(c) = sitofp i64 \(yVal) to double")
+                yDbl = c
+            }
+            let xVal = nextSSA()
+            lines.append("\(xVal) = load \(typeOf(xArg)), ptr \(addrOf(xArg))")
+            var xDbl = xVal
+            if typeOf(xArg) != "double" {
+                let c = nextSSA()
+                lines.append("\(c) = sitofp i64 \(xVal) to double")
+                xDbl = c
+            }
+            let result = nextSSA()
+            lines.append("\(result) = call double @atan2(double \(yDbl), double \(xDbl))")
+            lines.append(storeToTemp(dest, value: result, type: "double"))
+            registerTypes[dest] = "double"
+            return lines
         }
 
         var lines: [String] = []
@@ -3064,6 +3958,8 @@ public final class LLVMCodeGen {
                     lines.append(contentsOf: emitInlineStringRelease(oldPtr).map { "  " + $0 })
                 case .object:
                     lines.append("  call void @rockit_release(ptr \(oldPtr))")
+                case .typedObject(let tn):
+                    lines.append("  call void @__release_\(tn)(ptr \(oldPtr))")
                 case .list:
                     lines.append("  call void @rockit_list_release(ptr \(oldPtr))")
                 case .map:
@@ -3142,6 +4038,8 @@ public final class LLVMCodeGen {
                     }
                 case .call(let dest, let callee, _):
                     guard let dest = dest else { continue }
+                    // Stack-promoted lists don't need ARC — they live on the stack
+                    if stackPromotedCreateDests.contains(dest) { continue }
                     if heapKindForFunction(callee) != nil {
                         dests.insert(dest)
                     }
@@ -3195,6 +4093,8 @@ public final class LLVMCodeGen {
     /// Returns nil if the function is not a remappable collection builtin.
     private func emitRemappedCollectionBuiltin(dest: String?, function: String, args: [String]) -> [String]? {
         switch function {
+        case "__builtin_list_shift_left":
+            return emitBuiltinListShiftLeft(args: args)
         case "listCreate":
             return emitNativeCollectionCreate(dest: dest, nativeFn: "rockit_list_create", kind: .list)
         case "listCreateFilled":
@@ -3301,7 +4201,7 @@ public final class LLVMCodeGen {
         let capAddr = nextSSA()
         lines.append("\(capAddr) = getelementptr i8, ptr \(listPtr), i64 16")
         let cap = nextSSA()
-        lines.append("\(cap) = load i64, ptr \(capAddr), !tbaa !3")
+        lines.append("\(cap) = load i64, ptr \(capAddr), !tbaa !8")
         let ok = nextSSA()
         lines.append("\(ok) = icmp ult i64 \(size), \(cap)")
         let fastLabel = "append.fast.\(labelCounter)"
@@ -3313,14 +4213,16 @@ public final class LLVMCodeGen {
         // Fast path: store element and increment size
         lines.append("\(fastLabel):")
         if !isKnownInt {
-            // Unknown type — must retain (may be a heap pointer)
+            // Unknown type — must retain (may be a heap pointer like a string).
+            // Without retain, the original temp gets released at scope exit,
+            // leaving a dangling pointer in the list (use-after-free).
             lines.append("call void @rockit_retain_value(i64 \(val))")
         }
-        // else: Turbo — known integer, skip retain (no-op for non-heap values)
+        // Known integer: skip retain — integers are never heap pointers.
         let dataAddr = nextSSA()
         lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
         let dataPtr = nextSSA()
-        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !9")
         let elemAddr = nextSSA()
         lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(size)")
         lines.append("store i64 \(val), ptr \(elemAddr), !tbaa !4")
@@ -3332,9 +4234,10 @@ public final class LLVMCodeGen {
         // Slow path: call runtime for reallocation
         lines.append("\(slowLabel):")
         if isKnownInt {
-            // Turbo: known integer — use append_int (skips retain)
+            // Known integer: use append_int (skips retain — integers aren't heap pointers)
             lines.append("call void @rockit_list_append_int(ptr \(listPtr), i64 \(val))")
         } else {
+            // Unknown type: use full append with retain (prevents use-after-free)
             lines.append("call void @rockit_list_append(ptr \(listPtr), i64 \(val))")
         }
         lines.append("br label %\(doneLabel)")
@@ -3358,34 +4261,68 @@ public final class LLVMCodeGen {
 
     /// Inline listGet: GEP into RockitList.data[index]
     /// RockitList layout: refCount(0) size(8) capacity(16) data*(24)
+    /// When boundsChecksEnabled=false, skips bounds check for C-equivalent speed.
     private func emitInlineListGet(dest: String?, args: [String]) -> [String] {
         guard let dest = dest, args.count >= 2 else { return [] }
         var lines: [String] = []
         let listPtr = loadArgAsPtr(args[0], lines: &lines)
         let idx = loadArgAsI64(args[1], lines: &lines)
 
-        // Bounds check: idx < size
-        let sizeAddr = nextSSA()
-        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
-        let size = nextSSA()
-        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
-        let ok = nextSSA()
-        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
-        let okLabel = "list.ok.\(labelCounter)"
-        let oobLabel = "list.oob.\(labelCounter)"
-        labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
-        lines.append("\(oobLabel):")
-        let oobIdx = internString("list index out of bounds")
-        lines.append("call void @rockit_panic(ptr \(oobIdx))")
-        lines.append("unreachable")
-        lines.append("\(okLabel):")
+        // Stack-promoted path: direct GEP into [N x i32] alloca — no struct indirection.
+        // 2 instructions instead of 4, 1 load instead of 2.
+        if stackPromotedLists[args[0]] != nil {
+            let elemAddr = nextSSA()
+            lines.append("\(elemAddr) = getelementptr i32, ptr \(listPtr), i64 \(idx)")
+            let i32val = nextSSA()
+            lines.append("\(i32val) = load i32, ptr \(elemAddr)")
+            let result = nextSSA()
+            lines.append("\(result) = sext i32 \(i32val) to i64")
+            lines.append(storeToTemp(dest, value: result, type: "i64"))
+            registerTypes[dest] = "i64"
+            knownIntTemps.insert(dest)
+            return lines
+        }
+
+        if boundsChecksEnabled {
+            // Bounds check: idx < size
+            let sizeAddr = nextSSA()
+            lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+            let size = nextSSA()
+            lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+            let ok = nextSSA()
+            lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+            let okLabel = "list.ok.\(labelCounter)"
+            let oobLabel = "list.oob.\(labelCounter)"
+            labelCounter += 1
+            lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
+            lines.append("\(oobLabel):")
+            let oobIdx = internString("list index out of bounds")
+            lines.append("call void @rockit_panic(ptr \(oobIdx))")
+            lines.append("unreachable")
+            lines.append("\(okLabel):")
+        }
 
         // Inline GEP: data pointer at offset 24, then index into data array
         let dataAddr = nextSSA()
         lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
         let dataPtr = nextSSA()
-        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !9")
+
+        // Compact i32 lists: load i32 element and sign-extend to i64
+        if compactIntLists.contains(args[0]) {
+            let aliasMD = compactListAliasSuffix(args[0])
+            let elemAddr = nextSSA()
+            lines.append("\(elemAddr) = getelementptr i32, ptr \(dataPtr), i64 \(idx)")
+            let i32val = nextSSA()
+            lines.append("\(i32val) = load i32, ptr \(elemAddr), !tbaa !4\(aliasMD)")
+            let result = nextSSA()
+            lines.append("\(result) = sext i32 \(i32val) to i64")
+            lines.append(storeToTemp(dest, value: result, type: "i64"))
+            registerTypes[dest] = "i64"
+            knownIntTemps.insert(dest)
+            return lines
+        }
+
         let elemAddr = nextSSA()
         lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
         let result = nextSSA()
@@ -3393,12 +4330,72 @@ public final class LLVMCodeGen {
 
         lines.append(storeToTemp(dest, value: result, type: "i64"))
         registerTypes[dest] = "i64"
-        // Do NOT mark as knownInt — list elements can be strings/objects
+        // For int-only lists, mark result as knownInt (enables typed println dispatch,
+        // skips ARC retain/release on the returned value)
+        if intOnlyLists.contains(args[0]) {
+            knownIntTemps.insert(dest)
+        }
         return lines
     }
 
     /// Inline listSet: GEP into RockitList.data[index]
-    /// Skips ARC retain/release since stored values are integers in hot paths
+    /// Skips ARC retain/release since stored values are integers in hot paths.
+    /// When boundsChecksEnabled=false, skips bounds check for C-equivalent speed.
+    /// Emit inline memmove for __builtin_list_shift_left(list, startIdx, endIdx).
+    /// Shifts elements [startIdx+1..endIdx) down by one position.
+    /// Equivalent to: memmove(&data[start], &data[start+1], (end - start) * elemSize)
+    private func emitBuiltinListShiftLeft(args: [String]) -> [String] {
+        guard args.count >= 3 else { return [] }
+        var lines: [String] = []
+        let listPtr = loadArgAsPtr(args[0], lines: &lines)
+        let startIdx = loadArgAsI64(args[1], lines: &lines)
+        let endIdx = loadArgAsI64(args[2], lines: &lines)
+
+        let dataPtr: String
+        let elemSize: Int
+        let elemType: String
+
+        // Stack-promoted path: listPtr IS the array — no struct, no data pointer load.
+        if stackPromotedLists[args[0]] != nil {
+            dataPtr = listPtr
+            elemSize = 4
+            elemType = "i32"
+        } else {
+            // Load data pointer from list struct (offset 24)
+            let dataAddr = nextSSA()
+            lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
+            let dp = nextSSA()
+            lines.append("\(dp) = load ptr, ptr \(dataAddr), !tbaa !9")
+            dataPtr = dp
+
+            // Determine element size based on compact list status
+            let isCompact = compactIntLists.contains(args[0])
+            elemSize = isCompact ? 4 : 8
+            elemType = isCompact ? "i32" : "i64"
+        }
+
+        // Compute destination pointer: &data[startIdx]
+        let dstPtr = nextSSA()
+        lines.append("\(dstPtr) = getelementptr \(elemType), ptr \(dataPtr), i64 \(startIdx)")
+
+        // Compute source pointer: &data[startIdx + 1]
+        let srcOffset = nextSSA()
+        lines.append("\(srcOffset) = add i64 \(startIdx), 1")
+        let srcPtr = nextSSA()
+        lines.append("\(srcPtr) = getelementptr \(elemType), ptr \(dataPtr), i64 \(srcOffset)")
+
+        // Compute byte count: (endIdx - startIdx) * elemSize
+        let count = nextSSA()
+        lines.append("\(count) = sub i64 \(endIdx), \(startIdx)")
+        let bytes = nextSSA()
+        lines.append("\(bytes) = mul i64 \(count), \(elemSize)")
+
+        // Call llvm.memmove (handles overlapping regions safely)
+        lines.append("call void @llvm.memmove.p0.p0.i64(ptr \(dstPtr), ptr \(srcPtr), i64 \(bytes), i1 false)")
+
+        return lines
+    }
+
     private func emitInlineListSet(args: [String]) -> [String] {
         guard args.count >= 3 else { return [] }
         var lines: [String] = []
@@ -3422,28 +4419,52 @@ public final class LLVMCodeGen {
             val = valTmp
         }
 
-        // Bounds check: idx < size
-        let sizeAddr = nextSSA()
-        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
-        let size = nextSSA()
-        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
-        let ok = nextSSA()
-        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
-        let okLabel = "list.ok.\(labelCounter)"
-        let oobLabel = "list.oob.\(labelCounter)"
-        labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
-        lines.append("\(oobLabel):")
-        let oobIdx = internString("list index out of bounds")
-        lines.append("call void @rockit_panic(ptr \(oobIdx))")
-        lines.append("unreachable")
-        lines.append("\(okLabel):")
+        // Stack-promoted path: direct GEP into [N x i32] alloca — no struct indirection.
+        if stackPromotedLists[args[0]] != nil {
+            let elemAddr = nextSSA()
+            lines.append("\(elemAddr) = getelementptr i32, ptr \(listPtr), i64 \(idx)")
+            let truncVal = nextSSA()
+            lines.append("\(truncVal) = trunc i64 \(val) to i32")
+            lines.append("store i32 \(truncVal), ptr \(elemAddr)")
+            return lines
+        }
+
+        if boundsChecksEnabled {
+            // Bounds check: idx < size
+            let sizeAddr = nextSSA()
+            lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+            let size = nextSSA()
+            lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+            let ok = nextSSA()
+            lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+            let okLabel = "list.ok.\(labelCounter)"
+            let oobLabel = "list.oob.\(labelCounter)"
+            labelCounter += 1
+            lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
+            lines.append("\(oobLabel):")
+            let oobIdx = internString("list index out of bounds")
+            lines.append("call void @rockit_panic(ptr \(oobIdx))")
+            lines.append("unreachable")
+            lines.append("\(okLabel):")
+        }
 
         // Inline GEP store
         let dataAddr = nextSSA()
         lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
         let dataPtr = nextSSA()
-        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !9")
+
+        // Compact i32 lists: truncate i64 value to i32 and store with i32 GEP
+        if compactIntLists.contains(args[0]) {
+            let aliasMD = compactListAliasSuffix(args[0])
+            let elemAddr = nextSSA()
+            lines.append("\(elemAddr) = getelementptr i32, ptr \(dataPtr), i64 \(idx)")
+            let truncVal = nextSSA()
+            lines.append("\(truncVal) = trunc i64 \(val) to i32")
+            lines.append("store i32 \(truncVal), ptr \(elemAddr), !tbaa !4\(aliasMD)")
+            return lines
+        }
+
         let elemAddr = nextSSA()
         lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
         lines.append("store i64 \(val), ptr \(elemAddr), !tbaa !4")
@@ -3455,6 +4476,15 @@ public final class LLVMCodeGen {
     private func emitInlineListSize(dest: String?, args: [String]) -> [String] {
         guard let dest = dest, args.count >= 1 else { return [] }
         var lines: [String] = []
+
+        // Stack-promoted path: size is a compile-time constant.
+        if let size = stackPromotedLists[args[0]] {
+            lines.append(storeToTemp(dest, value: "\(size)", type: "i64"))
+            registerTypes[dest] = "i64"
+            knownIntTemps.insert(dest)
+            return lines
+        }
+
         let listPtr = loadArgAsPtr(args[0], lines: &lines)
 
         let sizeAddr = nextSSA()
@@ -3464,38 +4494,42 @@ public final class LLVMCodeGen {
 
         lines.append(storeToTemp(dest, value: result, type: "i64"))
         registerTypes[dest] = "i64"
+        knownIntTemps.insert(dest)
         return lines
     }
 
     /// Inline listGetFloat: GEP into RockitList.data[index], load i64, bitcast to double
+    /// When boundsChecksEnabled=false, skips bounds check for C-equivalent speed.
     private func emitInlineListGetFloat(dest: String?, args: [String]) -> [String] {
         guard let dest = dest, args.count >= 2 else { return [] }
         var lines: [String] = []
         let listPtr = loadArgAsPtr(args[0], lines: &lines)
         let idx = loadArgAsI64(args[1], lines: &lines)
 
-        // Bounds check: idx < size
-        let sizeAddr = nextSSA()
-        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
-        let size = nextSSA()
-        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
-        let ok = nextSSA()
-        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
-        let okLabel = "list.ok.\(labelCounter)"
-        let oobLabel = "list.oob.\(labelCounter)"
-        labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
-        lines.append("\(oobLabel):")
-        let oobIdx = internString("list index out of bounds")
-        lines.append("call void @rockit_panic(ptr \(oobIdx))")
-        lines.append("unreachable")
-        lines.append("\(okLabel):")
+        if boundsChecksEnabled {
+            // Bounds check: idx < size
+            let sizeAddr = nextSSA()
+            lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+            let size = nextSSA()
+            lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+            let ok = nextSSA()
+            lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+            let okLabel = "list.ok.\(labelCounter)"
+            let oobLabel = "list.oob.\(labelCounter)"
+            labelCounter += 1
+            lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
+            lines.append("\(oobLabel):")
+            let oobIdx = internString("list index out of bounds")
+            lines.append("call void @rockit_panic(ptr \(oobIdx))")
+            lines.append("unreachable")
+            lines.append("\(okLabel):")
+        }
 
         // Inline GEP: data pointer at offset 24, then index into data array
         let dataAddr = nextSSA()
         lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
         let dataPtr = nextSSA()
-        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !9")
         let elemAddr = nextSSA()
         lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
         let rawVal = nextSSA()
@@ -3510,6 +4544,7 @@ public final class LLVMCodeGen {
     }
 
     /// Inline listSetFloat: bitcast double to i64, GEP into RockitList.data[index], store
+    /// When boundsChecksEnabled=false, skips bounds check for C-equivalent speed.
     private func emitInlineListSetFloat(args: [String]) -> [String] {
         guard args.count >= 3 else { return [] }
         var lines: [String] = []
@@ -3522,28 +4557,30 @@ public final class LLVMCodeGen {
         let val = nextSSA()
         lines.append("\(val) = bitcast double \(valTmp) to i64")
 
-        // Bounds check: idx < size
-        let sizeAddr = nextSSA()
-        lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
-        let size = nextSSA()
-        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
-        let ok = nextSSA()
-        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
-        let okLabel = "list.ok.\(labelCounter)"
-        let oobLabel = "list.oob.\(labelCounter)"
-        labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
-        lines.append("\(oobLabel):")
-        let oobIdx = internString("list index out of bounds")
-        lines.append("call void @rockit_panic(ptr \(oobIdx))")
-        lines.append("unreachable")
-        lines.append("\(okLabel):")
+        if boundsChecksEnabled {
+            // Bounds check: idx < size
+            let sizeAddr = nextSSA()
+            lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+            let size = nextSSA()
+            lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+            let ok = nextSSA()
+            lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+            let okLabel = "list.ok.\(labelCounter)"
+            let oobLabel = "list.oob.\(labelCounter)"
+            labelCounter += 1
+            lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
+            lines.append("\(oobLabel):")
+            let oobIdx = internString("list index out of bounds")
+            lines.append("call void @rockit_panic(ptr \(oobIdx))")
+            lines.append("unreachable")
+            lines.append("\(okLabel):")
+        }
 
         // Inline GEP store
         let dataAddr = nextSSA()
         lines.append("\(dataAddr) = getelementptr i8, ptr \(listPtr), i64 24")
         let dataPtr = nextSSA()
-        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !3")
+        lines.append("\(dataPtr) = load ptr, ptr \(dataAddr), !tbaa !9")
         let elemAddr = nextSSA()
         lines.append("\(elemAddr) = getelementptr i64, ptr \(dataPtr), i64 \(idx)")
         lines.append("store i64 \(val), ptr \(elemAddr), !tbaa !4")
@@ -3559,28 +4596,32 @@ public final class LLVMCodeGen {
         let arrPtr = loadArgAsPtr(args[0], lines: &lines)
         let idx = loadArgAsI64(args[1], lines: &lines)
 
-        // Bounds check: idx < size (unsigned comparison catches negative indices too)
-        let sizeAddr = nextSSA()
-        lines.append("\(sizeAddr) = getelementptr i8, ptr \(arrPtr), i64 8")
-        let size = nextSSA()
-        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
-        let ok = nextSSA()
-        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
-        let okLabel = "ba.ok.\(labelCounter)"
-        let oobLabel = "ba.oob.\(labelCounter)"
-        labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
-        lines.append("\(oobLabel):")
-        let oobMsg = internString("byteArray index out of bounds")
-        lines.append("call void @rockit_panic(ptr \(oobMsg))")
-        lines.append("unreachable")
-        lines.append("\(okLabel):")
+        if boundsChecksEnabled {
+            let sizeAddr = nextSSA()
+            lines.append("\(sizeAddr) = getelementptr i8, ptr \(arrPtr), i64 0")
+            let size = nextSSA()
+            lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+            let ok = nextSSA()
+            lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+            let okLabel = "ba.ok.\(labelCounter)"
+            let oobLabel = "ba.oob.\(labelCounter)"
+            labelCounter += 1
+            lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
+            lines.append("\(oobLabel):")
+            let oobMsg = internString("byteArray index out of bounds")
+            lines.append("call void @rockit_panic(ptr \(oobMsg))")
+            lines.append("unreachable")
+            lines.append("\(okLabel):")
+        }
 
-        // Load byte at offset 16 + index
-        let dataBase = nextSSA()
-        lines.append("\(dataBase) = getelementptr i8, ptr \(arrPtr), i64 16")
+        // ByteArray layout: {size(0), capacity(8), data*(16)}
+        // Load data pointer, then index into it
+        let dataPtrAddr = nextSSA()
+        lines.append("\(dataPtrAddr) = getelementptr i8, ptr \(arrPtr), i64 16")
+        let dataPtr = nextSSA()
+        lines.append("\(dataPtr) = load ptr, ptr \(dataPtrAddr), !tbaa !3")
         let byteAddr = nextSSA()
-        lines.append("\(byteAddr) = getelementptr i8, ptr \(dataBase), i64 \(idx)")
+        lines.append("\(byteAddr) = getelementptr i8, ptr \(dataPtr), i64 \(idx)")
         let byteVal = nextSSA()
         lines.append("\(byteVal) = load i8, ptr \(byteAddr), !tbaa !4")
         let result = nextSSA()
@@ -3592,7 +4633,7 @@ public final class LLVMCodeGen {
         return lines
     }
 
-    /// Inline byteArraySet: truncate value to i8, store at arr+16+index
+    /// Inline byteArraySet: truncate value to i8, store via data pointer
     private func emitInlineByteArraySet(args: [String]) -> [String] {
         guard args.count >= 3 else { return [] }
         var lines: [String] = []
@@ -3600,30 +4641,33 @@ public final class LLVMCodeGen {
         let idx = loadArgAsI64(args[1], lines: &lines)
         let val = loadArgAsI64(args[2], lines: &lines)
 
-        // Bounds check
-        let sizeAddr = nextSSA()
-        lines.append("\(sizeAddr) = getelementptr i8, ptr \(arrPtr), i64 8")
-        let size = nextSSA()
-        lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
-        let ok = nextSSA()
-        lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
-        let okLabel = "ba.ok.\(labelCounter)"
-        let oobLabel = "ba.oob.\(labelCounter)"
-        labelCounter += 1
-        lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
-        lines.append("\(oobLabel):")
-        let oobMsg = internString("byteArray index out of bounds")
-        lines.append("call void @rockit_panic(ptr \(oobMsg))")
-        lines.append("unreachable")
-        lines.append("\(okLabel):")
+        if boundsChecksEnabled {
+            let sizeAddr = nextSSA()
+            lines.append("\(sizeAddr) = getelementptr i8, ptr \(arrPtr), i64 0")
+            let size = nextSSA()
+            lines.append("\(size) = load i64, ptr \(sizeAddr), !tbaa !3")
+            let ok = nextSSA()
+            lines.append("\(ok) = icmp ult i64 \(idx), \(size)")
+            let okLabel = "ba.ok.\(labelCounter)"
+            let oobLabel = "ba.oob.\(labelCounter)"
+            labelCounter += 1
+            lines.append("br i1 \(ok), label %\(okLabel), label %\(oobLabel), !prof !5")
+            lines.append("\(oobLabel):")
+            let oobMsg = internString("byteArray index out of bounds")
+            lines.append("call void @rockit_panic(ptr \(oobMsg))")
+            lines.append("unreachable")
+            lines.append("\(okLabel):")
+        }
 
-        // Truncate and store
+        // ByteArray layout: {size(0), capacity(8), data*(16)}
         let truncVal = nextSSA()
         lines.append("\(truncVal) = trunc i64 \(val) to i8")
-        let dataBase = nextSSA()
-        lines.append("\(dataBase) = getelementptr i8, ptr \(arrPtr), i64 16")
+        let dataPtrAddr = nextSSA()
+        lines.append("\(dataPtrAddr) = getelementptr i8, ptr \(arrPtr), i64 16")
+        let dataPtr = nextSSA()
+        lines.append("\(dataPtr) = load ptr, ptr \(dataPtrAddr), !tbaa !3")
         let byteAddr = nextSSA()
-        lines.append("\(byteAddr) = getelementptr i8, ptr \(dataBase), i64 \(idx)")
+        lines.append("\(byteAddr) = getelementptr i8, ptr \(dataPtr), i64 \(idx)")
         lines.append("store i8 \(truncVal), ptr \(byteAddr), !tbaa !4")
 
         return lines
@@ -3633,8 +4677,57 @@ public final class LLVMCodeGen {
     private func emitListCreateFilled(dest: String?, args: [String]) -> [String] {
         guard let dest = dest, args.count >= 2 else { return [] }
         var lines: [String] = []
+
+        // Stack-promoted path: use the pre-allocated [N x i32] alloca.
+        // No malloc, no struct, no refcount — just a raw array on the stack.
+        if let allocaName = stackPromotedListAllocas[dest],
+           let size = stackPromotedLists[dest] {
+            // Zero-initialize the stack array
+            let bytes = size * 4  // N * sizeof(i32)
+            externalDecls.insert("declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)")
+            lines.append("call void @llvm.memset.p0.i64(ptr \(allocaName), i8 0, i64 \(bytes), i1 false)")
+            // Store the alloca address as the "list pointer" for downstream access
+            lines.append(storeToTemp(dest, value: allocaName, type: "ptr"))
+            registerTypes[dest] = "ptr"
+            // No ARC flag — stack allocas don't need retain/release
+            return lines
+        }
+
         let size = loadArgAsI64(args[0], lines: &lines)
         let value = loadArgAsI64(args[1], lines: &lines)
+
+        // Compact i32 path: inline list creation with i32 element storage.
+        // Halves memory footprint and enables NEON 4-wide vectorization.
+        if compactIntLists.contains(dest) {
+            externalDecls.insert("declare ptr @calloc(i64, i64)")
+            // Allocate RockitList struct: {refCount(i64), size(i64), capacity(i64), data*(ptr)}
+            let listPtr = nextSSA()
+            lines.append("\(listPtr) = call ptr @malloc(i64 32)")
+            // refCount = 1
+            lines.append("store i64 1, ptr \(listPtr)")
+            // size
+            let sizeAddr = nextSSA()
+            lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+            lines.append("store i64 \(size), ptr \(sizeAddr)")
+            // capacity = size
+            let capAddr = nextSSA()
+            lines.append("\(capAddr) = getelementptr i8, ptr \(listPtr), i64 16")
+            lines.append("store i64 \(size), ptr \(capAddr)")
+            // Allocate i32 data array using calloc (zero-initialized)
+            let dataPtr = nextSSA()
+            lines.append("\(dataPtr) = call ptr @calloc(i64 \(size), i64 4)")
+            // Store data pointer
+            let dataField = nextSSA()
+            lines.append("\(dataField) = getelementptr i8, ptr \(listPtr), i64 24")
+            lines.append("store ptr \(dataPtr), ptr \(dataField)")
+            lines.append(storeToTemp(dest, value: listPtr, type: "ptr"))
+            registerTypes[dest] = "ptr"
+            if let flag = arcFlags[dest] {
+                lines.append("store i1 true, ptr \(flag)")
+            }
+            return lines
+        }
+
         let result = nextSSA()
         lines.append("\(result) = call ptr @rockit_list_create_filled(i64 \(size), i64 \(value))")
         lines.append(storeToTemp(dest, value: result, type: "ptr"))
@@ -3686,13 +4779,25 @@ public final class LLVMCodeGen {
         return lines
     }
 
-    /// Emit a native listClear call (void, single ptr arg)
+    /// Emit listClear. In performance mode (boundsChecksEnabled=false), inline
+    /// as a simple size=0 store — avoids the O(n) rockit_release_value loop for
+    /// integer-only lists. In safety mode, call the runtime for proper ARC release.
     private func emitNativeListClear(args: [String]) -> [String] {
         guard args.count >= 1 else { return [] }
         var lines: [String] = []
         let listPtr = loadArgAsPtr(args[0], lines: &lines)
-        externalDecls.insert("declare void @rockit_list_clear(ptr)")
-        lines.append("call void @rockit_list_clear(ptr \(listPtr))")
+
+        if boundsChecksEnabled {
+            // Safety mode: call runtime to properly release all elements
+            externalDecls.insert("declare void @rockit_list_clear(ptr)")
+            lines.append("call void @rockit_list_clear(ptr \(listPtr))")
+        } else {
+            // Performance mode: inline — just set size=0 (skip release loop)
+            // RockitList layout: refCount(0) size(8) capacity(16) data*(24)
+            let sizeAddr = nextSSA()
+            lines.append("\(sizeAddr) = getelementptr i8, ptr \(listPtr), i64 8")
+            lines.append("store i64 0, ptr \(sizeAddr), !tbaa !3")
+        }
         return lines
     }
 
@@ -3867,10 +4972,26 @@ public final class LLVMCodeGen {
                 "\(tmp) = load i64, ptr \(addrOf(arg))",
                 "call void @\(prefix)_any(i64 \(tmp))"
             ]
+        case "i8", "i16", "i32":
+            // Narrow integers — sign-extend to i64 for println
+            let ext = nextSSA()
+            return [
+                "\(tmp) = load \(argType), ptr \(addrOf(arg))",
+                "\(ext) = sext \(argType) \(tmp) to i64",
+                "call void @\(prefix)_int(i64 \(ext))"
+            ]
         case "double":
             return [
                 "\(tmp) = load double, ptr \(addrOf(arg))",
                 "call void @\(prefix)_float(double \(tmp))"
+            ]
+        case "float":
+            // Float32 — extend to double for println
+            let ext = nextSSA()
+            return [
+                "\(tmp) = load float, ptr \(addrOf(arg))",
+                "\(ext) = fpext float \(tmp) to double",
+                "call void @\(prefix)_float(double \(ext))"
             ]
         case "i1":
             return [
@@ -3923,6 +5044,28 @@ public final class LLVMCodeGen {
             var result = emitOldTempRelease(dest: dest, kind: .string)
             result.append("\(tmp) = load double, ptr \(addrOf(arg))")
             result.append("\(resultTmp) = call ptr @rockit_float_to_string(double \(tmp))")
+            result.append(storeToTemp(dest, value: resultTmp, type: "ptr"))
+            if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
+            return result
+        case "i8", "i16", "i32":
+            // Narrow integers — sign-extend to i64, then int_to_string
+            let ext = nextSSA()
+            trackHeapTemp(dest, kind: .string)
+            var result = emitOldTempRelease(dest: dest, kind: .string)
+            result.append("\(tmp) = load \(argType), ptr \(addrOf(arg))")
+            result.append("\(ext) = sext \(argType) \(tmp) to i64")
+            result.append("\(resultTmp) = call ptr @rockit_int_to_string(i64 \(ext))")
+            result.append(storeToTemp(dest, value: resultTmp, type: "ptr"))
+            if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
+            return result
+        case "float":
+            // Float32 — extend to double, then float_to_string
+            let ext = nextSSA()
+            trackHeapTemp(dest, kind: .string)
+            var result = emitOldTempRelease(dest: dest, kind: .string)
+            result.append("\(tmp) = load float, ptr \(addrOf(arg))")
+            result.append("\(ext) = fpext float \(tmp) to double")
+            result.append("\(resultTmp) = call ptr @rockit_float_to_string(double \(ext))")
             result.append(storeToTemp(dest, value: resultTmp, type: "ptr"))
             if let flag = arcFlags[dest] { result.append("store i1 1, ptr \(flag)") }
             return result
@@ -4372,6 +5515,89 @@ public final class LLVMCodeGen {
         return lines
     }
 
+    // MARK: - Typed Layout Retain/Release Functions
+
+    /// Emit a retain function for typed layout objects: null-check, immortal-check, increment refCount.
+    private func emitTypedRetainFunction(typeName: String) -> String {
+        return """
+        define void @__retain_\(typeName)(ptr %obj) {
+        entry:
+          %nn = icmp ne ptr %obj, null
+          br i1 %nn, label %do_retain, label %done
+        do_retain:
+          %rc_ptr = getelementptr %\(typeName), ptr %obj, i32 0, i32 0
+          %rc = load i64, ptr %rc_ptr
+          %immortal = icmp eq i64 %rc, 9223372036854775807
+          br i1 %immortal, label %done, label %inc
+        inc:
+          %new_rc = add i64 %rc, 1
+          store i64 %new_rc, ptr %rc_ptr
+          br label %done
+        done:
+          ret void
+        }
+        """
+    }
+
+    /// Emit a release function for typed layout objects: decrement refCount, release pointer fields, free.
+    private func emitTypedReleaseFunction(typeName: String, fields: [(name: String, llvmType: String, mirType: MIRType)]) -> String {
+        var lines: [String] = []
+        lines.append("define void @__release_\(typeName)(ptr %obj) {")
+        lines.append("entry:")
+        lines.append("  %nn = icmp ne ptr %obj, null")
+        lines.append("  br i1 %nn, label %do_release, label %done")
+        lines.append("do_release:")
+        lines.append("  %rc_ptr = getelementptr %\(typeName), ptr %obj, i32 0, i32 0")
+        lines.append("  %rc = load i64, ptr %rc_ptr")
+        lines.append("  %immortal = icmp eq i64 %rc, 9223372036854775807")
+        lines.append("  br i1 %immortal, label %done, label %dec")
+        lines.append("dec:")
+        lines.append("  %new_rc = sub i64 %rc, 1")
+        lines.append("  store i64 %new_rc, ptr %rc_ptr")
+        lines.append("  %dead = icmp eq i64 %new_rc, 0")
+        lines.append("  br i1 %dead, label %dealloc, label %done")
+        lines.append("dealloc:")
+
+        // Release each pointer field before freeing
+        for (i, field) in fields.enumerated() {
+            guard i > 0 else { continue }  // skip refCount at index 0
+            guard field.llvmType == "ptr" else { continue }
+
+            let fieldLabel = "rel_f\(i)"
+            let skipLabel = "skip_f\(i)"
+            lines.append("  %f\(i)_ptr = getelementptr %\(typeName), ptr %obj, i32 0, i32 \(i)")
+            lines.append("  %f\(i)_val = load ptr, ptr %f\(i)_ptr")
+            lines.append("  %f\(i)_nn = icmp ne ptr %f\(i)_val, null")
+            lines.append("  br i1 %f\(i)_nn, label %\(fieldLabel), label %\(skipLabel)")
+            lines.append("\(fieldLabel):")
+
+            // Dispatch to the correct release based on field type
+            let releaseKind = heapKindForFieldType(field.mirType)
+            switch releaseKind {
+            case .string:
+                lines.append("  call void @rockit_string_release(ptr %f\(i)_val)")
+            case .typedObject(let tn):
+                lines.append("  call void @__release_\(tn)(ptr %f\(i)_val)")
+            case .object:
+                lines.append("  call void @rockit_release(ptr %f\(i)_val)")
+            default:
+                let i64Name = "%f\(i)_i64"
+                lines.append("  \(i64Name) = ptrtoint ptr %f\(i)_val to i64")
+                lines.append("  call void @rockit_release_value(i64 \(i64Name))")
+            }
+
+            lines.append("  br label %\(skipLabel)")
+            lines.append("\(skipLabel):")
+        }
+
+        lines.append("  call void @free(ptr %obj)")
+        lines.append("  br label %done")
+        lines.append("done:")
+        lines.append("  ret void")
+        lines.append("}")
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: - Object Operations
 
     /// Look up field index from type declarations.
@@ -4406,24 +5632,90 @@ public final class LLVMCodeGen {
         let fieldCount = typeDecls[typeName]?.fields.count ?? args.count
         let valueType = isValueType(typeName)
         let isStackPromoted = stackPromotedTemps.contains(dest)
+        let hasTypedLayout = typedLayoutTypes.contains(typeName)
 
-        if valueType {
-            // Allocate: stack or heap
+        if hasTypedLayout {
+            // Typed layout: compact struct { i64 refCount, field1, field2, ... }
+            let structFields = typedStructFields[typeName]!
             let objTmp: String
             if isStackPromoted, let stackAlloca = stackAllocaNames[dest] {
-                // Stack allocation: use pre-allocated prologue alloca
                 objTmp = stackAlloca
-                // Skip header initialization — value types use inline GEP at
-                // hardcoded offsets, ARC is skipped, and escape analysis
-                // guarantees no runtime function receives the object.
-                // Header fields (typeName, RC, fieldCount, ptrFieldBits)
-                // are never read for stack-promoted value types.
+            } else {
+                // malloc(sizeof(%TypeName))
+                let sizeTmp = nextSSA()
+                lines.append("\(sizeTmp) = ptrtoint ptr getelementptr (%\(typeName), ptr null, i32 1) to i64")
+                objTmp = nextSSA()
+                lines.append("\(objTmp) = call ptr @malloc(i64 \(sizeTmp))")
+                // refCount = 1
+                let rcGep = nextSSA()
+                lines.append("\(rcGep) = getelementptr %\(typeName), ptr \(objTmp), i32 0, i32 0")
+                lines.append("store i64 1, ptr \(rcGep)")
+            }
+
+            // Store fields using typed GEP at natural widths
+            for (i, arg) in args.enumerated() {
+                let fieldIdx = i + 1  // field 0 is refCount
+                let fieldLLType = structFields[fieldIdx].llvmType
+                let fieldMIR = structFields[fieldIdx].mirType
+                let argType = typeOf(arg)
+                let valTmp = nextSSA()
+                lines.append("\(valTmp) = load \(argType), ptr \(addrOf(arg))")
+
+                // Convert to field type if needed
+                let storeVal: String
+                let storeType: String
+                if argType == fieldLLType {
+                    storeVal = valTmp
+                    storeType = fieldLLType
+                } else if fieldLLType == "ptr" && argType == "i64" {
+                    let castTmp = nextSSA()
+                    lines.append("\(castTmp) = inttoptr i64 \(valTmp) to ptr")
+                    storeVal = castTmp
+                    storeType = "ptr"
+                } else if fieldLLType == "i64" && argType == "i1" {
+                    let extTmp = nextSSA()
+                    lines.append("\(extTmp) = zext i1 \(valTmp) to i64")
+                    storeVal = extTmp
+                    storeType = "i64"
+                } else if fieldLLType == "i64" && argType == "double" {
+                    let castTmp = nextSSA()
+                    lines.append("\(castTmp) = bitcast double \(valTmp) to i64")
+                    storeVal = castTmp
+                    storeType = "i64"
+                } else {
+                    storeVal = valTmp
+                    storeType = argType
+                }
+
+                let fieldGep = nextSSA()
+                lines.append("\(fieldGep) = getelementptr %\(typeName), ptr \(objTmp), i32 0, i32 \(fieldIdx)")
+                lines.append("store \(storeType) \(storeVal), ptr \(fieldGep)")
+
+                // Retain pointer fields (strings, objects)
+                if !valueType && fieldLLType == "ptr" {
+                    let retainKind = heapKindForFieldType(fieldMIR)
+                    lines.append(contentsOf: emitFieldRetain(storeVal, kind: retainKind))
+                }
+            }
+
+            let heapKind: HeapKind = valueType ? .object : .typedObject(typeName)
+            if isStackPromoted {
+                lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
+            } else {
+                lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: heapKind))
+                lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
+                trackHeapTemp(dest, kind: heapKind)
+                if let flag = arcFlags[dest] { lines.append("store i1 1, ptr \(flag)") }
+            }
+        } else if valueType {
+            // Legacy value type path (shouldn't reach here since all value types also have typed layout)
+            let objTmp: String
+            if isStackPromoted, let stackAlloca = stackAllocaNames[dest] {
+                objTmp = stackAlloca
             } else {
                 objTmp = nextSSA()
                 lines.append("\(objTmp) = call ptr @rockit_object_alloc(ptr \(typeNameGlobal), i32 \(fieldCount))")
             }
-
-            // Value type: inline GEP field stores, no ARC retain (all fields are primitives)
             for (i, arg) in args.enumerated() {
                 let argType = typeOf(arg)
                 let valTmp = nextSSA()
@@ -4440,22 +5732,17 @@ public final class LLVMCodeGen {
                 } else {
                     valI64 = valTmp
                 }
-                // Inline GEP: offset 24 (header) + i * 8
                 let fieldOffset = 24 + i * 8
                 let fieldGep = nextSSA()
                 lines.append("\(fieldGep) = getelementptr i8, ptr \(objTmp), i64 \(fieldOffset)")
                 lines.append("store i64 \(valI64), ptr \(fieldGep)")
             }
-
             if !isStackPromoted {
-                // ptrFieldBits = 0 (no pointer fields) — stack path sets this in header init above
                 let bitsGep = nextSSA()
                 lines.append("\(bitsGep) = getelementptr i8, ptr \(objTmp), i64 20")
                 lines.append("store i32 0, ptr \(bitsGep)")
             }
-
             if isStackPromoted {
-                // Stack promoted: just store the pointer, no ARC tracking
                 lines.append(storeToTemp(dest, value: objTmp, type: "ptr"))
             } else {
                 lines.append(contentsOf: emitOldTempRelease(dest: dest, kind: .object))
@@ -4544,7 +5831,37 @@ public final class LLVMCodeGen {
             idx = found ?? 0
         }
 
-        // Value type fast path: inline GEP, no function call, no ARC
+        // Typed layout fast path: typed GEP at natural widths
+        if let tlName = typedLayoutForTemp(object), let fields = typedStructFields[tlName] {
+            let fieldIdx = idx + 1  // field 0 is refCount
+            let fieldLLType = fields[fieldIdx].llvmType
+            let fieldGep = nextSSA()
+            lines.append("\(fieldGep) = getelementptr %\(tlName), ptr \(objTmp), i32 0, i32 \(fieldIdx)")
+            let rawTmp = nextSSA()
+            lines.append("\(rawTmp) = load \(fieldLLType), ptr \(fieldGep)")
+
+            let destType = typeOf(dest)
+            if fieldLLType == destType {
+                lines.append(storeToTemp(dest, value: rawTmp, type: destType))
+            } else if fieldLLType == "ptr" && destType == "i64" {
+                let castTmp = nextSSA()
+                lines.append("\(castTmp) = ptrtoint ptr \(rawTmp) to i64")
+                lines.append(storeToTemp(dest, value: castTmp, type: "i64"))
+            } else if fieldLLType == "i64" && destType == "i1" {
+                let castTmp = nextSSA()
+                lines.append("\(castTmp) = trunc i64 \(rawTmp) to i1")
+                lines.append(storeToTemp(dest, value: castTmp, type: "i1"))
+            } else if fieldLLType == "i64" && destType == "double" {
+                let castTmp = nextSSA()
+                lines.append("\(castTmp) = bitcast i64 \(rawTmp) to double")
+                lines.append(storeToTemp(dest, value: castTmp, type: "double"))
+            } else {
+                lines.append(storeToTemp(dest, value: rawTmp, type: fieldLLType))
+            }
+            return lines
+        }
+
+        // Legacy value type fast path: inline GEP, no function call, no ARC
         let vtName = valueTypeForTemp(object)
         if vtName != nil {
             let fieldOffset = 24 + idx * 8
@@ -4615,7 +5932,81 @@ public final class LLVMCodeGen {
             idx = found ?? 0
         }
 
-        // Value type fast path: inline GEP store, no ARC
+        // Typed layout fast path: typed GEP store at natural widths
+        if let tlName = typedLayoutForTemp(object), let fields = typedStructFields[tlName] {
+            let fieldIdx = idx + 1  // field 0 is refCount
+            let fieldLLType = fields[fieldIdx].llvmType
+            let fieldMIR = fields[fieldIdx].mirType
+            let valType = typeOf(value)
+            let valTmp = nextSSA()
+            lines.append("\(valTmp) = load \(valType), ptr \(addrOf(value))")
+
+            // Convert to field type if needed
+            let storeVal: String
+            let storeType: String
+            if valType == fieldLLType {
+                storeVal = valTmp
+                storeType = fieldLLType
+            } else if fieldLLType == "ptr" && valType == "i64" {
+                let castTmp = nextSSA()
+                lines.append("\(castTmp) = inttoptr i64 \(valTmp) to ptr")
+                storeVal = castTmp
+                storeType = "ptr"
+            } else if fieldLLType == "i64" && valType == "i1" {
+                let extTmp = nextSSA()
+                lines.append("\(extTmp) = zext i1 \(valTmp) to i64")
+                storeVal = extTmp
+                storeType = "i64"
+            } else if fieldLLType == "i64" && valType == "double" {
+                let castTmp = nextSSA()
+                lines.append("\(castTmp) = bitcast double \(valTmp) to i64")
+                storeVal = castTmp
+                storeType = "i64"
+            } else {
+                storeVal = valTmp
+                storeType = valType
+            }
+
+            // For pointer fields: ARC write barrier (release old, retain new)
+            if fieldLLType == "ptr" {
+                let retainKind = heapKindForFieldType(fieldMIR)
+                let fieldGep = nextSSA()
+                lines.append("\(fieldGep) = getelementptr %\(tlName), ptr \(objTmp), i32 0, i32 \(fieldIdx)")
+                let oldVal = nextSSA()
+                lines.append("\(oldVal) = load ptr, ptr \(fieldGep)")
+                lines.append(contentsOf: emitFieldRetain(storeVal, kind: retainKind))
+                lines.append("store \(storeType) \(storeVal), ptr \(fieldGep)")
+                // Release old value (after store, so new value is safe if same object)
+                let oldNonnull = nextSSA()
+                let relLabel = "sf.rel.\(labelCounter)"
+                let skipLabel = "sf.skip.\(labelCounter)"
+                labelCounter += 1
+                lines.append("\(oldNonnull) = icmp ne ptr \(oldVal), null")
+                lines.append("br i1 \(oldNonnull), label %\(relLabel), label %\(skipLabel)")
+                lines.append("\(relLabel):")
+                switch retainKind {
+                case .string:
+                    lines.append(contentsOf: emitInlineStringRelease(oldVal).map { "  " + $0 })
+                case .object:
+                    lines.append("  call void @rockit_release(ptr \(oldVal))")
+                case .typedObject(let tn):
+                    lines.append("  call void @__release_\(tn)(ptr \(oldVal))")
+                default:
+                    let oldI64 = nextSSA()
+                    lines.append("  \(oldI64) = ptrtoint ptr \(oldVal) to i64")
+                    lines.append("  call void @rockit_release_value(i64 \(oldI64))")
+                }
+                lines.append("  br label %\(skipLabel)")
+                lines.append("\(skipLabel):")
+            } else {
+                let fieldGep = nextSSA()
+                lines.append("\(fieldGep) = getelementptr %\(tlName), ptr \(objTmp), i32 0, i32 \(fieldIdx)")
+                lines.append("store \(storeType) \(storeVal), ptr \(fieldGep)")
+            }
+            return lines
+        }
+
+        // Legacy value type fast path: inline GEP store, no ARC
         let vtName = valueTypeForTemp(object)
         if vtName != nil {
             let valType = typeOf(value)
@@ -4676,30 +6067,42 @@ public final class LLVMCodeGen {
 
     private func llvmType(_ type: MIRType) -> String {
         switch type {
-        case .int, .int64:      return "i64"
-        case .int32:            return "i32"
-        case .float, .float64, .double: return "double"
-        case .bool:             return "i1"
-        case .string:           return "ptr"
-        case .unit:             return "void"
-        case .nothing:          return "void"
-        case .nullable:         return "ptr"
-        case .reference:        return "ptr"
-        case .function:         return "ptr"
+        case .int8, .uint8:             return "i8"
+        case .int16, .uint16:           return "i16"
+        case .int32, .uint32:           return "i32"
+        case .int, .int64, .uint64:     return "i64"
+        case .float, .float32:          return "float"
+        case .float64, .double:         return "double"
+        case .bool:                     return "i1"
+        case .string:                   return "ptr"
+        case .unit:                     return "void"
+        case .nothing:                  return "void"
+        case .nullable:                 return "ptr"
+        case .reference:                return "ptr"
+        case .function:                 return "ptr"
         }
+    }
+
+    /// LLVM type for a struct field — same as llvmType but maps unit/nothing to i64 (fields are never void).
+    private func llvmFieldType(_ type: MIRType) -> String {
+        let t = llvmType(type)
+        return t == "void" ? "i64" : t
     }
 
     private func llvmArithType(_ type: MIRType) -> String {
         switch type {
-        case .float, .float64, .double: return "double"
-        case .int32:                    return "i32"
-        default:                        return "i64"
+        case .float, .float32:              return "float"
+        case .float64, .double:             return "double"
+        case .int8, .uint8:                 return "i8"
+        case .int16, .uint16:               return "i16"
+        case .int32, .uint32:               return "i32"
+        default:                            return "i64"
         }
     }
 
     private func isFloatType(_ type: MIRType) -> Bool {
         switch type {
-        case .float, .float64, .double: return true
+        case .float, .float32, .float64, .double: return true
         default: return false
         }
     }

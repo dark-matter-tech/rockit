@@ -14,6 +14,9 @@ public final class MIRLowering {
     /// Maps local variable names to their alloc temps
     private var locals: [String: String] = [:]
 
+    /// Maps local variable names to their MIR types (avoids ExpressionID collisions)
+    private var localTypes: [String: MIRType] = [:]
+
     /// The current class name (for method name mangling)
     private var currentClassName: String?
 
@@ -156,6 +159,7 @@ public final class MIRLowering {
         let savedBuilder = builder
         builder = MIRBuilder()
         locals = [:]
+        localTypes = [:]
 
         var params: [(String, MIRType)] = []
 
@@ -215,6 +219,7 @@ public final class MIRLowering {
         for (name, type) in params {
             let slot = builder.emitAlloc(type: type)
             locals[name] = slot
+            localTypes[name] = type
             // Parameters are available as their name; store the param value
             let paramTemp = builder.newTemp()
             builder.emit(.load(dest: paramTemp, src: "param.\(name)"))
@@ -269,6 +274,7 @@ public final class MIRLowering {
 
             let savedLocals = locals
             locals = [:]
+        localTypes = [:]
             builder.startBlock(label: "entry")
 
             let val = lowerExpression(p.initializer!)
@@ -292,17 +298,24 @@ public final class MIRLowering {
         switch node {
         case .simple(let name, _, _):
             switch name {
-            case "Int":     return .int
-            case "Int32":   return .int32
-            case "Int64":   return .int64
-            case "Float":   return .float
-            case "Float64": return .float64
-            case "Double":  return .double
-            case "Bool":    return .bool
-            case "String":  return .string
-            case "Unit":    return .unit
-            case "Nothing": return .nothing
-            default:        return .reference(name)
+            case "Int":            return .int
+            case "Int8":           return .int8
+            case "Int16":          return .int16
+            case "Int32":          return .int32
+            case "Int64":          return .int64
+            case "UInt", "UInt64": return .uint64
+            case "UInt8":          return .uint8
+            case "UInt16":         return .uint16
+            case "UInt32":         return .uint32
+            case "Float":          return .float
+            case "Float32":        return .float32
+            case "Float64":        return .float64
+            case "Double":         return .double
+            case "Bool":           return .bool
+            case "String":         return .string
+            case "Unit":           return .unit
+            case "Nothing":        return .nothing
+            default:               return .reference(name)
             }
         case .nullable(let inner, _):
             return .nullable(mirTypeFromTypeNode(inner))
@@ -315,7 +328,9 @@ public final class MIRLowering {
 
     private func isPrimitiveFieldType(_ type: MIRType) -> Bool {
         switch type {
-        case .int, .int32, .int64, .float, .float64, .double, .bool:
+        case .int, .int8, .int16, .int32, .int64,
+             .uint8, .uint16, .uint32, .uint64,
+             .float, .float32, .float64, .double, .bool:
             return true
         default:
             return false
@@ -404,9 +419,14 @@ public final class MIRLowering {
         let isValueType = isDataClass && parentType == nil && sealedSubs.isEmpty
             && !fields.isEmpty && fields.allSatisfy { isPrimitiveFieldType($0.1) }
 
+        // Typed layout eligibility: known fields, no inheritance hierarchy.
+        // Enables compact LLVM struct layout (refCount + typed fields) instead of generic RockitObject.
+        let useTypedLayout = !fields.isEmpty && parentType == nil && sealedSubs.isEmpty
+
         typeDecls.append(MIRTypeDecl(name: c.name, fields: fields, methods: methodNames,
                                      parentType: parentType, sealedSubclasses: sealedSubs,
-                                     isValueType: isValueType))
+                                     isValueType: isValueType,
+                                     useTypedLayout: useTypedLayout))
 
         // Lower nested classes (e.g., sealed subclasses)
         for member in c.members {
@@ -471,6 +491,7 @@ public final class MIRLowering {
             // Create initializer function: allocates an object with $variant = "entryName"
             let savedLocals = locals
             locals = [:]
+        localTypes = [:]
             builder.startBlock(label: "entry")
 
             let variantStr = builder.emitConstString(entry.name)
@@ -672,7 +693,10 @@ public final class MIRLowering {
 
     private func lowerLocalProperty(_ p: PropertyDecl) {
         let type: MIRType
-        if let sym = result.symbolTable.lookup(p.name) {
+        if let typeNode = p.type {
+            // Explicit type annotation — use the declared type
+            type = mirTypeFromTypeNode(typeNode)
+        } else if let sym = result.symbolTable.lookup(p.name) {
             type = MIRType.from(sym.type)
         } else if let init_ = p.initializer {
             // Fallback: infer type from initializer expression via typeMap
@@ -683,6 +707,7 @@ public final class MIRLowering {
 
         let slot = builder.emitAlloc(type: type)
         locals[p.name] = slot
+        localTypes[p.name] = type
 
         if let initializer = p.initializer {
             let val = lowerExpression(initializer)
@@ -1292,10 +1317,54 @@ public final class MIRLowering {
             return lowerShortCircuitOr(left: left, right: right)
         }
 
-        let lhs = lowerExpression(left)
-        let rhs = lowerExpression(right)
+        var lhs = lowerExpression(left)
+        var rhs = lowerExpression(right)
         let dest = builder.newTemp()
-        let type = lookupExprType(left)
+
+        // Determine operand types and the promoted result type
+        var leftType = lookupExprType(left)
+        var rightType = lookupExprType(right)
+
+        // Literal type adaptation: when one operand is a literal and the other
+        // has a specific numeric type, adapt the literal to match rather than
+        // promoting the non-literal. Avoids unnecessary widening
+        // (e.g., `i32 + 1` stays i32, not widened to i64).
+        if leftType != rightType {
+            let leftIsLiteral: Bool
+            if case .intLiteral = left { leftIsLiteral = true }
+            else if case .floatLiteral = left { leftIsLiteral = true }
+            else { leftIsLiteral = false }
+            let rightIsLiteral: Bool
+            if case .intLiteral = right { rightIsLiteral = true }
+            else if case .floatLiteral = right { rightIsLiteral = true }
+            else { rightIsLiteral = false }
+
+            if rightIsLiteral && !leftIsLiteral && leftType.bitWidth > 0 {
+                rightType = leftType
+            } else if leftIsLiteral && !rightIsLiteral && rightType.bitWidth > 0 {
+                leftType = rightType
+            }
+        }
+
+        // For arithmetic/comparison, use the promoted (wider) type
+        let type: MIRType
+        if leftType.bitWidth > 0 && rightType.bitWidth > 0 && leftType != rightType {
+            // Mixed numeric types — promote to the wider type
+            type = leftType.bitWidth >= rightType.bitWidth ? leftType : rightType
+            // Insert widening conversions as needed
+            if leftType != type {
+                let conv = builder.newTemp()
+                builder.emit(.numericConvert(dest: conv, operand: lhs, from: leftType, to: type))
+                lhs = conv
+            }
+            if rightType != type {
+                let conv = builder.newTemp()
+                builder.emit(.numericConvert(dest: conv, operand: rhs, from: rightType, to: type))
+                rhs = conv
+            }
+        } else {
+            type = leftType
+        }
 
         switch op {
         case .plus:     builder.emit(.add(dest: dest, lhs: lhs, rhs: rhs, type: type))
@@ -1840,6 +1909,7 @@ public final class MIRLowering {
         let captures = freeVarNames.filter { savedLocals[$0] != nil && !paramNames.contains($0) }.sorted()
 
         locals = [:]
+        localTypes = [:]
         builder = lambdaBuilder
 
         // Build parameter list: captured vars first, then user params
@@ -2156,6 +2226,12 @@ public final class MIRLowering {
 
     /// Look up the MIR type for an expression using the type map.
     private func lookupExprType(_ expr: Expression) -> MIRType {
+        // For identifiers, use localTypes to avoid ExpressionID collision
+        // (binary expressions like `i < n` share the same start position as `i`,
+        //  so the typeMap entry for `i` can be overwritten by the binary expr's type)
+        if case .identifier(let name, _) = expr {
+            if let t = localTypes[name] { return t }
+        }
         let id = ExpressionID(expr.span)
         if let type = result.typeMap[id] {
             return MIRType.from(type)

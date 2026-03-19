@@ -257,6 +257,9 @@ public struct LLVMEmitPhase: CompilerPhase {
     public func execute(input: MIRModule, context: CompilationContext,
                         diagnostics: DiagnosticEngine) throws -> String {
         let codeGen = LLVMCodeGen()
+        // Safety profiles (DAL A-E) enable bounds checks for certification.
+        // Standard compilation disables them for C-equivalent performance.
+        codeGen.boundsChecksEnabled = context.safetyLevel != nil
         return codeGen.emit(module: input)
     }
 }
