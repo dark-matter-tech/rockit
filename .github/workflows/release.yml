@@ -215,6 +215,9 @@ jobs:
     needs: build
     runs-on: ubuntu-22.04
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -225,9 +228,15 @@ jobs:
           if [ -n "${{ inputs.version }}" ]; then
             echo "VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
             echo "TAG=v${{ inputs.version }}" >> "$GITHUB_ENV"
-          else
+          elif echo "${GITHUB_REF_NAME}" | grep -q "^v"; then
             echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
             echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            # Branch push (e.g., staging) — extract version from source
+            RAW_VERSION=$(grep 'compilerVersion' RockitCompiler/bootstrap-swift/RockitKit/CompilerPipeline.swift | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9._-]*' | head -1)
+            VERSION="${RAW_VERSION:-0.1.0-alpha}"
+            echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+            echo "TAG=v${VERSION}" >> "$GITHUB_ENV"
           fi
 
       - name: List artifacts
@@ -287,7 +296,7 @@ jobs:
           RELEASE_BODY+="## What's Included\n\n"
           RELEASE_BODY+="- **rockit** — The Rockit compiler (Stage 1, self-hosted)\n"
           RELEASE_BODY+="- **fuel** — The Rockit package manager\n"
-          RELEASE_BODY+="- **stdlib** — Standard library (22 modules)\n"
+          RELEASE_BODY+="- **stdlib** — Standard library (15 modules)\n"
           RELEASE_BODY+="- **rockit_runtime.o** — Prebuilt runtime\n\n"
           RELEASE_BODY+="## Platforms\n\n"
           RELEASE_BODY+="| Platform | Archive |\n|----------|--------|\n"
@@ -357,7 +366,7 @@ jobs:
 
           - **rockit** — The Rockit compiler (Stage 1, self-hosted)
           - **fuel** — The Rockit package manager
-          - **stdlib** — Standard library (22 modules)
+          - **stdlib** — Standard library (15 modules)
           - **rockit_runtime.o** — Prebuilt runtime
 
           ## Platforms
