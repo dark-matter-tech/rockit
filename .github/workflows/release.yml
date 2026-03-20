@@ -17,6 +17,8 @@ permissions:
 
 jobs:
   build:
+    # Skip on Gitea — no macOS runners. Artifacts are mirrored from GitHub.
+    if: contains(github.server_url, 'github.com')
     strategy:
       fail-fast: false
       matrix:
@@ -442,6 +444,79 @@ jobs:
             $FILES
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Mirror release to Gitea
+        if: env.IS_GITHUB == 'true'
+        continue-on-error: true
+        run: |
+          GITEA_API="https://rustygits.com/api/v1"
+          GITEA_REPO="Dark-Matter/moon"
+
+          # Check if release already exists
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${GH_MIRROR_PAT}" \
+            "${GITEA_API}/repos/${GITEA_REPO}/releases/tags/${TAG}")
+
+          if [ "$STATUS" = "200" ]; then
+            # Delete existing release
+            RELEASE_ID=$(curl -s \
+              -H "Authorization: token ${GH_MIRROR_PAT}" \
+              "${GITEA_API}/repos/${GITEA_REPO}/releases/tags/${TAG}" | jq -r '.id')
+            curl -s -X DELETE \
+              -H "Authorization: token ${GH_MIRROR_PAT}" \
+              "${GITEA_API}/repos/${GITEA_REPO}/releases/${RELEASE_ID}"
+            echo "Deleted existing Gitea release ${TAG}"
+          fi
+
+          # Create tag if needed
+          curl -s -X POST \
+            -H "Authorization: token ${GH_MIRROR_PAT}" \
+            -H "Content-Type: application/json" \
+            "${GITEA_API}/repos/${GITEA_REPO}/tags" \
+            -d "{\"tag_name\": \"${TAG}\", \"target\": \"staging\"}" 2>/dev/null || true
+
+          # Create release
+          RELEASE_ID=$(curl -s -X POST \
+            -H "Authorization: token ${GH_MIRROR_PAT}" \
+            -H "Content-Type: application/json" \
+            "${GITEA_API}/repos/${GITEA_REPO}/releases" \
+            -d "{
+              \"tag_name\": \"${TAG}\",
+              \"name\": \"Rockit ${TAG}\",
+              \"body\": \"Mirrored from GitHub. See https://github.com/dark-matter-tech/rockit/releases/tag/${TAG}\",
+              \"draft\": false,
+              \"prerelease\": false
+            }" | jq -r '.id')
+
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "WARNING: Failed to create Gitea release"
+            exit 0
+          fi
+          echo "Created Gitea release ID: ${RELEASE_ID}"
+
+          # Upload all artifacts
+          for artifact_dir in artifacts/rockit-* artifacts/intellij-plugin; do
+            for file in "$artifact_dir"/*; do
+              [ -f "$file" ] || continue
+              FILENAME=$(basename "$file")
+              CONTENT_TYPE="application/gzip"
+              echo "$FILENAME" | grep -q '\.zip$' && CONTENT_TYPE="application/zip"
+
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+                -H "Authorization: token ${GH_MIRROR_PAT}" \
+                -H "Content-Type: ${CONTENT_TYPE}" \
+                --data-binary "@${file}" \
+                "${GITEA_API}/repos/${GITEA_REPO}/releases/${RELEASE_ID}/assets?name=${FILENAME}")
+
+              if [ "$HTTP_CODE" -ge 400 ]; then
+                echo "WARNING: Failed to upload ${FILENAME} (HTTP ${HTTP_CODE})"
+              else
+                echo "Mirrored to Gitea: ${FILENAME}"
+              fi
+            done
+          done
+        env:
+          GH_MIRROR_PAT: ${{ secrets.GH_MIRROR_PAT }}
 
       - name: Update GitHub Wiki
         if: env.IS_GITHUB == 'true'
