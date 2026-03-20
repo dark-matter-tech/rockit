@@ -225,12 +225,28 @@ jobs:
           fi
           START=$(date +%s)
 
-          # Run test suite — tests/ directory with recursive discovery,
-          # class-based test suites, setUp/tearDown lifecycle
-          echo "  Running Probe test suite (tests/ recursive, excluding advanced/)..."
-          $ROCKIT test --scheme default 2>&1 | tee probe-output.log
+          # Run tests file-by-file to avoid OOM (each test gets its own process)
+          echo "  Running Probe test suite (tests/ recursive, excluding advanced/ and lib/)..."
+          PASS=0; FAIL=0; TOTAL=0
+          FAILED_TESTS=""
+          for f in $(find tests -name '*.rok' -not -path '*/advanced/*' -not -path '*/lib/*' | sort); do
+            name=$(basename "$f" .rok)
+            TOTAL=$((TOTAL + 1))
+            if $ROCKIT test "$f" 2>&1 | tee -a probe-output.log | grep -q "PASS"; then
+              PASS=$((PASS + 1))
+            else
+              FAIL=$((FAIL + 1))
+              FAILED_TESTS="$FAILED_TESTS\n    $name"
+            fi
+          done
           echo ""
-          echo "  ✅ Probe test suite passed"
+          if [ "$FAIL" -eq 0 ]; then
+            echo "  ✅ All $PASS/$TOTAL Probe tests passed"
+          else
+            echo "  💀 FAILURES: $FAIL/$TOTAL failed"
+            printf "$FAILED_TESTS\n"
+            exit 1
+          fi
 
           END=$(date +%s)
           ELAPSED=$((END - START))

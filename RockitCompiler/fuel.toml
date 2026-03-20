@@ -7,7 +7,7 @@ directory = "tests"
 
 [test.scheme.default]
 include = ["*"]
-exclude = ["advanced"]
+exclude = ["advanced", "core/lib"]
 
 [test.scheme.all]
 include = ["*"]
