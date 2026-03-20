@@ -232,11 +232,15 @@ jobs:
           for f in $(find tests -name '*.rok' -not -path '*/advanced/*' -not -path '*/lib/*' | sort); do
             name=$(basename "$f" .rok)
             TOTAL=$((TOTAL + 1))
-            if $ROCKIT test "$f" 2>&1 | tee -a probe-output.log | grep -q "PASS"; then
+            # Capture output (ignore exit code — test runner may exit non-zero)
+            OUTPUT=$($ROCKIT test "$f" 2>&1 || true)
+            echo "$OUTPUT" >> probe-output.log
+            if echo "$OUTPUT" | grep -q "PASS"; then
               PASS=$((PASS + 1))
             else
               FAIL=$((FAIL + 1))
               FAILED_TESTS="$FAILED_TESTS\n    $name"
+              echo "  FAIL  $name"
             fi
           done
           echo ""
