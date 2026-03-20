@@ -454,30 +454,30 @@ jobs:
 
           # Check if release already exists
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: token ${GH_MIRROR_PAT}" \
+            -H "Authorization: token ${FUEL_TOKEN}" \
             "${GITEA_API}/repos/${GITEA_REPO}/releases/tags/${TAG}")
 
           if [ "$STATUS" = "200" ]; then
             # Delete existing release
             RELEASE_ID=$(curl -s \
-              -H "Authorization: token ${GH_MIRROR_PAT}" \
+              -H "Authorization: token ${FUEL_TOKEN}" \
               "${GITEA_API}/repos/${GITEA_REPO}/releases/tags/${TAG}" | jq -r '.id')
             curl -s -X DELETE \
-              -H "Authorization: token ${GH_MIRROR_PAT}" \
+              -H "Authorization: token ${FUEL_TOKEN}" \
               "${GITEA_API}/repos/${GITEA_REPO}/releases/${RELEASE_ID}"
             echo "Deleted existing Gitea release ${TAG}"
           fi
 
           # Create tag if needed
           curl -s -X POST \
-            -H "Authorization: token ${GH_MIRROR_PAT}" \
+            -H "Authorization: token ${FUEL_TOKEN}" \
             -H "Content-Type: application/json" \
             "${GITEA_API}/repos/${GITEA_REPO}/tags" \
             -d "{\"tag_name\": \"${TAG}\", \"target\": \"staging\"}" 2>/dev/null || true
 
           # Create release
           RELEASE_ID=$(curl -s -X POST \
-            -H "Authorization: token ${GH_MIRROR_PAT}" \
+            -H "Authorization: token ${FUEL_TOKEN}" \
             -H "Content-Type: application/json" \
             "${GITEA_API}/repos/${GITEA_REPO}/releases" \
             -d "{
@@ -503,7 +503,7 @@ jobs:
               echo "$FILENAME" | grep -q '\.zip$' && CONTENT_TYPE="application/zip"
 
               HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-                -H "Authorization: token ${GH_MIRROR_PAT}" \
+                -H "Authorization: token ${FUEL_TOKEN}" \
                 -H "Content-Type: ${CONTENT_TYPE}" \
                 --data-binary "@${file}" \
                 "${GITEA_API}/repos/${GITEA_REPO}/releases/${RELEASE_ID}/assets?name=${FILENAME}")
@@ -516,7 +516,7 @@ jobs:
             done
           done
         env:
-          GH_MIRROR_PAT: ${{ secrets.GH_MIRROR_PAT }}
+          FUEL_TOKEN: ${{ secrets.FUEL_TOKEN }}
 
       - name: Update GitHub Wiki
         if: env.IS_GITHUB == 'true'
